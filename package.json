@@ -11,6 +11,7 @@
     "build:renderer": "node ./node_modules/typescript/bin/tsc -b && node ./node_modules/vite/bin/vite.js build",
     "build": "npm run build:renderer",
     "dist:win": "npm run build && node ./node_modules/electron-builder/cli.js --win nsis portable --x64",
+    "dist:mac": "npm run build && node ./node_modules/electron-builder/cli.js --mac --arm64 --x64",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
     "preview": "node ./node_modules/vite/bin/vite.js preview"
