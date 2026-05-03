@@ -1,4 +1,4 @@
-import type { AppState, ArticleStatus, BlockPreview, CreateArticlePayload, CreateThesisPayload, LlmProviderKind, LlmProvidersState, LlmStreamEvent, LlmTestResult, McpInfo, MoodType, SectionType, ThemeType, UpdateThesisPayload, WritingStats, WritingStreak, TagColor, WritingScenario, ItalicGuide, ZoteroConfig, ProgressEntry, ProgressEntryKind, Finding, FindingStatus, DailySession } from './types'
+import type { AnnotationAuthor, AnnotationStatus, AppState, ArticleStatus, BlockPreview, CreateArticlePayload, CreateThesisPayload, LlmProviderKind, LlmProvidersState, LlmStreamEvent, LlmTestResult, McpInfo, MoodType, SectionType, ThemeType, UpdateThesisPayload, WritingStats, WritingStreak, TagColor, WritingScenario, ItalicGuide, ZoteroConfig, ProgressEntry, ProgressEntryKind, Finding, FindingStatus, DailySession } from './types'
 import type { BibTeXEntry } from './utils/bibtexParser'
 
 declare global {
@@ -27,7 +27,32 @@ declare global {
         content: string,
         description?: string,
       ) => Promise<AppState>
+      recordBlockVersion: (
+        articleId: string,
+        blockId: string,
+        changeDescription?: string,
+      ) => Promise<AppState>
       deleteBlock: (articleId: string, blockId: string) => Promise<AppState>
+      addAnnotation: (
+        articleId: string,
+        blockId: string,
+        payload: { anchorText: string; comment: string; author: AnnotationAuthor },
+      ) => Promise<AppState>
+      updateAnnotation: (
+        articleId: string,
+        annotationId: string,
+        patch: { comment?: string; status?: AnnotationStatus },
+      ) => Promise<AppState>
+      deleteAnnotation: (articleId: string, annotationId: string) => Promise<AppState>
+      annotateText: (params: {
+        sectionType: SectionType
+        anchorText: string
+        contextBefore: string
+        contextAfter: string
+        articleLanguage?: 'zh' | 'en'
+        providerId?: string
+      }) => Promise<{ ok: boolean; comment: string }>
+      llmKeyStoreInfo: () => Promise<{ mode: string; keyDir: string; isPackaged: boolean; warning: string | null }>
       importAssetBlock: (
         articleId: string,
         sectionType: SectionType,
@@ -97,7 +122,7 @@ declare global {
       addMoodEntry: (mood: MoodType, note?: string) => Promise<AppState>
 
       // Pomodoro operations
-      addPomodoroSession: (duration: number) => Promise<AppState>
+      addPomodoroSession: (duration: number, articleId?: string, sectionType?: SectionType) => Promise<AppState>
 
       // Citation operations
       addCitation: (articleId: string, citation: BibTeXEntry) => Promise<AppState>
@@ -106,8 +131,10 @@ declare global {
       getTheme: () => Promise<ThemeType>
       setTheme: (theme: ThemeType) => Promise<AppState>
 
-      // Writing stats
+      // Writing stats / mood / pomodoro
       getWritingStats: () => Promise<WritingStats>
+      getMoodHistory: () => Promise<import('./types').MoodEntry[]>
+      getPomodoroStats: () => Promise<import('./types').PomodoroStats>
 
       // Tag operations
       addTag: (articleId: string, tagName: string, tagColor: TagColor) => Promise<AppState>
@@ -167,7 +194,7 @@ declare global {
             approach: string
           }
         } | null
-        currentSection: { type: string; contentExcerpt: string } | null
+        currentSection: { type: string; contentExcerpt: string; currentBlockId?: string | null } | null
         scenarioId?: string
       }) => Promise<{ ok: boolean; error?: string }>
       llmCancelSession: (sessionId: string) => Promise<void>

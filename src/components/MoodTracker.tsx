@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { MoodType, MoodEntry } from '../types'
+import { localIsoDate } from '../utils/dateUtils'
 
 interface MoodTrackerProps {
   moodHistory: MoodEntry[]
@@ -25,7 +26,7 @@ const MOOD_OPTIONS: { type: MoodType; emoji: string; label: string }[] = [
 ]
 
 export function MoodTracker({ moodHistory, onAddMood, onMoodRecorded }: MoodTrackerProps) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localIsoDate()
   const todayMood = moodHistory.find((m) => m.date === today)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [note, setNote] = useState('')

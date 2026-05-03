@@ -1,0 +1,924 @@
+/* =============================================================================
+   FocusModeEditor — Immersive writing surface (v1 styles)
+
+   CLAUDE_DESIGN: this stylesheet is intentionally restrained. The visual
+   pass should:
+     1. Polish typography (serif body, generous line-height, refined measure)
+     2. Add subtle stage-curtain entrance animation on .focus-mode-shell
+     3. Refine the rail to feel like a margin, not a sidebar
+     4. Treat the selection toolbar like a floating tooltip (v1 fixes it
+        to the top of the canvas; v2 should anchor to the selection)
+   All colors come from tokens.css — never hardcode hex here.
+   See ../components/FocusModeEditor.design.md for full prompts.
+   ========================================================================= */
+
+/* ----- Inline shell (sprint 6 阶段 8.6) -------------------------------- */
+/* Used to be a portaled full-screen overlay; now lives inside the article
+ * view's content-stage as one tab among many. Fill-parent + own grid. */
+.focus-mode-shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  color: var(--c-ink);
+  font-family: var(--font-body);
+}
+
+/* ----- Header ------------------------------------------------------------- */
+.focus-mode-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: var(--bw) solid var(--c-line);
+  background: var(--c-panel-soft);
+  backdrop-filter: var(--backdrop-blur);
+}
+
+.focus-mode-header-side {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.focus-mode-header-side--right {
+  justify-content: flex-end;
+}
+.focus-mode-header-center {
+  display: flex;
+  justify-content: center;
+}
+
+.focus-mode-section-tag {
+  font-family: var(--font-heading);
+  font-size: var(--fs-sm);
+  text-transform: var(--tt-heading);
+  letter-spacing: var(--letter-heading);
+  color: var(--c-accent-strong);
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-pill);
+  background: var(--c-accent-soft);
+}
+
+.focus-mode-article-title {
+  font-size: var(--fs-sm);
+  color: var(--c-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ----- Preview canvas (内嵌只读 SectionEditor) ------------------------- */
+.focus-mode-canvas--preview {
+  align-items: stretch;
+  padding: var(--sp-5) var(--sp-5);
+}
+.focus-mode-preview-host {
+  width: min(960px, 100%);
+  margin: 0 auto;
+}
+
+.focus-mode-font-select {
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  background: var(--c-panel);
+  border: var(--bw) solid var(--c-line);
+  border-radius: var(--r-button);
+  padding: 2px var(--sp-2);
+  cursor: pointer;
+  max-width: 180px;
+  transition: border-color var(--t-fast), color var(--t-fast);
+}
+.focus-mode-font-select:hover {
+  color: var(--c-ink);
+  border-color: var(--c-line-strong);
+}
+
+.focus-mode-icon-button,
+.focus-mode-exit {
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  color: var(--c-ink-muted);
+  background: transparent;
+  border: var(--bw) solid var(--c-line);
+  border-radius: var(--r-button);
+  padding: var(--sp-1) var(--sp-3);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.focus-mode-header-side--right {
+  flex-wrap: wrap;
+  row-gap: var(--sp-1);
+}
+.focus-mode-icon-button:hover,
+.focus-mode-exit:hover {
+  color: var(--c-ink);
+  border-color: var(--c-line-strong);
+  background: var(--c-panel-sub);
+}
+.focus-mode-icon-button {
+  min-width: 32px;
+}
+.focus-mode-exit {
+  font-weight: var(--fw-medium);
+}
+
+/* ----- Save indicator (single quiet dot, no text) ----------------------- */
+.focus-mode-save-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  transition: background 200ms ease, opacity 200ms ease;
+}
+.focus-mode-save-dot--idle   { background: transparent; }
+.focus-mode-save-dot--dirty  { background: var(--c-ink-faint); }
+.focus-mode-save-dot--saving { background: var(--c-warning); animation: focus-mode-pulse 1s ease-in-out infinite; }
+.focus-mode-save-dot--saved  { background: var(--c-success); }
+@keyframes focus-mode-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+/* ----- Stage layout ------------------------------------------------------- */
+.focus-mode-stage {
+  display: grid;
+  overflow: hidden;
+  /* AI helper moved to the global drawer — rail only hosts annotations +
+   * version history, so a slimmer 320 keeps more space for the canvas. */
+  --focus-rail-width: 320px;
+}
+.focus-mode-stage.is-rail-open {
+  grid-template-columns: 1fr var(--focus-rail-width);
+}
+/* When AI drawer is open, narrow the rail further — every px helps the
+ * editor canvas stay readable. */
+body.ai-drawer-open .focus-mode-stage.is-rail-open {
+  --focus-rail-width: 280px;
+}
+/* Below ~1080 effective viewport — fold rail under the canvas as a stack
+ * so the writer always sees the full canvas width. */
+@media (max-width: 1080px) {
+  .focus-mode-stage.is-rail-open {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+  .focus-mode-rail {
+    border-left: none;
+    border-top: var(--bw) solid var(--c-line);
+    max-height: 50vh;
+  }
+}
+.focus-mode-stage.is-rail-closed {
+  grid-template-columns: 1fr;
+}
+
+/* ----- Canvas (writing surface) ------------------------------------------ */
+.focus-mode-canvas {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  padding: var(--sp-7) var(--sp-5);
+}
+
+/* CLAUDE_DESIGN: this is THE typography moment. Default to library calm. */
+.focus-mode-block-name {
+  width: min(720px, 100%);
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--c-ink);
+  font-family: var(--font-body);
+}
+
+.focus-mode-block-name {
+  font-family: var(--focus-font-override, var(--font-heading));
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--letter-heading);
+  color: var(--c-ink);
+  padding: var(--sp-2) 0;
+  margin-bottom: var(--sp-4);
+  border-bottom: var(--bw) dashed transparent;
+  transition: border-color var(--t-fast);
+}
+.focus-mode-block-name::placeholder {
+  color: var(--c-ink-faint);
+  font-weight: var(--fw-regular);
+}
+.focus-mode-block-name:focus {
+  border-bottom-color: var(--c-line);
+}
+
+@keyframes focus-mode-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ----- Right rail -------------------------------------------------------- */
+.focus-mode-rail {
+  display: flex;
+  flex-direction: column;
+  border-left: var(--bw) solid var(--c-line);
+  background: var(--c-panel-sub);
+  overflow-y: auto;
+}
+
+.focus-mode-rail-section {
+  padding: var(--sp-4) var(--sp-4);
+  border-bottom: var(--bw) solid var(--c-line);
+}
+.focus-mode-rail-section:last-child { border-bottom: none; }
+
+.focus-mode-rail-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+}
+.focus-mode-rail-header h3 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--letter-heading);
+  text-transform: var(--tt-heading);
+  color: var(--c-ink);
+}
+.focus-mode-rail-count,
+.focus-mode-rail-tag {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-faint);
+  font-feature-settings: "tnum";
+}
+.focus-mode-rail-tag {
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--c-panel);
+  border: var(--bw) solid var(--c-line);
+}
+
+.focus-mode-rail-empty {
+  font-size: var(--fs-sm);
+  color: var(--c-ink-faint);
+  line-height: var(--lh-body);
+  margin: 0;
+}
+
+/* ----- Annotation cards -------------------------------------------------- */
+.focus-mode-annotation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.focus-mode-annotation {
+  background: var(--c-panel);
+  border: var(--bw) solid var(--c-line);
+  border-radius: var(--r-card);
+  padding: var(--sp-3);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.focus-mode-annotation--ai {
+  border-left: 3px solid var(--c-accent);
+}
+.focus-mode-annotation--user {
+  border-left: 3px solid var(--c-info);
+}
+.focus-mode-annotation--resolved {
+  opacity: 0.55;
+}
+
+.focus-mode-annotation-anchor {
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  font-style: italic;
+  border-left: 2px solid var(--c-line-strong);
+  padding-left: var(--sp-2);
+  line-height: 1.4;
+  transition: color var(--t-fast);
+}
+.focus-mode-annotation-anchor:hover { color: var(--c-accent-strong); }
+
+.focus-mode-annotation-body {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--c-ink);
+}
+.focus-mode-annotation-author {
+  font-weight: var(--fw-semi);
+  color: var(--c-ink-muted);
+  margin-right: var(--sp-1);
+}
+
+.focus-mode-annotation-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+.focus-mode-annotation-actions button {
+  font-size: var(--fs-xs);
+  background: transparent;
+  border: none;
+  color: var(--c-ink-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: color var(--t-fast);
+}
+.focus-mode-annotation-actions button:hover { color: var(--c-ink); }
+
+/* ----- Footer ------------------------------------------------------------ */
+.focus-mode-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-5);
+  border-top: var(--bw) solid var(--c-line);
+  background: var(--c-panel-soft);
+  backdrop-filter: var(--backdrop-blur);
+  font-size: var(--fs-xs);
+  color: var(--c-ink-faint);
+  font-feature-settings: "tnum";
+}
+.focus-mode-footer-stat { white-space: nowrap; }
+.focus-mode-footer-spacer { flex: 1; }
+.focus-mode-footer-hint { color: var(--c-ink-muted); }
+
+/* ----- Help overlay ------------------------------------------------------ */
+.focus-mode-help {
+  position: fixed;
+  right: var(--sp-5);
+  bottom: var(--sp-7);
+  z-index: 1100;
+  background: var(--c-panel);
+  border: var(--bw) solid var(--c-line-strong);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-4);
+  max-width: 320px;
+  font-size: var(--fs-sm);
+  color: var(--c-ink);
+}
+.focus-mode-help h4 {
+  margin: 0 0 var(--sp-2) 0;
+  font-family: var(--font-heading);
+  font-size: var(--fs-base);
+}
+.focus-mode-help ul {
+  margin: 0 0 var(--sp-3) 0;
+  padding-left: var(--sp-4);
+}
+.focus-mode-help li { margin-bottom: var(--sp-1); }
+.focus-mode-help kbd {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--c-panel-sub);
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  border: var(--bw) solid var(--c-line);
+}
+.focus-mode-help button {
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-on-accent);
+  background: var(--c-accent);
+  border: none;
+  border-radius: var(--r-button);
+  padding: var(--sp-1) var(--sp-3);
+  cursor: pointer;
+}
+
+/* ----- Section editor entry button -------------------------------------- */
+/* CLAUDE_DESIGN: small invitation button. Should feel like an offer, not a CTA. */
+.focus-mode-entry-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-accent-strong);
+  background: var(--c-accent-soft);
+  border: var(--bw) solid transparent;
+  border-radius: var(--r-button);
+  padding: var(--sp-1) var(--sp-3);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.focus-mode-entry-button:hover {
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+/* ----- TipTap (ProseMirror) editor surface ------------------------------ */
+/* CLAUDE_DESIGN: this is the actual writing surface in v2. The host wrapper
+   .focus-mode-editor-host is the flex item; .focus-mode-prose is what TipTap
+   renders into. Keep transparent — no border, no background, no radius.
+   Per Kimi's design recommendation: "the textarea should look like a sheet
+   of paper, that's the first source of immersion." */
+.focus-mode-editor-host {
+  width: min(720px, 100%);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.focus-mode-prose {
+  flex: 1;
+  min-height: 60vh;
+  outline: none;
+  font-family: var(--focus-font-override, var(--font-body));
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--c-ink);
+  padding: var(--sp-3) 0 var(--sp-7) 0;
+}
+.focus-mode-prose p,
+.focus-mode-prose h2,
+.focus-mode-prose h3,
+.focus-mode-prose ul,
+.focus-mode-prose ol,
+.focus-mode-prose blockquote {
+  margin: 0 0 var(--sp-3) 0;
+}
+.focus-mode-prose h2 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--letter-heading);
+  margin-top: var(--sp-5);
+}
+.focus-mode-prose h3 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semi);
+  margin-top: var(--sp-4);
+}
+.focus-mode-prose ul,
+.focus-mode-prose ol {
+  padding-left: var(--sp-5);
+}
+.focus-mode-prose li { margin-bottom: var(--sp-1); }
+.focus-mode-prose blockquote {
+  border-left: 3px solid var(--c-line-strong);
+  padding-left: var(--sp-3);
+  color: var(--c-ink-muted);
+  font-style: italic;
+}
+.focus-mode-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--c-panel-sub);
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+}
+.focus-mode-prose strong { font-weight: var(--fw-semi); }
+.focus-mode-prose em { font-style: italic; }
+.focus-mode-prose ::selection {
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
+}
+/* Placeholder shown when editor is empty (TipTap Placeholder extension). */
+.focus-mode-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--c-ink-faint);
+  font-style: italic;
+  pointer-events: none;
+  height: 0;
+}
+
+/* ----- Inline annotation highlights ------------------------------------ */
+/* CLAUDE_DESIGN: subtle wash, not a screaming yellow. Author distinguishes
+   color (AI = accent, user = info). Resolved fades to muted dotted underline. */
+.focus-mode-prose mark[data-annotation-id] {
+  background: var(--c-accent-soft);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  cursor: help;
+  transition: background var(--t-fast);
+}
+.focus-mode-prose mark[data-annotation-id][data-author="ai"] {
+  background: var(--c-accent-soft);
+  border-bottom: 2px solid var(--c-accent);
+}
+.focus-mode-prose mark[data-annotation-id][data-author="user"] {
+  background: rgba(74, 106, 165, 0.15);
+  border-bottom: 2px solid var(--c-info);
+}
+.focus-mode-prose mark[data-annotation-id][data-status="resolved"] {
+  background: transparent;
+  border-bottom: 1px dotted var(--c-ink-faint);
+  color: var(--c-ink-muted);
+}
+.focus-mode-prose mark[data-annotation-id]:hover {
+  filter: brightness(0.95);
+}
+
+/* ----- Autocomplete popup ----------------------------------------------- */
+/* CLAUDE_DESIGN: ghost-tooltip aesthetic. Appears at the cursor, dismisses
+   silently when no match. Should never feel like a panel. */
+.focus-mode-autocomplete {
+  background: var(--c-panel);
+  border: var(--bw) solid var(--c-line-strong);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-md);
+  min-width: 200px;
+  max-width: 360px;
+  font-family: var(--font-body);
+  overflow: hidden;
+  animation: focus-mode-pop 100ms ease;
+}
+.focus-mode-autocomplete-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-1) 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.focus-mode-autocomplete-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--c-ink);
+  cursor: default;
+  line-height: 1.4;
+}
+.focus-mode-autocomplete-item.is-selected {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+}
+.focus-mode-autocomplete-item--phrase .focus-mode-autocomplete-text {
+  font-style: italic;
+}
+.focus-mode-autocomplete-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.focus-mode-autocomplete-kind {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-faint);
+  text-transform: var(--tt-heading);
+  letter-spacing: var(--letter-heading);
+  flex-shrink: 0;
+}
+.focus-mode-autocomplete-item.is-selected .focus-mode-autocomplete-kind {
+  color: var(--c-accent-strong);
+}
+.focus-mode-autocomplete-hint {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-faint);
+  border-top: var(--bw) solid var(--c-line);
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--c-panel-sub);
+}
+
+/* ----- Inline draft area (in right rail) ------------------------------- */
+/* CLAUDE_DESIGN: this section appears at the top of the rail when the user
+   selects text. The whole "新批注 → 写 → 保存 / 让 AI 评论" flow happens here.
+   No central modal — keeps the writing canvas uninterrupted. */
+.focus-mode-rail-section--draft {
+  background: var(--c-panel);
+  border-bottom: 2px solid var(--c-accent-soft);
+}
+.focus-mode-rail-close {
+  background: transparent;
+  border: none;
+  color: var(--c-ink-faint);
+  font-size: var(--fs-md);
+  cursor: pointer;
+  padding: 0 var(--sp-2);
+  line-height: 1;
+  border-radius: var(--r-sm);
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.focus-mode-rail-close:hover {
+  color: var(--c-ink);
+  background: var(--c-panel-sub);
+}
+.focus-mode-draft-anchor-inline {
+  margin: 0 0 var(--sp-2) 0;
+  padding: var(--sp-1) var(--sp-2);
+  border-left: 2px solid var(--c-accent);
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  font-style: italic;
+  line-height: 1.4;
+  background: var(--c-accent-soft);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.focus-mode-draft-textarea-inline {
+  width: 100%;
+  border: var(--bw) solid var(--c-line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--c-ink);
+  background: var(--c-panel-sub);
+  resize: vertical;
+  min-height: 64px;
+  outline: none;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.focus-mode-draft-textarea-inline:focus {
+  border-color: var(--c-accent);
+  background: var(--c-panel);
+}
+.focus-mode-draft-textarea-inline:disabled {
+  background: var(--c-panel-sub);
+  color: var(--c-ink-faint);
+  cursor: wait;
+}
+.focus-mode-draft-textarea-inline::placeholder {
+  color: var(--c-ink-faint);
+  font-style: italic;
+}
+.focus-mode-draft-error-inline {
+  margin-top: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  background: rgba(181, 68, 58, 0.08);
+  color: var(--c-danger);
+  font-size: var(--fs-xs);
+  border-radius: var(--r-sm);
+}
+.focus-mode-draft-actions-inline {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.focus-mode-draft-button {
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-on-accent);
+  background: var(--c-accent);
+  border: var(--bw) solid var(--c-accent);
+  border-radius: var(--r-button);
+  padding: var(--sp-1) var(--sp-3);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), opacity var(--t-fast);
+}
+.focus-mode-draft-button:hover:not(:disabled) {
+  background: var(--c-accent-strong);
+  border-color: var(--c-accent-strong);
+}
+.focus-mode-draft-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.focus-mode-draft-button--ghost {
+  color: var(--c-accent-strong);
+  background: transparent;
+}
+.focus-mode-draft-button--ghost:hover:not(:disabled) {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+  color: var(--c-accent-strong);
+}
+
+/* ----- Compact DiffViewer (rail variant) -------------------------------- */
+.diff-viewer-compact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.diff-viewer-compact .version-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.diff-viewer-compact .version-item {
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw) solid var(--c-line);
+  border-radius: var(--r-sm);
+  background: var(--c-panel);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.diff-viewer-compact .version-item:hover {
+  border-color: var(--c-line-strong);
+}
+.diff-viewer-compact .version-item.selected {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+.diff-viewer-compact .version-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+}
+.diff-viewer-compact .version-author {
+  font-weight: var(--fw-semi);
+}
+.diff-viewer-compact .version-description {
+  margin: 2px 0 0 0;
+  font-size: var(--fs-xs);
+  color: var(--c-ink);
+  line-height: 1.35;
+}
+.diff-viewer-compact .diff-view {
+  border: var(--bw) solid var(--c-line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2);
+  background: var(--c-panel);
+}
+.diff-viewer-compact .diff-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.diff-viewer-compact .diff-view-header .eyebrow {
+  margin: 0;
+}
+.diff-viewer-compact .diff-rollback-btn {
+  font-size: var(--fs-xs);
+  padding: 2px var(--sp-2);
+}
+.diff-viewer-compact .diff-content {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  max-height: 220px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+.diff-viewer-compact .diff-line {
+  display: flex;
+  gap: var(--sp-1);
+}
+.diff-viewer-compact .diff-line.diff-added .diff-text {
+  background: rgba(74, 161, 86, 0.12);
+  color: var(--c-success);
+}
+.diff-viewer-compact .diff-line.diff-removed .diff-text {
+  background: rgba(181, 68, 58, 0.10);
+  color: var(--c-danger);
+  text-decoration: line-through;
+}
+.diff-viewer-compact .diff-indicator {
+  width: 1ch;
+  text-align: center;
+  color: var(--c-ink-faint);
+  flex-shrink: 0;
+}
+
+/* ----- Font size override (header dropdown) ---------------------------- */
+.focus-mode-prose {
+  font-size: var(--focus-font-size, var(--fs-md));
+}
+.focus-mode-font-size-select { max-width: 110px; }
+
+/* ----- Header icon-button "active" state (上版本 toggle) --------------- */
+.focus-mode-icon-button.is-active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+  border-color: var(--c-accent);
+}
+
+/* ----- Canvas split (上下两栏：编辑 40% + 上版本 60%) ----------------- */
+/* When split is OFF the wrapping pane is transparent — keeps original layout. */
+.focus-mode-canvas-pane {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+}
+.focus-mode-canvas-pane--editor {
+  flex: 1;
+}
+.focus-mode-canvas--split {
+  display: grid;
+  grid-template-rows: 40% auto 1fr;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+.focus-mode-canvas--split > .focus-mode-canvas-pane {
+  overflow-y: auto;
+}
+.focus-mode-canvas--split > .focus-mode-canvas-pane--editor {
+  padding: var(--sp-5) var(--sp-5) var(--sp-3);
+}
+.focus-mode-canvas-divider {
+  height: 4px;
+  background: var(--c-line);
+  border-top: var(--bw) solid var(--c-line-strong);
+  border-bottom: var(--bw) solid var(--c-line-strong);
+  cursor: row-resize;
+}
+.focus-mode-canvas-pane--prev {
+  background: var(--c-panel-sub);
+  padding: var(--sp-3) var(--sp-5) var(--sp-5);
+  align-items: stretch;
+}
+.focus-mode-prev-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: min(720px, 100%);
+  margin: 0 auto var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+}
+.focus-mode-prev-label {
+  font-feature-settings: "tnum";
+  text-transform: var(--tt-heading);
+  letter-spacing: var(--letter-heading);
+}
+.focus-mode-prev-close {
+  background: transparent;
+  border: none;
+  font-size: var(--fs-md);
+  color: var(--c-ink-faint);
+  cursor: pointer;
+  padding: 0 var(--sp-2);
+  line-height: 1;
+  border-radius: var(--r-sm);
+}
+.focus-mode-prev-close:hover { color: var(--c-ink); background: var(--c-panel); }
+.focus-mode-prev-body {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: var(--sp-3);
+  background: var(--c-panel);
+  border: var(--bw) solid var(--c-line);
+  border-radius: var(--r-sm);
+  font-family: var(--focus-font-override, var(--font-body));
+  font-size: var(--focus-font-size, var(--fs-md));
+  line-height: var(--lh-body);
+  color: var(--c-ink-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 100%;
+  overflow: auto;
+  flex: 1;
+}
+
+/* ----- Collapsible rail sections (chevron toggle) ---------------------- */
+.focus-mode-rail-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.focus-mode-rail-toggle:hover h3 { color: var(--c-accent-strong); }
+.focus-mode-rail-toggle h3 { transition: color var(--t-fast); }
+.focus-mode-rail-chevron {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-faint);
+  width: 1ch;
+  display: inline-block;
+}
+.focus-mode-rail-section.is-collapsed {
+  padding-bottom: var(--sp-3);
+}
+.focus-mode-rail-section.is-collapsed .focus-mode-rail-header {
+  margin-bottom: 0;
+}
+.focus-mode-rail-section--chat.is-collapsed {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+/* ----- Pixel theme tweak ------------------------------------------------- */
+[data-theme="pixel"] .focus-mode-autocomplete { animation: none; }

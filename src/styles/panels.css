@@ -41,6 +41,25 @@
   background: #FFF;
 }
 
+/* Section composer (in SectionEditor preview): the action cluster is
+ * "✨ 进入写作" (primary) + "导入图片" + "导入文件". Layout is 1 wide on top,
+ * 2 equal columns below — primary CTA reads first, secondary actions stay
+ * paired and balanced. */
+.composer-card .section-heading .inline-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+  width: min(280px, 100%);
+  flex-shrink: 0;
+}
+.composer-card .section-heading .inline-actions .primary-button {
+  grid-column: 1 / -1;
+}
+.composer-card .section-heading .inline-actions > * {
+  width: 100%;
+  justify-content: center;
+}
+
 /* ---------- Section heading (eyebrow + title + optional action) ---------- */
 .section-heading {
   display: flex;

@@ -5,6 +5,15 @@
    Components consume tokens; they do NOT branch on data-theme.
    ========================================================================= */
 
+/* Global font scale (Settings → 字号). All --fs-* below are in rem, so
+ * changing the html font-size cascades through every component. Values
+ * mirror the SettingsModule fontScale enum: sm=14, md=16, lg=18. */
+html { font-size: 16px; }
+html[data-font-scale="sm"] { font-size: 14px; }
+html[data-font-scale="md"] { font-size: 16px; }
+html[data-font-scale="lg"] { font-size: 18px; }
+html[data-font-scale="xl"] { font-size: 20px; }
+
 :root {
   /* --- Type ---------------------------------------------------------- */
   --font-heading: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua',
@@ -225,4 +234,17 @@
   --brand-glyph-fg: #F1F8F4;
 
   --tag-mode: tint;
+}
+
+/* =========================================================================
+   Legacy token aliases. home.css 大量用到 --c-rule / --c-paper / --c-ink-soft
+   但这些名字从未在 tokens.css 定义 → 旧版 CSS 直接 discard，Daily Log /
+   Findings / Pomodoro UI 的边框背景文字颜色全部失效。这里 alias 到现成
+   token，三主题各自的 --c-line / --c-panel-sub / --c-ink-muted 通过 var()
+   惰性求值自动跟随当前主题。
+   ========================================================================= */
+:where(:root) {
+  --c-rule:     var(--c-line);
+  --c-paper:    var(--c-panel-sub);
+  --c-ink-soft: var(--c-ink-muted);
 }

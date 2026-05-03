@@ -308,26 +308,26 @@ const TOOLS = [
         researchContext: {
           type: 'object',
           properties: {
-            background: {
+            scientificQuestion: {
               type: 'string',
-              description: '研究背景。',
+              description: '研究的科学问题（一句话）。',
+            },
+            observedPhenomenon: {
+              type: 'string',
+              description: '已观察到的关键现象 / 反常 / 数据线索。',
             },
             hypothesis: {
               type: 'string',
               description: '研究假设。',
             },
-            objectives: {
+            approach: {
               type: 'string',
-              description: '研究目标。',
-            },
-            keyMethods: {
-              type: 'string',
-              description: '关键方法。',
+              description: '研究方案 / 关键方法路径。',
             },
           },
           required: [],
           additionalProperties: false,
-          description: '新的研究上下文内容。',
+          description: '新的研究上下文内容。仅传入需要修改的字段，未传入字段会保持当前值（storage 在 normalize 时空字符串视为未填写，请避免显式传空串覆盖已有内容）。',
         },
       },
       required: ['articleId', 'researchContext'],
@@ -338,7 +338,7 @@ const TOOLS = [
   {
     name: 'add_text_block',
     description:
-      '向指定论文和章节新增一个文本块，用于追加结果描述、方法段落、讨论要点或其他正文材料。该工具会写入文章内容，sectionType 必须使用标准学术章节类型。',
+      '【仅当目标章节当前还没有任何 Text 类型 block 时使用】给一个空白章节写入第一段正文。如果章节已有 text block，绝不要用本工具——必须改用 update_text_block 把新内容追加 / 改写到现有 block。papertodo 实行单块策略：每章节最多 1 个 text block。',
     isWrite: true,
     parameters: {
       type: 'object',
@@ -369,7 +369,7 @@ const TOOLS = [
   {
     name: 'update_text_block',
     description:
-      '更新已有文本块的正文内容，用于用户要求改写、替换或校正文稿片段时。该工具会保留版本记录并修改指定 blockId 的内容，调用前应确认目标块无误。',
+      '修改已有文本块的整段正文。用户说"改这段 / 改写 / 帮我加一段 / 扩写"等都用本工具——把新内容（包括追加段落）作为完整 content 写回。content 是整块的最终内容，不是 diff，不要只传新增部分。如果用户想"加一段"，请把现有正文 + 新段落拼成完整 content 一起传。',
     isWrite: true,
     parameters: {
       type: 'object',
@@ -446,8 +446,8 @@ const TOOLS = [
               description: '作者列表。',
             },
             year: {
-              type: 'number',
-              description: '发表年份。',
+              type: 'string',
+              description: '发表年份（YYYY 字符串，与 types.ts Citation.year 对齐）。',
             },
             localPdfPath: {
               type: 'string',

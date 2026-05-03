@@ -31,13 +31,22 @@ function buildSectionContext(section) {
     return '';
   }
   const excerpt = (section.contentExcerpt || '').slice(0, 800);
-  return [
+  const lines = [
     '',
     `当前章节: ${section.type}`,
+  ];
+  if (section.currentBlockId) {
+    lines.push(
+      `当前正在沉浸编辑的文本块 blockId: ${section.currentBlockId}`,
+      '默认行为: 改这一段就用 update_text_block(blockId=上面这个 id)。只有用户明说"另起一段"或"加一段新的"时才用 add_text_block 新建。',
+    );
+  }
+  lines.push(
     excerpt
       ? `现有内容(节选,前 800 字):\n${excerpt}`
       : '现有内容: (空白)',
-  ].join('\n');
+  );
+  return lines.join('\n');
 }
 
 function buildSystemPrompt({ tools, currentArticle, currentSection } = {}) {

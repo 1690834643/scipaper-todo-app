@@ -11,7 +11,17 @@ contextBridge.exposeInMainWorld('scipaper', {
     ipcRenderer.invoke('block:addText', { articleId, sectionType, content, description }),
   updateTextBlock: (articleId, blockId, content, description) =>
     ipcRenderer.invoke('block:updateText', { articleId, blockId, content, description }),
+  recordBlockVersion: (articleId, blockId, changeDescription) =>
+    ipcRenderer.invoke('block:recordVersion', { articleId, blockId, changeDescription }),
   deleteBlock: (articleId, blockId) => ipcRenderer.invoke('block:delete', { articleId, blockId }),
+  addAnnotation: (articleId, blockId, payload) =>
+    ipcRenderer.invoke('annotation:add', { articleId, blockId, payload }),
+  updateAnnotation: (articleId, annotationId, patch) =>
+    ipcRenderer.invoke('annotation:update', { articleId, annotationId, patch }),
+  deleteAnnotation: (articleId, annotationId) =>
+    ipcRenderer.invoke('annotation:delete', { articleId, annotationId }),
+  annotateText: (params) => ipcRenderer.invoke('llm:annotateText', params),
+  llmKeyStoreInfo: () => ipcRenderer.invoke('llm:keyStoreInfo'),
   importAssetBlock: (articleId, sectionType, kind) =>
     ipcRenderer.invoke('block:importAsset', { articleId, sectionType, kind }),
   openBlockAsset: (articleId, blockId) => ipcRenderer.invoke('block:openAsset', { articleId, blockId }),

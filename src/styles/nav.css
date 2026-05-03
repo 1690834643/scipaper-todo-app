@@ -15,6 +15,11 @@
   align-self: start;
   position: sticky;
   top: var(--sp-4);
+  /* Cap at viewport height so when the AI drawer narrows the workspace and
+   * the chip list grows tall, lower chapter tabs stay reachable via scroll
+   * instead of being clipped below the viewport. */
+  max-height: calc(100vh - 2 * var(--sp-4));
+  overflow-y: auto;
 }
 
 [data-theme="pixel"] .section-nav {

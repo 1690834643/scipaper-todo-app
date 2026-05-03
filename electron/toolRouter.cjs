@@ -1,6 +1,41 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const storage = require('./storage.cjs');
 const { TOOLS } = require('./llmTools.cjs');
 const zoteroClient = require('./zoteroClient.cjs');
+
+// 安全：attach_file 接受任意 sourcePath（绝对路径）→ 历史无校验，LLM/MCP 输入可读取
+// 系统配置/凭据。这里限制为用户家目录、/tmp、WSL /mnt/<drive>/ 下，且拒绝典型敏感子目录。
+// 同时匹配 / 与 \\ 分隔符，覆盖 Windows 路径（review-05 报告：之前正则只
+// 含 / 在 Windows 上敏感目录会被绕过）。统一用 [\\\\/]+ 而非 split + join。
+const ATTACH_DENY_PATTERNS = [
+  /(^|[\\/])\.ssh([\\/]|$)/i,
+  /(^|[\\/])\.aws([\\/]|$)/i,
+  /(^|[\\/])\.azure([\\/]|$)/i,
+  /(^|[\\/])\.gnupg([\\/]|$)/i,
+  /(^|[\\/])\.netrc$/i,
+  /(^|[\\/])\.kube([\\/]|$)/i,
+  /(^|[\\/])\.docker([\\/]|$)/i,
+  /(^|[\\/])\.config[\\/]scipaper-todo([\\/]|$)/i,
+];
+
+function isAllowedAttachSource(sourcePath) {
+  if (typeof sourcePath !== 'string' || !sourcePath) return false;
+  if (!path.isAbsolute(sourcePath)) return false;
+  const resolved = path.resolve(sourcePath);
+  if (ATTACH_DENY_PATTERNS.some((re) => re.test(resolved))) return false;
+  const allowedRoots = [
+    os.homedir(),
+    os.tmpdir(),
+    '/mnt', // WSL Windows drives
+    '/Volumes', // macOS external mounts
+  ].filter(Boolean).map((root) => path.resolve(root));
+  return allowedRoots.some((root) => {
+    const rootSep = root.endsWith(path.sep) ? root : root + path.sep;
+    return resolved === root || resolved.startsWith(rootSep);
+  });
+}
 
 const ROUTER_ONLY_TOOLS = [
   {
@@ -170,7 +205,11 @@ const WRITE_DISPATCH = {
   create_thesis: (fn, args) => fn(args),
   link_article_to_thesis: (fn, args) => fn(args.thesisId, args.articleId),
   attach_file: (fn, args) => {
-    const fs = require('fs');
+    if (!isAllowedAttachSource(args.sourcePath)) {
+      throw new Error(
+        'sourcePath 不在允许目录内（仅支持用户家目录 / 临时目录 / /mnt 或 /Volumes 挂载点，且排除 ~/.ssh、~/.aws 等敏感目录）：' + args.sourcePath,
+      );
+    }
     if (!fs.existsSync(args.sourcePath)) {
       throw new Error('Source file does not exist: ' + args.sourcePath);
     }
@@ -291,9 +330,12 @@ function validateArgs(name, args) {
   }
 
   if (schema.additionalProperties === false) {
+    // schema 明确禁止未知字段 → 必须 fail，否则旧 schema 调用（如 LLM 用旧版
+    // background/objectives/keyMethods 调 update_research_context）会 silent
+    // no-op，AI 还以为操作成功。
     for (const key of Object.keys(input)) {
       if (!Object.prototype.hasOwnProperty.call(properties, key)) {
-        console.warn('extra tool arg ignored for ' + name + ': ' + key);
+        errors.push('unknown property: ' + key);
       }
     }
   }
@@ -407,6 +449,8 @@ function summarizeForApproval(name, args) {
     case 'update_thesis_meta': return '更新学位论文元信息：' + input.thesisId;
     case 'add_thesis_section': return '为学位论文 ' + input.thesisId + ' 新增 section：' + input.sectionType;
     case 'unlink_article_from_thesis': return '把论文 ' + input.articleId + ' 从学位论文 ' + input.thesisId + ' 解关联';
+    case 'add_pomodoro_session': return '记录番茄钟（' + (input.duration || '?') + ' 分钟）';
+    case 'add_mood_entry': return '记心情：' + (input.mood || '?');
     default: return '执行工具调用：' + name;
   }
 }

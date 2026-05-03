@@ -4,18 +4,23 @@ import UTIF from 'utif'
 import { DiffViewer } from './DiffViewer'
 import type { Article, BlockPreview, ContentBlock, Section, Finding, FindingStatus } from '../types'
 
+// Section view is a permanent preview surface (sprint 6 阶段 8.5).
+// All text writing happens in FocusModeEditor; this component only displays
+// existing blocks, asset previews, and findings. The "✨ 沉浸式编辑" / "✨ 沉浸式
+// 撰写" buttons are the only ways into text editing from here.
 interface SectionEditorProps {
   article: Article
   section: Section
-  onAddText: (content: string, description?: string) => Promise<void>
-  onUpdateBlock: (blockId: string, content: string, description?: string) => Promise<void>
   onDeleteBlock: (blockId: string) => Promise<void>
-  onAddImage: () => Promise<void>
-  onAddFile: () => Promise<void>
   onOpenAsset: (blockId: string) => Promise<void>
+  onAddImage?: () => Promise<void>
+  onAddFile?: () => Promise<void>
   onAddFinding?: (title: string) => Promise<void>
   onUpdateFinding?: (findingId: string, patch: { title?: string; status?: FindingStatus }) => Promise<void>
   onDeleteFinding?: (findingId: string) => Promise<void>
+  /** Click on the manuscript text block → host should switch to immersive
+   *  writing. Wired by App.tsx to the focus-mode viewMode setter. */
+  onEnterEdit?: () => void
 }
 
 const FINDING_STATUS_LABEL: Record<FindingStatus, string> = {
@@ -188,90 +193,6 @@ function buildBlobUrl(bufferBase64: string, mimeType: string) {
   return URL.createObjectURL(blob)
 }
 
-function TextBlockModal({
-  block,
-  onClose,
-  onSave,
-  onDelete,
-}: {
-  block: ContentBlock
-  onClose: () => void
-  onSave: (content: string, description: string) => Promise<void>
-  onDelete: () => Promise<void>
-}) {
-  const [content, setContent] = useState(block.content)
-  const [description, setDescription] = useState(block.description)
-
-  useEffect(() => {
-    setContent(block.content)
-    setDescription(block.description)
-  }, [block.id, block.content, block.description])
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [])
-
-  return createPortal(
-    <div className="modal-overlay" role="presentation">
-      <div className="modal-dialog modal-dialog--wide">
-        <div className="modal-header">
-          <div>
-            <p className="eyebrow">文本块</p>
-            <h2>大窗口编辑</h2>
-            <p className="modal-subtitle">
-              来源 {block.updatedBy || block.createdBy || '未知'} · 最近更新 {formatDate(block.updatedAt)}
-            </p>
-          </div>
-          <button className="ghost-button" onClick={onClose} type="button">
-            关闭
-          </button>
-        </div>
-
-        <div className="modal-grid">
-          <div className="panel-card">
-            <label className="field">
-              <span>备注</span>
-              <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="为这段文字加一个容易识别的标签" />
-            </label>
-            <label className="field">
-              <span>正文</span>
-              <textarea className="block-textarea large-textarea" rows={18} value={content} onChange={(event) => setContent(event.target.value)} />
-            </label>
-          </div>
-
-          <aside className="panel-card history-panel">
-            <p className="eyebrow">写入来源</p>
-            <h3>最近版本</h3>
-            <div className="revision-list">
-              {block.versions.slice(0, 6).map((version) => (
-                <div key={version.id} className="revision-item">
-                  <strong>{version.modifiedBy}</strong>
-                  <p>{version.changeDescription || '未填写变更说明'}</p>
-                  <span>{formatDate(version.modifiedAt)}</span>
-                </div>
-              ))}
-            </div>
-          </aside>
-        </div>
-
-        <div className="modal-footer">
-          <button className="ghost-button" onClick={onDelete} type="button">
-            删除文本块
-          </button>
-          <button className="primary-button" onClick={() => onSave(content, description)} type="button">
-            保存修改
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  )
-}
-
 function AssetPreviewModal({
   block,
   preview,
@@ -405,41 +326,24 @@ function AssetPreviewModal({
 export function SectionEditor({
   article,
   section,
-  onAddText,
-  onUpdateBlock,
   onDeleteBlock,
+  onOpenAsset,
   onAddImage,
   onAddFile,
-  onOpenAsset,
   onAddFinding,
   onUpdateFinding,
   onDeleteFinding,
+  onEnterEdit,
 }: SectionEditorProps) {
-  const [newText, setNewText] = useState('')
-  const [newDescription, setNewDescription] = useState('')
-  const [expandedTextBlock, setExpandedTextBlock] = useState<ContentBlock | null>(null)
   const [previewBlock, setPreviewBlock] = useState<ContentBlock | null>(null)
   const [previewPayload, setPreviewPayload] = useState<BlockPreview | null>(null)
   const [previewError, setPreviewError] = useState('')
 
   useEffect(() => {
-    setNewText('')
-    setNewDescription('')
-    setExpandedTextBlock(null)
     setPreviewBlock(null)
     setPreviewPayload(null)
     setPreviewError('')
   }, [section.id])
-
-  async function handleAddText() {
-    if (!newText.trim()) {
-      return
-    }
-
-    await onAddText(newText, newDescription)
-    setNewText('')
-    setNewDescription('')
-  }
 
   async function handlePreview(block: ContentBlock) {
     setPreviewBlock(block)
@@ -467,21 +371,6 @@ export function SectionEditor({
         />
       ) : null}
 
-      {expandedTextBlock ? (
-        <TextBlockModal
-          block={expandedTextBlock}
-          onClose={() => setExpandedTextBlock(null)}
-          onDelete={async () => {
-            await onDeleteBlock(expandedTextBlock.id)
-            setExpandedTextBlock(null)
-          }}
-          onSave={async (content, description) => {
-            await onUpdateBlock(expandedTextBlock.id, content, description)
-            setExpandedTextBlock(null)
-          }}
-        />
-      ) : null}
-
       {previewBlock ? (
         <AssetPreviewModal
           block={previewBlock}
@@ -501,46 +390,79 @@ export function SectionEditor({
       <section className="composer-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Section</p>
+            <p className="eyebrow">Section · 预览</p>
             <h3>{section.type}</h3>
-            <p>这里展示当前章节的文本、图片、PDF 和备份文件。</p>
+            <p>展示当前章节的文本、图片、PDF 和备份文件。点右边"✨ 进入写作"或下方手稿卡片即可开始写。</p>
           </div>
           <div className="inline-actions">
-            <button className="ghost-button" onClick={onAddImage} type="button">
-              导入图片
-            </button>
-            <button className="ghost-button" onClick={onAddFile} type="button">
-              导入文件
-            </button>
+            {onEnterEdit ? (
+              <button className="primary-button" onClick={() => onEnterEdit()} type="button">
+                ✨ 进入写作
+              </button>
+            ) : null}
+            {onAddImage ? (
+              <button className="ghost-button" onClick={onAddImage} type="button">
+                导入图片
+              </button>
+            ) : null}
+            {onAddFile ? (
+              <button className="ghost-button" onClick={onAddFile} type="button">
+                导入文件
+              </button>
+            ) : null}
           </div>
         </div>
-
-        <label className="field">
-          <span>内容备注</span>
-          <input value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder="例如：这一段主要解释 Figure 2 的核心结果" />
-        </label>
-        <label className="field">
-          <span>新增文本</span>
-          <textarea rows={6} value={newText} onChange={(event) => setNewText(event.target.value)} placeholder="在这里补充本章节内容..." />
-        </label>
-        <button className="primary-button" onClick={handleAddText} type="button">
-          保存文本块
-        </button>
       </section>
 
       {section.contentBlocks.length === 0 ? (
         <section className="empty-panel">
           <h3>这个章节还没有内容</h3>
-          <p>先加一段文本，或者导入图片、SVG、TIFF、PDF 等附件。</p>
+          <p>
+            {onEnterEdit ? (
+              <>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => onEnterEdit()}
+                  style={{ marginRight: '8px' }}
+                >
+                  ✨ 开始写作
+                </button>
+                或导入图片 / PDF 等附件。
+              </>
+            ) : (
+              '导入图片 / PDF 等附件来开始这一章。'
+            )}
+          </p>
         </section>
       ) : (
         section.contentBlocks.map((block) => {
           if (block.type === 'Text') {
+            const enterable = !!onEnterEdit
             return (
-              <article key={block.id} className="content-card text-summary-card">
+              <article
+                key={block.id}
+                className={`content-card text-summary-card${enterable ? ' is-enterable' : ''}`}
+                onClick={enterable ? (e) => {
+                  // Don't trigger when the click landed on an action button or
+                  // a nested DiffViewer interactive element.
+                  const tag = (e.target as HTMLElement).closest('button, a')
+                  if (tag) return
+                  onEnterEdit?.()
+                } : undefined}
+                role={enterable ? 'button' : undefined}
+                tabIndex={enterable ? 0 : undefined}
+                onKeyDown={enterable ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onEnterEdit?.()
+                  }
+                } : undefined}
+                title={enterable ? '点击进入沉浸式写作' : undefined}
+              >
                 <div className="content-card-header">
                   <div>
-                    <p className="eyebrow">文本块</p>
+                    <p className="eyebrow">手稿 · 点击进入写作</p>
                     <strong>{block.description || '未命名文本块'}</strong>
                     <p className="muted-text">
                       来源 {block.updatedBy || block.createdBy || '未知'} · {formatDate(block.updatedAt)}
@@ -550,16 +472,13 @@ export function SectionEditor({
                     <button className="ghost-button" onClick={() => onDeleteBlock(block.id)} type="button">
                       删除
                     </button>
-                    <button className="primary-button" onClick={() => setExpandedTextBlock(block)} type="button">
-                      展开编辑
-                    </button>
                   </div>
                 </div>
 
                 <p className="text-block-preview">{getPreviewSummary(block)}</p>
 
-                {block.type === 'Text' && block.versions.length > 0 && (
-                  <DiffViewer 
+                {block.versions.length > 0 && (
+                  <DiffViewer
                     versions={block.versions}
                     currentContent={block.content}
                   />

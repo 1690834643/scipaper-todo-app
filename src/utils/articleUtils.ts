@@ -1,4 +1,5 @@
 import type { Article, ArticleStatus, Thesis, ThesisStatus } from '../types'
+import { localIsoDate } from './dateUtils'
 
 /* ---------- Word counts (single source of truth) ---------- */
 
@@ -29,7 +30,7 @@ export function relativeTime(iso: string | undefined | null): string {
   if (hr < 24) return `${hr} 小时前`
   const day = Math.floor(hr / 24)
   if (day < 30) return `${day} 天前`
-  return new Date(iso).toISOString().slice(0, 10)
+  return localIsoDate(new Date(iso))
 }
 
 /* ---------- Status label + data-status mapping ---------- */

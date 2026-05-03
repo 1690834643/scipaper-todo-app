@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Article, CommentStatus, ReviewComment, ReviewCommentType, ReviewRound } from '../types'
+import { localIsoDate } from '../utils/dateUtils'
 
 interface ReviewPanelProps {
   article: Article
@@ -18,7 +19,7 @@ function RoundComposer({
   onSubmit: (payload: { submittedAt: string; journalName: string; manuscriptNumber: string }) => Promise<void>
 }) {
   const [draft, setDraft] = useState({
-    submittedAt: new Date().toISOString().slice(0, 10),
+    submittedAt: localIsoDate(),
     journalName: '',
     manuscriptNumber: '',
   })

@@ -37,7 +37,13 @@ if (target === 'exe') {
   const transport = new StdioClientTransport({
     command,
     args,
-    env: { ...process.env, SCIPAPER_MCP_CLIENT: 'wire-smoke' },
+    // 默认对外发布的 MCP 模式只暴露读工具；smoke test 想验证写工具
+    // 也被 advertise，需要显式开启写 gate（仅本机测试用）。
+    env: {
+      ...process.env,
+      SCIPAPER_MCP_CLIENT: 'wire-smoke',
+      SCIPAPER_MCP_ALLOW_WRITE: '1',
+    },
   });
 
   const client = new Client(

@@ -42,11 +42,34 @@ function inlineToLatex(line) {
     .join('');
 }
 
+// Bibtex key 字符集（参考 BibTeX：字母数字 + - _ : .）。在写作中 [@key] 引用
+// 会被替换为 \cite{key}；其余文本仍走 inlineToLatex 做 italic + escape。
+const CITE_PATTERN = /\[@([A-Za-z][\w:.-]*)\]/g;
+
+function bodyToLatex(line) {
+  if (!line) return '';
+  const parts = [];
+  let lastIdx = 0;
+  let m;
+  CITE_PATTERN.lastIndex = 0;
+  while ((m = CITE_PATTERN.exec(line)) !== null) {
+    if (m.index > lastIdx) {
+      parts.push(inlineToLatex(line.slice(lastIdx, m.index)));
+    }
+    parts.push(`\\cite{${m[1]}}`);
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < line.length) {
+    parts.push(inlineToLatex(line.slice(lastIdx)));
+  }
+  return parts.join('');
+}
+
 function paragraphsToLatex(text) {
   if (!text) return '';
   const paragraphs = String(text).split(/\n{2,}/);
   return paragraphs
-    .map((para) => para.split('\n').map(inlineToLatex).join('\\\\\n'))
+    .map((para) => para.split('\n').map(bodyToLatex).join('\\\\\n'))
     .join('\n\n');
 }
 
@@ -59,18 +82,38 @@ function extractBibKey(bibtex) {
   return m ? m[1] : null;
 }
 
+// BibTeX 字段值在 {...} 内仍按 LaTeX 解析，未 escape 的 & / % / $ / # / _
+// 会在 LaTeX pass 中报错。结构化 fallback 来自用户原文，需主动 escape。
+function escapeBibValue(value) {
+  return String(value == null ? '' : value).replace(/[\\{}$&%#_^~]/g, (ch) => {
+    switch (ch) {
+      case '\\': return '\\textbackslash{}';
+      case '{': return '\\{';
+      case '}': return '\\}';
+      case '$': return '\\$';
+      case '&': return '\\&';
+      case '%': return '\\%';
+      case '#': return '\\#';
+      case '_': return '\\_';
+      case '^': return '\\textasciicircum{}';
+      case '~': return '\\textasciitilde{}';
+      default: return ch;
+    }
+  });
+}
+
 function fallbackBibtex(citation, key) {
   const fields = [];
-  if (citation.title) fields.push(`  title = {${citation.title}}`);
-  if (citation.authors) fields.push(`  author = {${citation.authors}}`);
-  if (citation.year) fields.push(`  year = {${citation.year}}`);
-  if (citation.journal) fields.push(`  journal = {${citation.journal}}`);
-  if (citation.volume) fields.push(`  volume = {${citation.volume}}`);
-  if (citation.number) fields.push(`  number = {${citation.number}}`);
-  if (citation.pages) fields.push(`  pages = {${citation.pages}}`);
-  if (citation.publisher) fields.push(`  publisher = {${citation.publisher}}`);
-  if (citation.doi) fields.push(`  doi = {${citation.doi}}`);
-  if (citation.url) fields.push(`  url = {${citation.url}}`);
+  if (citation.title) fields.push(`  title = {${escapeBibValue(citation.title)}}`);
+  if (citation.authors) fields.push(`  author = {${escapeBibValue(citation.authors)}}`);
+  if (citation.year) fields.push(`  year = {${escapeBibValue(citation.year)}}`);
+  if (citation.journal) fields.push(`  journal = {${escapeBibValue(citation.journal)}}`);
+  if (citation.volume) fields.push(`  volume = {${escapeBibValue(citation.volume)}}`);
+  if (citation.number) fields.push(`  number = {${escapeBibValue(citation.number)}}`);
+  if (citation.pages) fields.push(`  pages = {${escapeBibValue(citation.pages)}}`);
+  if (citation.publisher) fields.push(`  publisher = {${escapeBibValue(citation.publisher)}}`);
+  if (citation.doi) fields.push(`  doi = {${escapeBibValue(citation.doi)}}`);
+  if (citation.url) fields.push(`  url = {${escapeBibValue(citation.url)}}`);
   return `@misc{${key},\n${fields.join(',\n')}\n}`;
 }
 

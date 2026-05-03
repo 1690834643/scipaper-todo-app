@@ -18,10 +18,14 @@ import { ScenarioLibrary } from './ScenarioLibrary'
 import { ItalicGuidePanel } from './ItalicGuidePanel'
 import { ZoteroConfigPanel } from './ZoteroConfigPanel'
 
+type FontScale = 'sm' | 'md' | 'lg' | 'xl'
+
 interface SettingsViewProps {
   state: AppState
   theme: ThemeType
   onThemeChange: (theme: ThemeType) => Promise<void>
+  fontScale: FontScale
+  onFontScaleChange: (next: FontScale) => void
   mcpInfo: McpInfo | null
   providers: LlmProvider[]
   activeProviderId: string | null
@@ -50,10 +54,11 @@ interface SettingsViewProps {
   onFocusConsumed?: () => void
 }
 
-export type SettingsModule = 'theme' | 'storage' | 'ai' | 'scenarios' | 'italic' | 'zotero' | 'mcp' | 'stats' | 'autoApprove'
+export type SettingsModule = 'theme' | 'fontScale' | 'storage' | 'ai' | 'scenarios' | 'italic' | 'zotero' | 'mcp' | 'stats' | 'autoApprove'
 
 const MODULE_LABEL: Record<SettingsModule, string> = {
   theme: '主题',
+  fontScale: '全局字号',
   storage: '本地数据目录',
   ai: 'AI Provider',
   scenarios: '写作场景库',
@@ -63,6 +68,13 @@ const MODULE_LABEL: Record<SettingsModule, string> = {
   stats: '写作统计',
   autoApprove: 'AI 自动批准',
 }
+
+const FONT_SCALE_OPTIONS: { id: FontScale; label: string; px: number; sample: string }[] = [
+  { id: 'sm', label: '小', px: 14, sample: '紧凑·更多内容上屏' },
+  { id: 'md', label: '中', px: 16, sample: '默认·均衡可读' },
+  { id: 'lg', label: '大', px: 18, sample: '宽松·适合长时间写作' },
+  { id: 'xl', label: '特大', px: 20, sample: '辅助阅读·投影或低视力' },
+]
 
 export function SettingsView(props: SettingsViewProps): JSX.Element {
   const [active, setActive] = useState<SettingsModule | null>(null)
@@ -90,6 +102,53 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
         <section className="panel-stack">
           {active === 'theme' && (
             <ThemeSwitcher currentTheme={props.theme} onThemeChange={props.onThemeChange} />
+          )}
+
+          {active === 'fontScale' && (
+            <section className="panel-card">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Typography</p>
+                  <h3>全局字号</h3>
+                  <p>影响整个 app 的字体大小（除沉浸模式正文有自己的字号设置外）。</p>
+                </div>
+              </div>
+              <div className="plain-list" style={{ display: 'grid', gap: 'var(--sp-2)' }}>
+                {FONT_SCALE_OPTIONS.map((opt) => {
+                  const checked = props.fontScale === opt.id
+                  return (
+                    <label
+                      key={opt.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--sp-3)',
+                        padding: 'var(--sp-3)',
+                        border: '1px solid var(--c-line)',
+                        borderRadius: 'var(--r-md)',
+                        background: checked ? 'var(--c-accent-soft)' : 'var(--c-panel)',
+                        borderColor: checked ? 'var(--c-accent)' : 'var(--c-line)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="fontScale"
+                        value={opt.id}
+                        checked={checked}
+                        onChange={() => props.onFontScaleChange(opt.id)}
+                      />
+                      <span style={{ fontWeight: 'var(--fw-semi)', minWidth: '4ch' }}>{opt.label}</span>
+                      <span style={{ color: 'var(--c-ink-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}>{opt.px}px</span>
+                      <span style={{ flex: 1, color: 'var(--c-ink-muted)' }}>{opt.sample}</span>
+                    </label>
+                  )
+                })}
+                <p className="muted-text" style={{ marginTop: 'var(--sp-2)' }}>
+                  设置即时生效，会持久化到本机；下次启动自动恢复。
+                </p>
+              </div>
+            </section>
           )}
 
           {active === 'storage' && (
@@ -206,6 +265,13 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
           <h3 className="module-card-title">主题</h3>
           <p className="module-card-desc">三套界面外观</p>
           <p className="module-card-status">当前: {props.theme}</p>
+        </button>
+
+        <button className="module-card" onClick={() => setActive('fontScale')} type="button">
+          <span className="module-card-icon">A</span>
+          <h3 className="module-card-title">全局字号</h3>
+          <p className="module-card-desc">小 / 中 / 大 / 特大，整个 app 跟随</p>
+          <p className="module-card-status">当前: {FONT_SCALE_OPTIONS.find((o) => o.id === props.fontScale)?.label ?? '中'}</p>
         </button>
 
         <button className="module-card" onClick={() => setActive('storage')} type="button">

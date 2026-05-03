@@ -15,6 +15,12 @@
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-md);
   min-width: 0;
+  /* Sprint 6: article view hosts the inline immersive editor; let it grow
+     to fill the route-main column so the editor canvas has real estate. */
+  min-height: calc(100vh - 2 * var(--sp-4));
+}
+.workspace.article-view {
+  flex: 1;
 }
 
 [data-theme="pixel"] .workspace {
@@ -29,6 +35,25 @@
   background: var(--c-panel-sub);
   border: 1px solid var(--c-line);
   border-radius: var(--r-lg);
+}
+
+/* Sprint 6 阶段 8.6: meta heading + grid fold by default so the Section tab
+ * gets maximum vertical space for writing. .header-actions (导出 docx /
+ * LaTeX / HTML / JSON / 分享包 / 保存信息) STAYS visible — users were losing
+ * the export workflow behind the toggle (sprint 8 fix). */
+.workspace-top--collapsed {
+  padding: var(--sp-3) var(--sp-5);
+  gap: var(--sp-2);
+}
+.workspace-top--collapsed .meta-grid {
+  display: none;
+}
+.workspace-top--collapsed .meta-heading h2 {
+  font-size: var(--fs-lg);
+}
+.meta-toggle-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 [data-theme="pixel"] .workspace-top {
@@ -86,6 +111,7 @@
   grid-template-columns: 240px minmax(0, 1fr);
   gap: var(--sp-4);
   min-height: 0;
+  flex: 1;
 }
 
 @media (max-width: 1180px) {

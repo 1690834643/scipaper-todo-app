@@ -129,7 +129,11 @@
 /* ---------- Main column ---------- */
 .home-main {
   padding: var(--sp-7) var(--sp-7);
-  max-width: 1180px;
+  /* Was capped at 1180 → on 1440+ screens the right side is dead space.
+   * Bumped to 1480 and centered so wide monitors fill nicely while a fixed
+   * line length keeps prose readable. */
+  width: min(1480px, 100%);
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: var(--sp-7);

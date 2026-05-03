@@ -8,6 +8,8 @@ export type ArticleStatus =
   | 'Rejected'
   | 'Published'
 
+export type ArticleLanguage = 'zh' | 'en'
+
 export type SectionType =
   | 'Title'
   | 'Abstract'
@@ -86,6 +88,26 @@ export interface ContentBlock {
   previewUrl?: string | null
   fileName?: string | null
   fileSize?: number | null
+  /** Set when the asset path can't be resolved on this platform — e.g.
+   *  Windows-formatted absolute path on macOS. UI shows a re-link prompt. */
+  assetError?: string | null
+  annotations?: BlockAnnotation[]
+}
+
+export type AnnotationStatus = 'open' | 'resolved'
+export type AnnotationAuthor = 'user' | 'ai'
+
+export interface BlockAnnotation {
+  id: string
+  blockId: string
+  /** Verbatim quote of the annotated span — used to re-anchor on the
+   *  current document, since byte offsets shift as the user edits. */
+  anchorText: string
+  comment: string
+  author: AnnotationAuthor
+  status: AnnotationStatus
+  createdAt: string
+  updatedAt: string
 }
 
 export type FindingStatus = 'planned' | 'inProgress' | 'done'
@@ -235,6 +257,10 @@ export interface Article {
   title: string
   targetJournal: string
   status: ArticleStatus
+  /** Writing language of the manuscript itself. AI always replies in Chinese
+   *  to the (Chinese-speaking) user, but produces example sentences and
+   *  critiques the manuscript text in this language. */
+  language?: ArticleLanguage
   createdAt: string
   updatedAt: string
   researchContext: ResearchContext
@@ -387,6 +413,7 @@ export interface CreateArticlePayload {
   title: string
   targetJournal: string
   status?: ArticleStatus
+  language?: ArticleLanguage
   researchContext: {
     scientificQuestion: string
     observedPhenomenon: string
