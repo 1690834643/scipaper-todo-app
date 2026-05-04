@@ -255,6 +255,21 @@ const TOOLS = [
     storageCall: 'createArticle',
   },
   {
+    name: 'delete_article',
+    description:
+      '彻底删除一篇论文：从数据库移除，删除其附件目录（Articles/{articleId}/），并从所有学位论文 (thesis) 的关联中解开。**不可撤销**，建议先确认 articleId（list_articles 拿）。进度日志条目 (progress_entries) 会保留以保留历史。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        articleId: { type: 'string', description: '要删除的论文 ID。' },
+      },
+      required: ['articleId'],
+      additionalProperties: false,
+    },
+    storageCall: 'deleteArticle',
+  },
+  {
     name: 'update_article_meta',
     description:
       '更新论文的标题、目标期刊或投稿状态，用于用户明确要求修改文章元信息时。该工具会改变现有文章记录，适合保存状态流转、换刊或题名调整。',
@@ -1461,6 +1476,27 @@ const TOOLS = [
       additionalProperties: false,
     },
     storageCall: 'removeCustomVocabPhrase',
+  },
+  {
+    name: 'get_user_profile',
+    description: '读取用户的显示名（显示在侧边栏与时间问候后）。空字符串表示用户尚未设置。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getUserProfile',
+  },
+  {
+    name: 'set_user_profile',
+    description: '设置用户的显示名。空字符串等于清空（UI 回到默认 "papertodo"）。最长 40 字。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        displayName: { type: 'string', description: '用户希望被称呼的名字（≤40 字）。' },
+      },
+      required: ['displayName'],
+      additionalProperties: false,
+    },
+    storageCall: 'setUserProfile',
   },
   {
     name: 'list_vocab_packs',

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('scipaper', {
   bootstrap: () => ipcRenderer.invoke('app:bootstrap'),
   getMcpInfo: () => ipcRenderer.invoke('app:getMcpInfo'),
   createArticle: (payload) => ipcRenderer.invoke('article:create', payload),
+  deleteArticle: (articleId) => ipcRenderer.invoke('article:delete', { articleId }),
   updateArticleMeta: (articleId, patch) => ipcRenderer.invoke('article:updateMeta', { articleId, patch }),
   updateResearchContext: (articleId, researchContext) =>
     ipcRenderer.invoke('article:updateResearchContext', { articleId, researchContext }),
@@ -134,6 +135,10 @@ contextBridge.exposeInMainWorld('scipaper', {
   deleteCustomVocabPack: (id) => ipcRenderer.invoke('vocabPacks:delete', { id }),
   renameCustomVocabPack: (id, name) => ipcRenderer.invoke('vocabPacks:rename', { id, name }),
   getCustomVocabPacks: () => ipcRenderer.invoke('vocabPacks:getCustom'),
+
+  // User profile
+  getUserProfile: () => ipcRenderer.invoke('user:getProfile'),
+  setUserProfile: (patch) => ipcRenderer.invoke('user:setProfile', { patch }),
 
   // Progress entries / Findings / Daily session
   addProgressEntry: (payload) => ipcRenderer.invoke('progress:add', { payload }),

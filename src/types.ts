@@ -407,6 +407,11 @@ export interface VocabPackSummary {
   enabled: boolean
 }
 
+export interface UserProfile {
+  /** Empty string means "not set yet" — UI falls back to defaults. */
+  displayName: string
+}
+
 export interface AppState {
   baseDirectory: string
   articles: Article[]
@@ -417,6 +422,7 @@ export interface AppState {
   progressEntries?: ProgressEntry[]
   dailySessions?: DailySession[]
   customVocab?: CustomVocab
+  userProfile: UserProfile
 }
 
 export interface McpInfo {

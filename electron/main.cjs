@@ -24,6 +24,7 @@ const {
   updateTextBlockWithStreak,
   recordBlockVersion,
   createArticle,
+  deleteArticle,
   createThesis,
   updateThesisMeta,
   addThesisSection,
@@ -65,6 +66,8 @@ const {
   deleteCustomVocabPack,
   renameCustomVocabPack,
   getCustomVocabPacks,
+  getUserProfile,
+  setUserProfile,
   getAutoApproveTools,
   setAutoApproveTools,
   addProgressEntry,
@@ -201,6 +204,13 @@ function createWindow() {
     autoHideMenuBar: true,
     show: false,
     title: 'SciPaper Todo',
+    // BrowserWindow icon is mainly for Linux + dev. Windows reads the icon
+    // from the packaged .exe resources (set via win.icon in build config),
+    // macOS reads it from the .app bundle (mac.icon → icon.icns).
+    icon: path.join(__dirname, '..', 'build',
+      process.platform === 'win32' ? 'icon.ico'
+      : process.platform === 'darwin' ? 'icon.icns'
+      : 'icon-1024.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -264,6 +274,12 @@ function registerIpc() {
     'article:create',
     wrapStateMutation(async (_event, payload) => {
       createArticle(payload);
+    }),
+  );
+  ipcMain.handle(
+    'article:delete',
+    wrapStateMutation(async (_event, { articleId }) => {
+      deleteArticle(articleId);
     }),
   );
   ipcMain.handle(
@@ -706,6 +722,12 @@ function registerIpc() {
   ipcMain.handle('vocabPacks:delete', (_, { id }) => deleteCustomVocabPack(id));
   ipcMain.handle('vocabPacks:rename', (_, { id, name }) => renameCustomVocabPack(id, name));
   ipcMain.handle('vocabPacks:getCustom', () => getCustomVocabPacks());
+
+  // User profile (display name shown in sidebar + greetings)
+  ipcMain.handle('user:getProfile', () => getUserProfile());
+  ipcMain.handle('user:setProfile', wrapStateMutation(async (_event, { patch }) => {
+    setUserProfile(patch);
+  }));
   ipcMain.handle('autoApprove:get', () => getAutoApproveTools());
   ipcMain.handle('autoApprove:set', (_, { value }) => setAutoApproveTools(value));
 

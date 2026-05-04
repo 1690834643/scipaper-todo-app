@@ -7,6 +7,7 @@ declare global {
       bootstrap: () => Promise<AppState>
       getMcpInfo: () => Promise<McpInfo>
       createArticle: (payload: CreateArticlePayload) => Promise<AppState>
+      deleteArticle: (articleId: string) => Promise<AppState>
       updateArticleMeta: (
         articleId: string,
         patch: { title: string; targetJournal: string; status: ArticleStatus },
@@ -237,6 +238,10 @@ declare global {
       deleteCustomVocabPack: (id: string) => Promise<import('./types').VocabPackSummary[]>
       renameCustomVocabPack: (id: string, name: string) => Promise<import('./types').VocabPack>
       getCustomVocabPacks: () => Promise<import('./types').VocabPack[]>
+
+      // User profile
+      getUserProfile: () => Promise<import('./types').UserProfile>
+      setUserProfile: (patch: Partial<import('./types').UserProfile>) => Promise<AppState>
 
       // Auto-approve tool calls
       getAutoApproveTools: () => Promise<boolean>

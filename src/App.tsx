@@ -1185,6 +1185,7 @@ function App() {
           dailyGoal={state?.writingStreak.dailyGoal ?? 1000}
           hasOpenArticle={!!selectedArticle}
           openArticleTitle={selectedArticle?.title ?? null}
+          userDisplayName={state?.userProfile?.displayName ?? ''}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
         />
@@ -1218,6 +1219,16 @@ function App() {
               }}
               onNewArticle={() => setWizardOpen(true)}
               onNewThesis={() => setThesisWizardOpen(true)}
+              onDeleteArticle={async (id, title) => {
+                try {
+                  const next = await window.scipaper.deleteArticle(id)
+                  setState(next)
+                  if (selectedArticleId === id) setSelectedArticleId(null)
+                  setNotice(`已删除「${title}」`)
+                } catch (error) {
+                  setNotice(error instanceof Error ? error.message : '删除失败')
+                }
+              }}
             />
           ) : null}
 
@@ -1267,6 +1278,11 @@ function App() {
               onSetAutoApproveTools={async (value) => {
                 const saved = await window.scipaper.setAutoApproveTools(value)
                 setAutoApproveToolsState(Boolean(saved))
+              }}
+              userDisplayName={state.userProfile?.displayName ?? ''}
+              onUpdateUserDisplayName={async (next) => {
+                const after = await window.scipaper.setUserProfile({ displayName: next })
+                setState(after)
               }}
               vocabPackSummaries={vocabPackSummaries}
               customVocabPacks={customVocabPacks}

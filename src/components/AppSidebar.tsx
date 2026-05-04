@@ -17,6 +17,8 @@ interface AppSidebarProps {
   openArticleTitle?: string | null
   collapsed?: boolean
   onToggleCollapsed?: () => void
+  /** Empty string falls back to the default brand name "papertodo". */
+  userDisplayName?: string
 }
 
 function aiShortcutLabel(): string {
@@ -55,13 +57,16 @@ export function AppSidebar({
   openArticleTitle,
   collapsed = false,
   onToggleCollapsed,
+  userDisplayName,
 }: AppSidebarProps): JSX.Element {
+  const brandLabel = (userDisplayName && userDisplayName.trim()) || 'papertodo'
+  const brandGlyph = (userDisplayName && userDisplayName.trim()) ? [...userDisplayName.trim()][0].toUpperCase() : 'P'
   return (
     <aside className={`home-sidebar${collapsed ? ' is-collapsed' : ''}`}>
       <div className='home-sidebar-top'>
         <div className='home-brand'>
-          <div className='home-brand-glyph'>P</div>
-          {!collapsed && <div className='home-brand-name'>papertodo</div>}
+          <div className='home-brand-glyph'>{brandGlyph}</div>
+          {!collapsed && <div className='home-brand-name'>{brandLabel}</div>}
         </div>
         {/* Always render the toggle so a `collapsed=true` sidebar without an
          * onToggleCollapsed handler isn't a permanent dead-end. Disabled state
