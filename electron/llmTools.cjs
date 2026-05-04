@@ -228,42 +228,25 @@ const TOOLS = [
   {
     name: 'create_article',
     description:
-      '创建新的论文项目，用于用户要开始整理一篇新稿件或把新的研究主题纳入待办系统时。可同时写入目标期刊和初始研究上下文，属于写入操作，调用前需要用户确认。',
+      '创建新的论文项目，用于用户要开始整理一篇新稿件或把新的研究主题纳入待办系统时。可同时写入目标期刊、初始状态、研究上下文（科学问题/现象/假设/方案），属于写入操作。',
     isWrite: true,
     parameters: {
       type: 'object',
       properties: {
-        title: {
-          type: 'string',
-          description: '论文标题。',
-        },
-        targetJournal: {
-          type: 'string',
-          description: '目标期刊，可为空。',
-        },
-        initialContext: {
+        title: { type: 'string', description: '论文标题。' },
+        targetJournal: { type: 'string', description: '目标期刊，可为空。' },
+        status: { type: 'string', enum: ARTICLE_STATUS_ENUM, description: '初始状态，默认 Drafting。' },
+        researchContext: {
           type: 'object',
           properties: {
-            background: {
-              type: 'string',
-              description: '研究背景。',
-            },
-            hypothesis: {
-              type: 'string',
-              description: '研究假设。',
-            },
-            objectives: {
-              type: 'string',
-              description: '研究目标。',
-            },
-            keyMethods: {
-              type: 'string',
-              description: '关键方法。',
-            },
+            scientificQuestion: { type: 'string', description: '科学问题。' },
+            observedPhenomenon: { type: 'string', description: '观察到的现象。' },
+            hypothesis: { type: 'string', description: '研究假设。' },
+            approach: { type: 'string', description: '研究方案 / 关键方法。' },
           },
           required: [],
           additionalProperties: false,
-          description: '创建文章时一并记录的初始研究上下文。',
+          description: '初始研究上下文（与 storage 字段一一对应）。',
         },
       },
       required: ['title'],
@@ -325,26 +308,26 @@ const TOOLS = [
         researchContext: {
           type: 'object',
           properties: {
-            background: {
+            scientificQuestion: {
               type: 'string',
-              description: '研究背景。',
+              description: '研究的科学问题（一句话）。',
+            },
+            observedPhenomenon: {
+              type: 'string',
+              description: '已观察到的关键现象 / 反常 / 数据线索。',
             },
             hypothesis: {
               type: 'string',
               description: '研究假设。',
             },
-            objectives: {
+            approach: {
               type: 'string',
-              description: '研究目标。',
-            },
-            keyMethods: {
-              type: 'string',
-              description: '关键方法。',
+              description: '研究方案 / 关键方法路径。',
             },
           },
           required: [],
           additionalProperties: false,
-          description: '新的研究上下文内容。',
+          description: '新的研究上下文内容。仅传入需要修改的字段，未传入字段会保持当前值（storage 在 normalize 时空字符串视为未填写，请避免显式传空串覆盖已有内容）。',
         },
       },
       required: ['articleId', 'researchContext'],
@@ -355,7 +338,7 @@ const TOOLS = [
   {
     name: 'add_text_block',
     description:
-      '向指定论文和章节新增一个文本块，用于追加结果描述、方法段落、讨论要点或其他正文材料。该工具会写入文章内容，sectionType 必须使用标准学术章节类型。',
+      '【仅当目标章节当前还没有任何 Text 类型 block 时使用】给一个空白章节写入第一段正文。如果章节已有 text block，绝不要用本工具——必须改用 update_text_block 把新内容追加 / 改写到现有 block。papertodo 实行单块策略：每章节最多 1 个 text block。',
     isWrite: true,
     parameters: {
       type: 'object',
@@ -386,7 +369,7 @@ const TOOLS = [
   {
     name: 'update_text_block',
     description:
-      '更新已有文本块的正文内容，用于用户要求改写、替换或校正文稿片段时。该工具会保留版本记录并修改指定 blockId 的内容，调用前应确认目标块无误。',
+      '修改已有文本块的整段正文。用户说"改这段 / 改写 / 帮我加一段 / 扩写"等都用本工具——把新内容（包括追加段落）作为完整 content 写回。content 是整块的最终内容，不是 diff，不要只传新增部分。如果用户想"加一段"，请把现有正文 + 新段落拼成完整 content 一起传。',
     isWrite: true,
     parameters: {
       type: 'object',
@@ -463,8 +446,8 @@ const TOOLS = [
               description: '作者列表。',
             },
             year: {
-              type: 'number',
-              description: '发表年份。',
+              type: 'string',
+              description: '发表年份（YYYY 字符串，与 types.ts Citation.year 对齐）。',
             },
             localPdfPath: {
               type: 'string',
@@ -1194,6 +1177,430 @@ const TOOLS = [
       additionalProperties: false,
     },
     storageCall: 'addMoodEntry',
+  },
+  {
+    name: 'export_article',
+    description:
+      '把论文导出成指定格式：markdown / docx / latex / html / json / share。导出文件落在 Articles/<id>/Exports/ 下，返回完整路径。docx 可选 docxTemplate（academic-en / thesis-zh / nature）和 applyItalicGuide（导出前调 LLM 套用学名/拉丁斜体规范，更慢更贵）。share 把文章打包成可分享的目录（含正文、figure、bib）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        articleId: { type: 'string', description: '要导出的论文 id。' },
+        format: {
+          type: 'string',
+          enum: ['markdown', 'docx', 'latex', 'html', 'json', 'share'],
+          description: '导出格式。',
+        },
+        docxTemplate: {
+          type: 'string',
+          enum: ['academic-en', 'thesis-zh', 'nature'],
+          description: '仅 format=docx 时有意义。',
+        },
+        applyItalicGuide: {
+          type: 'boolean',
+          description: '仅 format=docx 时有意义。导出前调 LLM 套用学名/拉丁斜体规范。',
+        },
+      },
+      required: ['articleId', 'format'],
+      additionalProperties: false,
+    },
+    storageCall: '__exporter__',
+  },
+  {
+    name: 'get_writing_streak',
+    description: '读取写作 streak 状态（连续天数、最长 streak、今日字数、daily goal、history）。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'loadState',
+  },
+  {
+    name: 'update_daily_writing_goal',
+    description: '设置每日写作字数目标（goal，正整数，单位字）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: { goal: { type: 'number', description: '每日字数目标，>0' } },
+      required: ['goal'],
+      additionalProperties: false,
+    },
+    storageCall: 'updateDailyGoal',
+  },
+  {
+    name: 'get_mood_history',
+    description: '读取心情历史（按日期倒序）。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getMoodHistory',
+  },
+  {
+    name: 'get_pomodoro_stats',
+    description: '读取番茄钟统计（今日 / 历史）。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getPomodoroStats',
+  },
+  {
+    name: 'get_writing_stats',
+    description: '读取写作统计（按论文 / 按天 / 按时段的字数与活动）。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getWritingStats',
+  },
+  {
+    name: 'get_theme',
+    description: '读取当前主题。可选三种之一：claude / pixel / fresh。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getTheme',
+  },
+  {
+    name: 'set_theme',
+    description: '切换主题。仅支持 claude / pixel / fresh 三种。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        theme: { type: 'string', enum: ['claude', 'pixel', 'fresh'], description: '主题名。' },
+      },
+      required: ['theme'],
+      additionalProperties: false,
+    },
+    storageCall: 'setTheme',
+  },
+  {
+    name: 'get_auto_approve_tools',
+    description: '读取「内置 AI 自动批准所有工具调用」开关当前值。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getAutoApproveTools',
+  },
+  {
+    name: 'set_auto_approve_tools',
+    description: '设置「内置 AI 自动批准所有工具调用」开关。开启后写入类工具不再弹出 approve 对话框，AI 会直接执行。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: { value: { type: 'boolean', description: 'true 开启自动批准，false 关闭。' } },
+      required: ['value'],
+      additionalProperties: false,
+    },
+    storageCall: 'setAutoApproveTools',
+  },
+  {
+    name: 'list_scenarios',
+    description: '列出所有写作场景预设（含 builtin 与用户自定义）。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'listWritingScenarios',
+  },
+  {
+    name: 'add_scenario',
+    description: '新增一个用户自定义写作场景。至少包含 name 与 systemPromptAddon。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        description: { type: 'string' },
+        systemPromptAddon: { type: 'string', description: '该场景注入到 system prompt 的额外指令。' },
+        enabled: { type: 'boolean' },
+      },
+      required: ['name', 'systemPromptAddon'],
+      additionalProperties: true,
+    },
+    storageCall: 'addWritingScenario',
+  },
+  {
+    name: 'update_scenario',
+    description: '更新写作场景。builtin 场景只允许改 systemPromptAddon。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        patch: { type: 'object', description: '要更新的字段；builtin 场景只接受 { systemPromptAddon }' },
+      },
+      required: ['id', 'patch'],
+      additionalProperties: false,
+    },
+    storageCall: 'updateWritingScenario',
+  },
+  {
+    name: 'delete_scenario',
+    description: '删除一个用户自定义场景（builtin 不允许）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    storageCall: 'deleteWritingScenario',
+  },
+  {
+    name: 'reset_scenario',
+    description: '把 builtin 场景重置回默认 systemPromptAddon（用户改坏后回滚）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    storageCall: 'resetWritingScenarioToDefault',
+  },
+  {
+    name: 'get_italic_guide',
+    description: '读取 latin / 学名斜体规范配置（enabled + prompt）。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getItalicGuide',
+  },
+  {
+    name: 'set_italic_guide',
+    description: '设置 latin / 学名斜体规范。可只传 enabled 或 prompt 任一字段，未传字段保持原值。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean', description: 'docx 导出时是否调 LLM 自动套斜体。' },
+        prompt: { type: 'string', description: '套斜体时给 LLM 的规范 prompt。' },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    storageCall: 'setItalicGuide',
+  },
+  {
+    name: 'get_zotero_config',
+    description: '读取 Zotero 集成配置（apiKey 在结果里会保留，调用方需注意）。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getZoteroConfig',
+  },
+  {
+    name: 'set_zotero_config',
+    description: '设置 Zotero 集成配置。把要更新的字段传进 config 对象。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        apiKey: { type: 'string' },
+        userId: { type: 'string' },
+        baseUrl: { type: 'string' },
+        libraryType: { type: 'string', enum: ['user', 'group'] },
+      },
+      required: [],
+      additionalProperties: true,
+    },
+    storageCall: 'setZoteroConfig',
+  },
+  {
+    name: 'list_vocab',
+    description: '列出用户自定义的补全词与短语。沉浸写作时这些会与内置 sci-vocab 合并到 general 桶里随时可见。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getCustomVocab',
+  },
+  {
+    name: 'add_vocab_word',
+    description: '把一个新词加入用户自定义补全库。重复（大小写不敏感）会被忽略。建议是 single token 或 hyphen 复合（≤30 字符），如 spermatheca / cis-regulatory / Cscaspase-3。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        word: { type: 'string', description: '要加入的词。' },
+      },
+      required: ['word'],
+      additionalProperties: false,
+    },
+    storageCall: 'addCustomVocabWord',
+  },
+  {
+    name: 'remove_vocab_word',
+    description: '从用户自定义补全库删除一个词（大小写不敏感）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        word: { type: 'string' },
+      },
+      required: ['word'],
+      additionalProperties: false,
+    },
+    storageCall: 'removeCustomVocabWord',
+  },
+  {
+    name: 'add_vocab_phrase',
+    description: '把一个短语加入用户自定义补全库。trigger 是用户键入≥2 字符的前缀，text 是被插入的完整短语。例：trigger="weshow", text="we show that"。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        trigger: { type: 'string', description: '触发前缀，≥2 字符。' },
+        text: { type: 'string', description: '完整插入文本。' },
+        label: { type: 'string', description: '弹窗里显示的简短标签（可选）。' },
+      },
+      required: ['trigger', 'text'],
+      additionalProperties: false,
+    },
+    storageCall: 'addCustomVocabPhrase',
+  },
+  {
+    name: 'remove_vocab_phrase',
+    description: '从用户自定义补全库删除短语。仅给 trigger 会删该 trigger 下所有短语；给 trigger+text 精确删一条。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        trigger: { type: 'string' },
+        text: { type: 'string' },
+      },
+      required: ['trigger'],
+      additionalProperties: false,
+    },
+    storageCall: 'removeCustomVocabPhrase',
+  },
+  {
+    name: 'list_vocab_packs',
+    description: '列出全部补全词库 pack（内置 + 用户导入），含每个 pack 的 id / 名称 / 描述 / 是否内置 / 默认开关 / 用户当前的启用状态。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'listVocabPacks',
+  },
+  {
+    name: 'set_vocab_pack_enabled',
+    description: '启用或禁用某个补全 pack（内置 / 用户导入皆可）。仅影响沉浸写作时的补全候选；不删除该 pack 内容。返回更新后的 pack 列表。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'pack id，参考 list_vocab_packs。' },
+        enabled: { type: 'boolean' },
+      },
+      required: ['id', 'enabled'],
+      additionalProperties: false,
+    },
+    storageCall: 'setVocabPackEnabled',
+  },
+  {
+    name: 'import_vocab_pack',
+    description: '从用户给的 words / phrases 创建一个新的 custom pack。words 可以是字符串数组（默认归到 general 段），也可以是按 IMRaD 段（general/introduction/methods/results/discussion）分桶的对象。导入后默认启用，立即生效。返回新 pack。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '展示名（≤60 字）。' },
+        description: { type: 'string', description: '可选的简短描述。' },
+        words: {
+          description: '字符串数组（直接合到 general 段），或 {general?, introduction?, methods?, results?, discussion?} 形式。',
+          oneOf: [
+            { type: 'array', items: { type: 'string' } },
+            { type: 'object', additionalProperties: { type: 'array', items: { type: 'string' } } },
+          ],
+        },
+        phrases: {
+          description: '可选。短语数组（合到 general 段）或按 IMRaD 段分桶。每条 {trigger, text, label?}。',
+          oneOf: [
+            {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  trigger: { type: 'string' },
+                  text: { type: 'string' },
+                  label: { type: 'string' },
+                },
+                required: ['trigger', 'text'],
+              },
+            },
+            { type: 'object' },
+          ],
+        },
+      },
+      required: ['name', 'words'],
+      additionalProperties: false,
+    },
+    storageCall: 'importVocabPack',
+  },
+  {
+    name: 'delete_vocab_pack',
+    description: '删除一个用户导入的 custom pack（内置 pack 不可删）。删除后该 pack 的启用偏好也一并清除。返回更新后的 pack 列表。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    storageCall: 'deleteCustomVocabPack',
+  },
+  {
+    name: 'rename_vocab_pack',
+    description: '重命名用户导入的 custom pack（内置不可改）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+      },
+      required: ['id', 'name'],
+      additionalProperties: false,
+    },
+    storageCall: 'renameCustomVocabPack',
+  },
+  {
+    name: 'update_thesis_meta',
+    description: '更新学位论文元信息（title / status / 等）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        thesisId: { type: 'string' },
+        patch: { type: 'object', description: '要更新的元信息字段。' },
+      },
+      required: ['thesisId', 'patch'],
+      additionalProperties: false,
+    },
+    storageCall: 'updateThesisMeta',
+  },
+  {
+    name: 'add_thesis_section',
+    description: '在学位论文中新增一个 section。sectionType 必须是 storage 端的固定 enum 之一。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        thesisId: { type: 'string' },
+        sectionType: {
+          type: 'string',
+          enum: ['Cover', 'Declaration', 'Abstract', 'Acknowledgements', 'TableOfContents', 'ListOfFigures', 'ListOfTables', 'Chapter', 'Conclusion', 'References', 'Appendix'],
+        },
+        title: { type: 'string' },
+      },
+      required: ['thesisId', 'sectionType', 'title'],
+      additionalProperties: false,
+    },
+    storageCall: 'addThesisSection',
+  },
+  {
+    name: 'unlink_article_from_thesis',
+    description: '从学位论文中解除一篇文章的关联（不会删除文章本身）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        thesisId: { type: 'string' },
+        articleId: { type: 'string' },
+      },
+      required: ['thesisId', 'articleId'],
+      additionalProperties: false,
+    },
+    storageCall: 'unlinkArticleFromThesis',
   },
 ];
 
