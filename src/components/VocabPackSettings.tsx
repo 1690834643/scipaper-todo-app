@@ -281,7 +281,7 @@ export function VocabPackSettings(props: VocabPackSettingsProps): JSX.Element {
             .txt：一行一词（# 开头当注释）。.json：可以是 ["w1","w2"] 数组、{`{"words":[...]}`}，或按 IMRaD 段分桶 {`{"general":[],"methods":[]}`}。
           </p>
           <div>
-            <button type="button" className="btn-primary" disabled={busy || !pendingFile || !importName.trim()} onClick={handleImport}>
+            <button type="button" className="primary-button" disabled={busy || !pendingFile || !importName.trim()} onClick={handleImport}>
               {busy ? '导入中…' : '导入并启用'}
             </button>
           </div>

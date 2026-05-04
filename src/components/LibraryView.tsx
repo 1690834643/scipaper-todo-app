@@ -20,6 +20,7 @@ interface LibraryViewProps {
   onOpenThesis: (id: string) => void
   onNewArticle: () => void
   onNewThesis: () => void
+  onDeleteArticle: (id: string, title: string) => void | Promise<void>
 }
 
 type LibraryItem = {
@@ -34,7 +35,7 @@ type LibraryItem = {
 }
 
 export function LibraryView(props: LibraryViewProps): JSX.Element {
-  const { articles, theses, onOpenArticle, onOpenThesis, onNewArticle, onNewThesis } = props
+  const { articles, theses, onOpenArticle, onOpenThesis, onNewArticle, onNewThesis, onDeleteArticle } = props
   const [filter, setFilter] = useState<Filter>('all')
 
   const items = useMemo<LibraryItem[]>(() => {
@@ -160,32 +161,80 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
 
       {!isCompletelyEmpty && !isFilteredEmpty && (
         <div className="library-grid">
-          {filteredItems.map((item) => (
-            <button
-              key={item.id}
-              className="library-card"
-              type="button"
-              onClick={() =>
-                item.kind === 'article' ? onOpenArticle(item.id) : onOpenThesis(item.id)
-              }
-            >
-              <div className="library-card-cover">{item.title.charAt(0).toUpperCase()}</div>
-              <div className="library-card-body">
-                <p className="library-item-meta-row">
-                  <span>{item.kind === 'article' ? 'Article' : 'Thesis'}</span>
-                  <span data-status={item.statusKey} className="library-item-status">
-                    {item.statusLabel}
-                  </span>
-                </p>
-                <h3>{item.title}</h3>
-                <p>{item.subtitle}</p>
+          {filteredItems.map((item) => {
+            const open = () =>
+              item.kind === 'article' ? onOpenArticle(item.id) : onOpenThesis(item.id)
+            return (
+              <div
+                key={item.id}
+                className="library-card"
+                role="button"
+                tabIndex={0}
+                onClick={open}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    open()
+                  }
+                }}
+                style={{ position: 'relative' }}
+              >
+                {item.kind === 'article' && (
+                  <button
+                    type="button"
+                    className="library-card-delete"
+                    aria-label={`删除 ${item.title}`}
+                    title="删除（不可撤销）"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm(`确定删除「${item.title}」？\n\n这会一并删除该论文的全部章节、附件、版本历史，且不可撤销。`)) {
+                        onDeleteArticle(item.id, item.title)
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      // Don't let Enter/Space bubble to the parent (would open the card)
+                      if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      right: 0,
+                      width: 44,
+                      height: 44,
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      border: '1px solid var(--c-line)',
+                      background: 'var(--c-panel)',
+                      color: 'var(--c-ink-muted)',
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+                <div className="library-card-cover">{Array.from(item.title)[0]?.toUpperCase() ?? ''}</div>
+                <div className="library-card-body">
+                  <p className="library-item-meta-row">
+                    <span>{item.kind === 'article' ? 'Article' : 'Thesis'}</span>
+                    <span data-status={item.statusKey} className="library-item-status">
+                      {item.statusLabel}
+                    </span>
+                  </p>
+                  <h3>{item.title}</h3>
+                  <p>{item.subtitle}</p>
+                </div>
+                <div className="library-card-footer">
+                  <span>{item.wordCount} 字</span>
+                  <span>{relativeTime(item.updatedAt)}</span>
+                </div>
               </div>
-              <div className="library-card-footer">
-                <span>{item.wordCount} 字</span>
-                <span>{relativeTime(item.updatedAt)}</span>
-              </div>
-            </button>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

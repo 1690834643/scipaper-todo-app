@@ -78,6 +78,10 @@ if (target === 'exe') {
     'import_vocab_pack',
     'delete_vocab_pack',
     'rename_vocab_pack',
+    // Sprint 15.5
+    'delete_article',
+    'get_user_profile',
+    'set_user_profile',
   ];
   const missing = expected.filter((n) => !names.includes(n));
   console.log('expected-set missing: ' + (missing.length ? missing.join(', ') : 'NONE'));

@@ -212,7 +212,7 @@ export function DailyLogView({
         <header className='daily-log-hero'>
           <div className='daily-log-hero-top'>
             <div className='daily-log-hero-greet'>
-              <p className='home-hero-eyebrow'>{today} · {timeOfDayGreeting()}</p>
+              <p className='home-hero-eyebrow'>{today} · {timeOfDayGreeting()}{state.userProfile?.displayName ? `, ${state.userProfile.displayName}` : ''}</p>
               <h1 className='home-hero-title'>今日 · {heroProgressTotal} 项进展</h1>
               <p className='home-hero-sub'>
                 {counts.length === 0

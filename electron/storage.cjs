@@ -559,7 +559,17 @@ function normalizeStoredDatabase(data) {
     customVocab: normalizeCustomVocab(data.customVocab),
     vocabPackPrefs: normalizeVocabPackPrefs(data.vocabPackPrefs),
     customVocabPacks: normalizeCustomVocabPacks(data.customVocabPacks),
+    userProfile: normalizeUserProfile(data.userProfile),
   };
+}
+
+// User profile — name shown in the sidebar brand slot and prepended to time-of-day
+// greetings. Empty string means "no name set" (UI falls back to defaults).
+function normalizeUserProfile(obj = {}) {
+  if (!obj || typeof obj !== 'object') obj = {};
+  const raw = typeof obj.displayName === 'string' ? obj.displayName.trim() : '';
+  // Cap at 40 chars to avoid sidebar layout overflow.
+  return { displayName: raw.length > 40 ? raw.slice(0, 40) : raw };
 }
 
 function isWindowsAbsolutePath(value) {
@@ -776,6 +786,45 @@ function unlinkArticleFromThesis(thesisId, articleId) {
   writeDatabase(database);
 }
 
+// Delete an article entirely: drops it from the articles array, removes its
+// attachment directory under Articles/{articleId}/, and detaches it from any
+// thesis that linked it. Progress entries that referenced this article keep
+// their articleId untouched so historical activity stays auditable; the UI
+// already shows them as orphaned ("article gone") when needed.
+function deleteArticle(articleId) {
+  if (typeof articleId !== 'string' || !articleId.trim()) {
+    throw new Error('deleteArticle: articleId is required');
+  }
+
+  const database = readDatabase();
+  const before = database.articles.length;
+  database.articles = database.articles.filter((a) => a.id !== articleId);
+  if (database.articles.length === before) {
+    throw new Error('deleteArticle: article not found');
+  }
+
+  for (const thesis of database.theses) {
+    if (Array.isArray(thesis.articleIds) && thesis.articleIds.includes(articleId)) {
+      thesis.articleIds = thesis.articleIds.filter((id) => id !== articleId);
+      touchThesis(thesis);
+    }
+  }
+
+  writeDatabase(database);
+
+  // Remove the per-article attachment / export directory if it exists. This
+  // is intentionally best-effort — if the user moved files manually we still
+  // succeed at the database delete.
+  const articleDir = getArticleDirectory(articleId);
+  try {
+    if (fs.existsSync(articleDir)) {
+      fs.rmSync(articleDir, { recursive: true, force: true });
+    }
+  } catch (error) {
+    console.error('deleteArticle: failed to remove attachments dir', articleDir, error);
+  }
+}
+
 function updateDailyGoal(goal) {
   const database = readDatabase();
 
@@ -922,7 +971,15 @@ function findBlock(article, blockId) {
 }
 
 function getArticleDirectory(articleId) {
-  return path.join(ARTICLES_DIRECTORY, articleId);
+  if (typeof articleId !== 'string' || !articleId) {
+    throw new Error('Invalid articleId');
+  }
+  const candidate = path.resolve(ARTICLES_DIRECTORY, articleId);
+  const root = path.resolve(ARTICLES_DIRECTORY);
+  if (candidate !== root && !candidate.startsWith(root + path.sep)) {
+    throw new Error('articleId resolves outside Articles directory');
+  }
+  return candidate;
 }
 
 function resolveBlockPath(articleId, block) {
@@ -1413,6 +1470,20 @@ function removeCustomVocabPhrase(trigger, text) {
   return db.customVocab;
 }
 
+function getUserProfile() {
+  const db = readDatabase();
+  return db.userProfile || normalizeUserProfile();
+}
+
+function setUserProfile(patch = {}) {
+  const db = readDatabase();
+  const current = db.userProfile || normalizeUserProfile();
+  const next = { ...current, ...patch };
+  db.userProfile = normalizeUserProfile(next);
+  writeDatabase(db);
+  return db.userProfile;
+}
+
 function clearCustomVocab() {
   const db = readDatabase();
   db.customVocab = normalizeCustomVocab();
@@ -1672,6 +1743,7 @@ function loadState() {
     theme: database.theme || 'light',
     progressEntries: Array.isArray(database.progressEntries) ? database.progressEntries : [],
     dailySessions: Array.isArray(database.dailySessions) ? database.dailySessions : [],
+    userProfile: database.userProfile || { displayName: '' },
   };
 }
 
@@ -2873,6 +2945,7 @@ module.exports = {
   addThesisSection,
   linkArticleToThesis,
   unlinkArticleFromThesis,
+  deleteArticle,
   updateDailyGoal,
   addMoodEntry,
   getMoodHistory,
@@ -2906,6 +2979,8 @@ module.exports = {
   deleteCustomVocabPack,
   renameCustomVocabPack,
   getCustomVocabPacks,
+  getUserProfile,
+  setUserProfile,
   getWritingStats,
   addTag,
   removeTag,

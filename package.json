@@ -1,7 +1,7 @@
 {
   "name": "scipaper-todo",
   "private": true,
-  "version": "1.0.35",
+  "version": "1.0.36",
   "description": "SciPaper Todo desktop app for local-first scientific manuscript management.",
   "author": "nee <ksjhunau@gmail.com>",
   "type": "module",
@@ -58,14 +58,21 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "build/icon.ico",
+      "build/icon.icns",
+      "build/icon-1024.png",
       "package.json"
     ],
     "asar": true,
     "asarUnpack": [
       "electron/**/*.cjs",
-      "node_modules/**"
+      "node_modules/**",
+      "build/icon.ico",
+      "build/icon.icns",
+      "build/icon-1024.png"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -79,13 +86,14 @@
             "x64"
           ]
         }
-      ],
-      "signAndEditExecutable": false
+      ]
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "portable": {

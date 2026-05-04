@@ -210,7 +210,7 @@ export function HomeView({ state, onResume, onNavigate }: HomeViewProps) {
           <div>
             <p className="home-hero-eyebrow">{formatNow()} · {tod.period}</p>
             <h1 className="home-hero-title">
-              {tod.greeting},<br />
+              {tod.greeting}{state.userProfile?.displayName ? `, ${state.userProfile.displayName}` : ''},<br />
               your study is <em>{tod.mood}</em>.
             </h1>
             <div className="home-hero-rule"></div>

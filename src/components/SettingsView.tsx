@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type {
   AppState,
   McpInfo,
@@ -54,6 +54,8 @@ interface SettingsViewProps {
   writingStats: WritingStatsType | null
   autoApproveTools: boolean
   onSetAutoApproveTools: (value: boolean) => Promise<void>
+  userDisplayName: string
+  onUpdateUserDisplayName: (next: string) => Promise<void>
   vocabPackSummaries: VocabPackSummary[]
   customVocabPacks: VocabPack[]
   onToggleVocabPack: (id: string, enabled: boolean) => Promise<void>
@@ -68,9 +70,10 @@ interface SettingsViewProps {
   onFocusConsumed?: () => void
 }
 
-export type SettingsModule = 'theme' | 'fontScale' | 'storage' | 'ai' | 'scenarios' | 'italic' | 'zotero' | 'mcp' | 'stats' | 'autoApprove' | 'vocabPacks'
+export type SettingsModule = 'profile' | 'theme' | 'fontScale' | 'storage' | 'ai' | 'scenarios' | 'italic' | 'zotero' | 'mcp' | 'stats' | 'autoApprove' | 'vocabPacks'
 
 const MODULE_LABEL: Record<SettingsModule, string> = {
+  profile: '个人资料',
   theme: '主题',
   fontScale: '全局字号',
   storage: '本地数据目录',
@@ -90,6 +93,71 @@ const FONT_SCALE_OPTIONS: { id: FontScale; label: string; px: number; sample: st
   { id: 'lg', label: '大', px: 18, sample: '宽松·适合长时间写作' },
   { id: 'xl', label: '特大', px: 20, sample: '辅助阅读·投影或低视力' },
 ]
+
+function UserProfilePanel(props: { displayName: string; onUpdate: (next: string) => Promise<void> }): JSX.Element {
+  const [draft, setDraft] = useState(props.displayName)
+  const [saving, setSaving] = useState(false)
+  const [showSaved, setShowSaved] = useState(false)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { setDraft(props.displayName) }, [props.displayName])
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    }
+  }, [])
+
+  async function save() {
+    setSaving(true)
+    try {
+      await props.onUpdate(draft.trim())
+      setShowSaved(true)
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+      savedTimerRef.current = setTimeout(() => setShowSaved(false), 4000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const dirty = draft.trim() !== props.displayName.trim()
+  return (
+    <section className="panel-card">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Profile</p>
+          <h3>显示名字</h3>
+          <p>会出现在侧边栏左上 brand 区域，以及主页 / 每日日志的时间问候后（"下午好, 你的名字"）。</p>
+        </div>
+      </div>
+      <div className="plain-list" style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+        <label className="field">
+          <span>怎么称呼你？</span>
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.slice(0, 40))}
+            onKeyDown={(e) => { if (e.key === 'Enter' && dirty) save() }}
+            placeholder="如：自动挡赛车手 / Wei / Jane"
+            maxLength={40}
+            autoFocus
+            disabled={saving}
+            style={{ width: '100%' }}
+          />
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <button className="primary-button" type="button" disabled={!dirty || saving} onClick={save}>
+            {saving ? '保存中…' : '保存'}
+          </button>
+          {!dirty && showSaved && (
+            <span className="muted-text" style={{ fontSize: 'var(--fs-xs)' }}>已保存</span>
+          )}
+          <span className="muted-text" style={{ fontSize: 'var(--fs-xs)', marginLeft: 'auto' }}>
+            最长 40 字。留空 = 回到默认 "papertodo"。
+          </span>
+        </div>
+      </div>
+    </section>
+  )
+}
 
 export function SettingsView(props: SettingsViewProps): JSX.Element {
   const [active, setActive] = useState<SettingsModule | null>(null)
@@ -115,6 +183,13 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
         </header>
 
         <section className="panel-stack">
+          {active === 'profile' && (
+            <UserProfilePanel
+              displayName={props.userDisplayName}
+              onUpdate={props.onUpdateUserDisplayName}
+            />
+          )}
+
           {active === 'theme' && (
             <ThemeSwitcher currentTheme={props.theme} onThemeChange={props.onThemeChange} />
           )}
@@ -286,6 +361,15 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
       </header>
 
       <div className="module-grid">
+        <button className="module-card" onClick={() => setActive('profile')} type="button">
+          <span className="module-card-icon" aria-hidden="true">☺</span>
+          <h3 className="module-card-title">个人资料</h3>
+          <p className="module-card-desc">显示在侧边栏与时间问候后的名字</p>
+          <p className="module-card-status">
+            {props.userDisplayName ? `当前: ${props.userDisplayName}` : '尚未设置'}
+          </p>
+        </button>
+
         <button className="module-card" onClick={() => setActive('theme')} type="button">
           <span className="module-card-icon">◐</span>
           <h3 className="module-card-title">主题</h3>

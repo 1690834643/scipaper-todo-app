@@ -188,10 +188,12 @@ const READ_DISPATCH = {
   get_auto_approve_tools: (fn) => fn(),
   list_vocab: (fn) => fn(),
   list_vocab_packs: (fn) => fn(),
+  get_user_profile: (fn) => fn(),
 };
 
 const WRITE_DISPATCH = {
   create_article: (fn, args) => fn(args),
+  delete_article: (fn, args) => fn(args.articleId),
   update_article_meta: (fn, args) => fn(args.articleId, args.patch),
   update_research_context: (fn, args) => fn(args.articleId, args.researchContext),
   add_text_block: (fn, args) => fn(args.articleId, args.sectionType, args.content, args.description, 'AI Co-write', 'ai'),
@@ -252,6 +254,7 @@ const WRITE_DISPATCH = {
   }),
   delete_vocab_pack: (fn, args) => fn(args.id),
   rename_vocab_pack: (fn, args) => fn(args.id, args.name),
+  set_user_profile: (fn, args) => fn({ displayName: args.displayName }),
   update_thesis_meta: (fn, args) => fn(args.thesisId, args.patch),
   add_thesis_section: (fn, args) => fn(args.thesisId, args.sectionType, args.title),
   unlink_article_from_thesis: (fn, args) => fn(args.thesisId, args.articleId),
@@ -403,6 +406,7 @@ function summarizeForApproval(name, args) {
 
   switch (name) {
     case 'create_article': return '创建论文项目：' + (input.title || '未命名研究');
+    case 'delete_article': return '⚠ 彻底删除论文（含附件）：' + (input.articleId || '?');
     case 'update_article_meta': return '更新论文元信息：' + input.articleId;
     case 'update_research_context': return '更新论文研究上下文：' + input.articleId;
     case 'add_text_block': return '向论文 ' + input.articleId + ' 的 ' + input.sectionType + ' 章节添加文本块';
@@ -483,6 +487,8 @@ function summarizeForApproval(name, args) {
     }
     case 'delete_vocab_pack': return '删除 custom pack：' + (input.id || '?');
     case 'rename_vocab_pack': return '重命名 pack ' + (input.id || '?') + ' → ' + (input.name || '?');
+    case 'get_user_profile': return '读取用户资料';
+    case 'set_user_profile': return '设置用户显示名为：' + (input.displayName || '(空)');
     default: return '执行工具调用：' + name;
   }
 }
