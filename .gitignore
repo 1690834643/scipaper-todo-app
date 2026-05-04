@@ -13,6 +13,7 @@ dist-ssr
 release
 *.tsbuildinfo
 *.local
+.vite/
 
 # Build artifacts
 *.exe
@@ -30,3 +31,23 @@ release
 *.njsproj
 *.sln
 *.sw?
+
+# Internal planning / handover / working-memory docs — never publish.
+# These accumulate during multi-session sprints and historically have leaked
+# in via rsync to the public repo (see GitHub commits c1a7750 / e55f951 /
+# 7b581eb where handover/, .codex, HANDOVER-* were retroactively deleted).
+HANDOFF.md
+HANDOVER-*.md
+plan.md
+task_plan.md
+progress.md
+findings.md
+CODE_REVIEW.md
+handover/
+.codex
+.claude/
+docs/superpowers/
+
+# Stray asset artifacts that shouldn't sit at repo root
+/index-*.js
+/storage.cjs
