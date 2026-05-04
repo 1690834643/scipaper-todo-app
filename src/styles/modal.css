@@ -10,7 +10,9 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  /* AI 抽屉 z-index: 90，splash z-index: 9999；modal 必须 > drawer 否则
+     ApprovalDialog 在抽屉打开时被遮挡，用户点不到批准按钮。 */
+  z-index: 100;
   display: grid;
   place-items: center;
   padding: var(--sp-4);

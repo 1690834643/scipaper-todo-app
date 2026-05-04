@@ -3,6 +3,7 @@ const { McpServer, ResourceTemplate } = require('@modelcontextprotocol/sdk/serve
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { TOOLS } = require('./llmTools.cjs');
 const { runTool } = require('./toolRouter.cjs');
+const { localIsoDate } = require('./dateUtils.cjs');
 const {
   getArticleById,
   getMcpResourceOverview,
@@ -93,7 +94,7 @@ function jsonSchemaToZod(jsonSchema = {}) {
 }
 
 function buildTodayInbox() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate();
   const state = loadState();
   const session = getDailySession(today);
   const todayEntries = (state.progressEntries || []).filter((e) => e.date === today);
@@ -222,7 +223,16 @@ async function startMcpServer() {
     async (uri, { articleId, section }) => asJsonContent(uri, getSectionByArticle(articleId, normalizeSection(section))),
   );
 
+  // 安全：MCP 通道下没有 approval dialog，外部客户端可任意调写工具。
+  // 默认只暴露读工具；写工具需用户显式设置 SCIPAPER_MCP_ALLOW_WRITE=1 才注册。
+  const allowWrite = process.env.SCIPAPER_MCP_ALLOW_WRITE === '1';
+  let registeredCount = 0;
+  let skippedWrites = 0;
   for (const tool of TOOLS) {
+    if (tool.isWrite && !allowWrite) {
+      skippedWrites += 1;
+      continue;
+    }
     server.registerTool(
       tool.name,
       {
@@ -246,7 +256,15 @@ async function startMcpServer() {
         };
       },
     );
+    registeredCount += 1;
   }
+  if (!allowWrite && skippedWrites > 0) {
+    console.error(
+      `[scipaper-mcp] 跳过 ${skippedWrites} 个写工具（默认只读模式）。` +
+        ' 设 SCIPAPER_MCP_ALLOW_WRITE=1 启用写入。',
+    );
+  }
+  console.error(`[scipaper-mcp] 已注册 ${registeredCount} 个工具${allowWrite ? '（含写）' : '（仅读）'}。`);
 
   server.registerPrompt(
     'generate-outline',

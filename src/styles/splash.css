@@ -1,0 +1,224 @@
+/* =========================================================================
+   SplashScreen — calm, slow opening that says "深呼吸再写一段".
+   - Inherits the active theme's tokens (claude / pixel / fresh) so the
+     opening feels like part of the same world the user is about to enter.
+   - Renders instantly at full opacity (no entrance fade) so the home page
+     beneath it never flashes a half-second of greeting before the splash.
+   - Auto-dismiss ~4.2s, click anywhere to skip.
+   ========================================================================= */
+
+/* While splash is on screen, hide the rest of the app entirely so its
+ * "晚上好" greeting + dashboard don't flash through. visibility (not display)
+ * preserves layout so the app stays mounted and ready. */
+body.splash-active .app-shell {
+  visibility: hidden;
+}
+
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  justify-items: center;
+  color: var(--c-ink);
+  cursor: pointer;
+  overflow: hidden;
+  font-family: var(--font-heading);
+  /* Themed background: token canvas + a low-contrast radial wash from the
+   * accent colour, so each theme reads consistent with the rest of the app. */
+  background: var(--c-bg);
+  background-image:
+    radial-gradient(ellipse at 50% 38%,
+      color-mix(in srgb, var(--c-accent-soft) 80%, transparent) 0%,
+      transparent 55%),
+    radial-gradient(ellipse at 50% 100%,
+      color-mix(in srgb, var(--c-accent) 6%, transparent) 0%,
+      transparent 60%);
+}
+
+.splash-screen--exit {
+  animation: splash-fade-out 700ms cubic-bezier(.4, 0, .6, 1) forwards;
+}
+
+@keyframes splash-fade-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.02); }
+}
+
+/* Slow breathing aura behind the brand mark — picks up the theme accent. */
+.splash-aura {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 540px;
+  height: 540px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--c-accent-soft) 90%, transparent) 0%,
+    transparent 70%);
+  filter: blur(8px);
+  animation: splash-breathe 5.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes splash-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.96); opacity: 0.7; }
+  50%      { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
+}
+
+.splash-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  position: relative;
+  z-index: 1;
+  padding: 0 24px;
+  text-align: center;
+}
+
+/* Brand mark — letter-by-letter fade. Theme-tinted ink. */
+.splash-mark {
+  display: flex;
+  align-items: baseline;
+  gap: 0.04em;
+  font-size: clamp(56px, 8vw, 96px);
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -0.01em;
+  color: var(--c-ink);
+  user-select: none;
+}
+.splash-mark-letter {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: splash-letter-in 1100ms ease-out forwards;
+}
+.splash-mark-dot {
+  font-style: normal;
+  margin: 0 0.06em;
+  color: var(--c-accent-strong);
+}
+@keyframes splash-letter-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Thin breathing rule — accent-coloured. */
+.splash-rule {
+  width: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    var(--c-accent-strong),
+    transparent);
+  animation: splash-rule-grow 1600ms 800ms ease-out forwards;
+  opacity: 0;
+}
+@keyframes splash-rule-grow {
+  from { width: 0; opacity: 0; }
+  to   { width: 240px; opacity: 0.7; }
+}
+
+.splash-tagline {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.5vw, 18px);
+  letter-spacing: 0.02em;
+  color: var(--c-ink-muted);
+  opacity: 0;
+  transform: translateY(6px);
+  animation: splash-tagline-in 1400ms 1500ms ease-out forwards;
+  max-width: 28em;
+  line-height: 1.7;
+  font-style: italic;
+}
+@keyframes splash-tagline-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 0.92; transform: translateY(0); }
+}
+
+/* Three dots breathing in sequence at the bottom — accent. */
+.splash-breath {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 56px;
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  animation: splash-tagline-in 1400ms 2200ms ease-out forwards;
+}
+.splash-breath span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  opacity: 0.4;
+  animation: splash-dot 2.4s ease-in-out infinite;
+}
+.splash-breath span:nth-child(2) { animation-delay: 0.4s; }
+.splash-breath span:nth-child(3) { animation-delay: 0.8s; }
+@keyframes splash-dot {
+  0%, 100% { transform: scale(0.8); opacity: 0.35; }
+  50%      { transform: scale(1.3); opacity: 0.95; }
+}
+
+.splash-skip-hint {
+  position: absolute;
+  bottom: 22px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--c-ink) 35%, transparent);
+  opacity: 0;
+  animation: splash-tagline-in 1200ms 2800ms ease-out forwards;
+}
+
+/* ----- Pixel theme overrides — hard-edge terminal calm ------------------ */
+[data-theme="pixel"] .splash-screen {
+  background: #FFF;
+  background-image: none;
+  font-family: var(--font-mono);
+}
+[data-theme="pixel"] .splash-mark {
+  font-style: normal;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.02em;
+}
+[data-theme="pixel"] .splash-mark-dot { color: #000; }
+[data-theme="pixel"] .splash-rule {
+  background: #000;
+  height: 2px;
+}
+[data-theme="pixel"] .splash-aura { display: none; }
+[data-theme="pixel"] .splash-tagline { font-style: normal; color: #555; }
+[data-theme="pixel"] .splash-breath span { border-radius: 0; background: #000; }
+
+/* ----- Fresh theme — soft mint blob behind the mark -------------------- */
+[data-theme="fresh"] .splash-aura {
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--c-accent) 18%, transparent) 0%,
+    transparent 70%);
+  filter: blur(20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-screen,
+  .splash-screen--exit,
+  .splash-aura,
+  .splash-mark-letter,
+  .splash-rule,
+  .splash-tagline,
+  .splash-breath,
+  .splash-breath span,
+  .splash-skip-hint {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    width: 240px;
+  }
+}

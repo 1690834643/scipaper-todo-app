@@ -4,6 +4,7 @@ import {
   countArticleWords,
   relativeTime,
 } from '../utils/articleUtils'
+import { localIsoDate } from '../utils/dateUtils'
 
 const HEATMAP_WEEKS = 16
 const HEATMAP_DAYS = HEATMAP_WEEKS * 7
@@ -30,7 +31,7 @@ function buildHeatmap(
   streakHistory: { date: string; words: number }[],
   progressEntries: ProgressEntry[],
 ): { cells: HeatmapCell[]; monthMarkers: { col: number; label: string }[] } {
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = localIsoDate()
   const wordsByDate = new Map(streakHistory.map((d) => [d.date, d.words]))
   const entriesByDate = new Map<string, number>()
   for (const e of progressEntries) {
@@ -53,7 +54,7 @@ function buildHeatmap(
   for (let i = 0; i < HEATMAP_DAYS; i++) {
     const d = new Date(start)
     d.setDate(d.getDate() + i)
-    const iso = d.toISOString().slice(0, 10)
+    const iso = localIsoDate(d)
     const words = wordsByDate.get(iso) ?? 0
     const entries = entriesByDate.get(iso) ?? 0
     const score = Math.floor(words / 200) + entries
@@ -89,7 +90,6 @@ function buildHeatmap(
 interface HomeViewProps {
   state: AppState
   onResume: (articleId: string) => void
-  onNewArticle: () => void
   onNavigate: (route: AppRoute) => void
 }
 
@@ -155,9 +155,8 @@ function pickRecent(state: AppState, n: number): Article[] {
     .slice(0, n)
 }
 
-export function HomeView({ state, onResume, onNewArticle, onNavigate }: HomeViewProps) {
+export function HomeView({ state, onResume, onNavigate }: HomeViewProps) {
   const tod = timeOfDay()
-  const articles = state.articles
   const recent = pickRecent(state, 1)[0] ?? null
   const streak = state.writingStreak
   const todayWords = streak?.todayWords ?? 0
@@ -174,7 +173,7 @@ export function HomeView({ state, onResume, onNewArticle, onNavigate }: HomeView
     for (let i = 6; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
-      const iso = d.toISOString().slice(0, 10)
+      const iso = localIsoDate(d)
       out.push({
         day: ['日', '一', '二', '三', '四', '五', '六'][d.getDay()],
         words: map.get(iso) ?? 0,
@@ -335,35 +334,6 @@ export function HomeView({ state, onResume, onNewArticle, onNavigate }: HomeView
               Open analytics ↗
             </button>
           </aside>
-        </section>
-
-        {/* Quick actions — 3 cards (Resume merged into Continue hero below) */}
-        <section>
-          <div className="home-h">
-            <h2>开始新的一段</h2>
-            <button className="home-h-link" onClick={() => onNavigate('library')} type="button">All shortcuts ↗</button>
-          </div>
-          <div className="home-actions home-actions--3">
-            <button className="home-action" onClick={onNewArticle} type="button">
-              <span className="home-action-glyph">+</span>
-              <h3 className="home-action-title">New article</h3>
-              <p className="home-action-sub">用向导起一篇新稿:标题、大纲、引文、评审。</p>
-            </button>
-            <button className="home-action" onClick={() => onNavigate('daily')} type="button">
-              <span className="home-action-glyph">☉</span>
-              <h3 className="home-action-title">Daily Log</h3>
-              <p className="home-action-sub">
-                打卡、番茄钟、心情、今日进展条目，都在这里。
-              </p>
-            </button>
-            <button className="home-action" onClick={() => onNavigate('library')} type="button">
-              <span className="home-action-glyph">§</span>
-              <h3 className="home-action-title">Citations</h3>
-              <p className="home-action-sub">
-                {totalCitations(state)} 条引文 · 跨 {articles.length} 篇稿件。
-              </p>
-            </button>
-          </div>
         </section>
 
         {/* Continue reading hero */}

@@ -1,7 +1,7 @@
 {
   "name": "scipaper-todo",
   "private": true,
-  "version": "1.0.26",
+  "version": "1.0.35",
   "description": "SciPaper Todo desktop app for local-first scientific manuscript management.",
   "author": "nee <ksjhunau@gmail.com>",
   "type": "module",
@@ -11,12 +11,19 @@
     "build:renderer": "node ./node_modules/typescript/bin/tsc -b && node ./node_modules/vite/bin/vite.js build",
     "build": "npm run build:renderer",
     "dist:win": "npm run build && node ./node_modules/electron-builder/cli.js --win nsis portable --x64",
+    "dist:mac": "npm run build && node ./node_modules/electron-builder/cli.js --mac --arm64 --x64",
+    "dist:mac:arm64": "npm run build && node ./node_modules/electron-builder/cli.js --mac --arm64",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
     "preview": "node ./node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
+    "@tiptap/extension-highlight": "^3.22.5",
+    "@tiptap/extension-placeholder": "^3.22.5",
+    "@tiptap/react": "^3.22.5",
+    "@tiptap/starter-kit": "^3.22.5",
+    "@tiptap/suggestion": "^3.22.5",
     "docx": "^9.6.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -54,6 +61,10 @@
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": [
+      "electron/**/*.cjs",
+      "node_modules/**"
+    ],
     "win": {
       "target": [
         {
@@ -79,6 +90,21 @@
     },
     "portable": {
       "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "category": "public.app-category.productivity",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "icon": "build/icon.icns",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "writeUpdateInfo": false
     }
   }
 }

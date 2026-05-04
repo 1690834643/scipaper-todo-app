@@ -261,7 +261,9 @@ async function executeToolCall(state, sessionId, toolCall, mainWindow, abortSign
     return { callId, ok: false, result };
   }
   throwIfAborted(abortSignal);
-  if (definition.isWrite && !state.alwaysAllow.has(name)) {
+  let autoApproveAll = false;
+  try { autoApproveAll = Boolean(getStorage().getAutoApproveTools && getStorage().getAutoApproveTools()); } catch {}
+  if (definition.isWrite && !autoApproveAll && !state.alwaysAllow.has(name)) {
     const decision = await waitForApproval(state, sessionId, callId, name, summary, args, mainWindow);
     state.approvalPromises.delete(callId);
     throwIfAborted(abortSignal);
@@ -271,6 +273,8 @@ async function executeToolCall(state, sessionId, toolCall, mainWindow, abortSign
       return { callId, ok: false, result };
     }
     if (decision.alwaysAllow) state.alwaysAllow.add(name);
+  } else if (definition.isWrite && autoApproveAll) {
+    sendToolEvent(mainWindow, { sessionId, kind: 'autoApproved', callId, toolName: name, summary, argsJson, args });
   }
   const response = await runTool(name, args);
   const ok = Boolean(response?.ok);
@@ -289,7 +293,14 @@ async function startChat({ providerId, sessionId, userMessage, history, currentA
     cancelSession(sessionId);
     state = { abortController: new AbortController(), approvalPromises: new Map(), alwaysAllow: new Set(), toolCallTotal: 0, messages: [] };
     sessions.set(sessionId, state);
-    const tools = provider.supportsToolUse === false ? [] : TOOLS;
+    // Single-block-per-section policy: when the current section already has
+    // a text block (currentBlockId set), strip add_text_block from the tool
+    // list so the AI can't create a second block. The AI must use
+    // update_text_block to append/rewrite the existing one.
+    const fullTools = provider.supportsToolUse === false ? [] : TOOLS;
+    const tools = currentSection?.currentBlockId
+      ? fullTools.filter((t) => t.name !== 'add_text_block')
+      : fullTools;
     const storage = getStorage();
     const scenarios = storage.listWritingScenarios ? storage.listWritingScenarios() : [];
     const italicGuide = storage.getItalicGuide ? storage.getItalicGuide() : null;
@@ -439,4 +450,7 @@ async function simpleComplete({ providerId, system, userMessage, signal, maxToke
   return data?.choices?.[0]?.message?.content || '';
 }
 
+// Same as simpleComplete but accepts a `history` array so we can keep a
+// running conversation. Tools are NOT exposed — this is the "AI helper that
+// can never edit your document" path used by the focus-mode rail chat.
 module.exports = { startChat, resolveApproval, cancelSession, testProvider, simpleComplete };

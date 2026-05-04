@@ -12,6 +12,19 @@
 .text-summary-card {
   gap: var(--sp-3);
 }
+.text-summary-card.is-enterable {
+  cursor: pointer;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+}
+.text-summary-card.is-enterable:hover {
+  border-color: var(--c-accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.text-summary-card.is-enterable:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
 
 .text-block-preview {
   white-space: pre-wrap;

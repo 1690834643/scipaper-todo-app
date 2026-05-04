@@ -15,6 +15,7 @@ const EMPTY_FORM: CreateArticlePayload = {
   title: '',
   targetJournal: '',
   status: 'Drafting',
+  language: 'en',
   researchContext: {
     scientificQuestion: '',
     observedPhenomenon: '',
@@ -102,6 +103,34 @@ export function ArticleWizard({ open, busy, onClose, onSubmit }: ArticleWizardPr
                   onChange={(event) => setForm({ ...form, targetJournal: event.target.value })}
                   placeholder="例如：Nature Cell Biology"
                 />
+              </label>
+              <label className="field">
+                <span>论文写作语言</span>
+                <div className="inline-actions">
+                  <label className="radio-pill">
+                    <input
+                      type="radio"
+                      name="article-language"
+                      value="en"
+                      checked={form.language !== 'zh'}
+                      onChange={() => setForm({ ...form, language: 'en' })}
+                    />
+                    <span>英文 (SCI)</span>
+                  </label>
+                  <label className="radio-pill">
+                    <input
+                      type="radio"
+                      name="article-language"
+                      value="zh"
+                      checked={form.language === 'zh'}
+                      onChange={() => setForm({ ...form, language: 'zh' })}
+                    />
+                    <span>中文</span>
+                  </label>
+                </div>
+                <small style={{ color: 'var(--c-ink-faint)', fontSize: 'var(--fs-xs)', marginTop: '4px' }}>
+                  AI 助手永远用中文跟你交流，但批注与示范句会按所选语言给。
+                </small>
               </label>
               <div className="form-tip">
                 <p>这里允许先留空。真正必填的是后面的 4 个研究问题。</p>

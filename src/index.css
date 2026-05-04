@@ -18,9 +18,12 @@
 @import './styles/stats.css';
 @import './styles/modal.css';
 @import './styles/ai-drawer.css';
+@import './styles/focus-mode.css';
 
 @import './styles/library.css';
 @import './styles/home.css';
 @import './styles/home-themes.css';
+
+@import './styles/splash.css';
 
 @import './styles/compat.css';

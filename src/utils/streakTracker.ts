@@ -1,6 +1,7 @@
 // src/utils/streakTracker.ts
 
 import type { WritingStreak } from '../types'
+import { localIsoDate } from './dateUtils'
 
 export function calculateStreak(
   streakHistory: WritingStreak['streakHistory'],
@@ -24,8 +25,8 @@ export function calculateStreak(
   let tempStreak = 0
   let totalWritingDays = 0
   
-  const today = new Date().toISOString().split('T')[0]
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+  const today = localIsoDate()
+  const yesterday = localIsoDate(new Date(Date.now() - 86400000))
   
   for (let i = 0; i < sorted.length; i++) {
     const entry = sorted[i]
@@ -74,7 +75,7 @@ export function getHeatmapData(
 
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(today.getTime() - i * 86400000)
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = localIsoDate(date)
     const entry = streakHistory.find(h => h.date === dateStr)
     window.push({ date: dateStr, words: entry?.words || 0 })
   }

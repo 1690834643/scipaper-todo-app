@@ -85,6 +85,48 @@ function fontProps(spec) {
   return { ascii: spec.font.ascii, eastAsia: spec.font.eastAsia || spec.font.ascii };
 }
 
+// 与 latexExporter 共享的 [@key] 引用模式。docx 没原生 cite 字段，落地为
+// 文本「[作者 年份]」或退回到字面 [@key]，由 buildCiteMap 决定。
+const CITE_PATTERN = /\[@([A-Za-z][\w:.-]*)\]/g;
+
+function extractCiteKey(bibtex) {
+  const m = String(bibtex || '').match(/@\w+\s*\{\s*([^,\s]+)/);
+  return m ? m[1] : null;
+}
+
+function firstAuthorLastName(authors) {
+  if (!authors) return '';
+  const trimmed = String(authors).trim();
+  if (!trimmed) return '';
+  // 支持「Smith, John; Doe, Jane」「J. Smith and J. Doe」「张三, 李四」三种常见输入。
+  const first = trimmed.split(/\s+and\s+|;|,(?=\s*[A-Z])/)[0].trim();
+  if (!first) return '';
+  if (first.includes(',')) {
+    return first.split(',')[0].trim();
+  }
+  const tokens = first.split(/\s+/);
+  return tokens[tokens.length - 1] || first;
+}
+
+function buildCiteMap(citations) {
+  const map = new Map();
+  if (!Array.isArray(citations)) return map;
+  citations.forEach((c, idx) => {
+    const key = extractCiteKey(c.bibtex) || c.id || `ref${idx + 1}`;
+    if (!key || map.has(key)) return;
+    const name = firstAuthorLastName(c.authors);
+    const year = c.year ? String(c.year).trim() : '';
+    let display;
+    if (name && year) display = `[${name} ${year}]`;
+    else if (name) display = `[${name}]`;
+    else if (year) display = `[${year}]`;
+    else if (c.title) display = `[${String(c.title).split(/\s+/).slice(0, 4).join(' ')}]`;
+    else display = `[${key}]`;
+    map.set(key, display);
+  });
+  return map;
+}
+
 // Parse inline markdown italics (`*x*` or `_x_`) into TextRun-compatible segments.
 // Skips `**bold**`, `__bold__`, escaped `\*`. Single-line input.
 function parseInlineItalic(line) {
@@ -136,23 +178,61 @@ function parseInlineItalic(line) {
   return segments.length ? segments : [{ text: '', italics: false }];
 }
 
-function runsForLine(line, spec) {
-  return parseInlineItalic(line).map(
-    (seg) =>
-      new TextRun({
-        text: seg.text,
-        italics: seg.italics || undefined,
-        font: fontProps(spec),
-        size: spec.bodySize,
-      })
-  );
+function runsForLine(line, spec, citeMap) {
+  // 拆分 [@key]：cite 段独立成 TextRun（带方括号显示），其余文本走
+  // parseInlineItalic 保留 italic 处理。docx 没有原生 cite 字段，落地为
+  // 文本「[作者 年份]」或回退到 [@key]。
+  const cites = citeMap instanceof Map ? citeMap : null;
+  const segments = [];
+  let lastIdx = 0;
+  let m;
+  CITE_PATTERN.lastIndex = 0;
+  while ((m = CITE_PATTERN.exec(line)) !== null) {
+    if (m.index > lastIdx) {
+      segments.push({ kind: 'text', value: line.slice(lastIdx, m.index) });
+    }
+    segments.push({ kind: 'cite', key: m[1] });
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < line.length) {
+    segments.push({ kind: 'text', value: line.slice(lastIdx) });
+  }
+  if (segments.length === 0) {
+    segments.push({ kind: 'text', value: line || '' });
+  }
+
+  const runs = [];
+  for (const seg of segments) {
+    if (seg.kind === 'cite') {
+      const display = cites && cites.has(seg.key) ? cites.get(seg.key) : `[@${seg.key}]`;
+      runs.push(
+        new TextRun({
+          text: display,
+          font: fontProps(spec),
+          size: spec.bodySize,
+        }),
+      );
+    } else {
+      for (const sub of parseInlineItalic(seg.value)) {
+        runs.push(
+          new TextRun({
+            text: sub.text,
+            italics: sub.italics || undefined,
+            font: fontProps(spec),
+            size: spec.bodySize,
+          }),
+        );
+      }
+    }
+  }
+  return runs;
 }
 
-function bodyParagraph(text, spec, extraIndent) {
+function bodyParagraph(text, spec, extraIndent, citeMap) {
   const lines = String(text || '').split('\n');
   return lines.map((line) =>
     new Paragraph({
-      children: runsForLine(line, spec),
+      children: runsForLine(line, spec, citeMap),
       spacing: spec.lineSpacing,
       indent: extraIndent !== undefined ? extraIndent : { firstLine: spec.firstLineIndentTwips },
     })
@@ -226,6 +306,7 @@ function italicParagraph(text, spec, size) {
 function buildDocument(article, spec, italicMap) {
   const children = [];
   const marks = italicMap instanceof Map ? italicMap : new Map();
+  const citeMap = buildCiteMap(article.citations);
 
   children.push(
     new Paragraph({
@@ -340,7 +421,7 @@ function buildDocument(article, spec, italicMap) {
       if (blockType === 'text') {
         const content = marks.has(block.id) ? marks.get(block.id) : (block.content || '');
         const indent = isReferences ? { left: 720, hanging: 720 } : { firstLine: spec.firstLineIndentTwips };
-        const paras = bodyParagraph(content, spec, indent);
+        const paras = bodyParagraph(content, spec, indent, citeMap);
         children.push(...paras);
       } else if (blockType === 'image') {
         let added = false;

@@ -10,6 +10,7 @@ import type {
 import { PomodoroTimer } from './PomodoroTimer'
 import { MoodTracker } from './MoodTracker'
 import { pickKickoffPlaceholder } from '../utils/jokesAndAnalogies'
+import { localIsoDate } from '../utils/dateUtils'
 
 const KIND_LABELS: Record<ProgressEntryKind, string> = {
   read: '读',
@@ -55,7 +56,7 @@ interface DailyLogViewProps {
 }
 
 function todayDate(): string {
-  return new Date().toISOString().slice(0, 10)
+  return localIsoDate()
 }
 
 function findArticleTitle(articles: Article[], articleId: string): string {

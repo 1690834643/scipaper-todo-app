@@ -1,6 +1,7 @@
 // src/utils/wordCounter.ts
 
 import type { Article, Thesis, WordCountStats } from '../types'
+import { localIsoDate } from './dateUtils'
 
 function processSections(
   items: { sections: { id: string; type: string; title?: string; contentBlocks: { type: string; content: string; updatedAt: string }[] }[] }[],
@@ -21,7 +22,7 @@ function processSections(
           sectionWords += words
           sectionChars += chars
 
-          const blockDate = new Date(block.updatedAt).toISOString().split('T')[0]
+          const blockDate = localIsoDate(new Date(block.updatedAt))
           if (blockDate === todayDate) {
             totals.todayWords += words
             totals.todayChars += chars

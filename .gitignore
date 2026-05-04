@@ -13,6 +13,7 @@ dist-ssr
 release
 *.tsbuildinfo
 *.local
+.vite/
 
 # Build artifacts
 *.exe
@@ -30,3 +31,23 @@ release
 *.njsproj
 *.sln
 *.sw?
+
+# Internal planning / handover / working-memory docs — never publish.
+# Mirrors the scipaper-todo-app cleanup so the rsync release path naturally
+# drops these. Anyone pushing to the public repo: do NOT remove these
+# entries without checking with the user first.
+HANDOFF.md
+HANDOVER-*.md
+plan.md
+task_plan.md
+progress.md
+findings.md
+CODE_REVIEW.md
+handover/
+.codex
+.claude/
+docs/superpowers/
+
+# Stray asset artifacts that shouldn't sit at repo root
+/index-*.js
+/storage.cjs
