@@ -11,7 +11,17 @@ contextBridge.exposeInMainWorld('scipaper', {
     ipcRenderer.invoke('block:addText', { articleId, sectionType, content, description }),
   updateTextBlock: (articleId, blockId, content, description) =>
     ipcRenderer.invoke('block:updateText', { articleId, blockId, content, description }),
+  recordBlockVersion: (articleId, blockId, changeDescription) =>
+    ipcRenderer.invoke('block:recordVersion', { articleId, blockId, changeDescription }),
   deleteBlock: (articleId, blockId) => ipcRenderer.invoke('block:delete', { articleId, blockId }),
+  addAnnotation: (articleId, blockId, payload) =>
+    ipcRenderer.invoke('annotation:add', { articleId, blockId, payload }),
+  updateAnnotation: (articleId, annotationId, patch) =>
+    ipcRenderer.invoke('annotation:update', { articleId, annotationId, patch }),
+  deleteAnnotation: (articleId, annotationId) =>
+    ipcRenderer.invoke('annotation:delete', { articleId, annotationId }),
+  annotateText: (params) => ipcRenderer.invoke('llm:annotateText', params),
+  llmKeyStoreInfo: () => ipcRenderer.invoke('llm:keyStoreInfo'),
   importAssetBlock: (articleId, sectionType, kind) =>
     ipcRenderer.invoke('block:importAsset', { articleId, sectionType, kind }),
   openBlockAsset: (articleId, blockId) => ipcRenderer.invoke('block:openAsset', { articleId, blockId }),
@@ -27,6 +37,7 @@ contextBridge.exposeInMainWorld('scipaper', {
   exportMarkdown: (articleId) => ipcRenderer.invoke('article:exportMarkdown', { articleId }),
   exportArticleDocx: (articleId, templateId, applyItalicGuide) =>
     ipcRenderer.invoke('article:exportDocx', { articleId, templateId, applyItalicGuide }),
+  exportArticleLatex: (articleId) => ipcRenderer.invoke('article:exportLatex', { articleId }),
   getWritingGuidance: (articleId, targetSection) =>
     ipcRenderer.invoke('article:getWritingGuidance', { articleId, targetSection }),
   copyText: (text) => clipboard.writeText(text),
@@ -100,9 +111,29 @@ contextBridge.exposeInMainWorld('scipaper', {
   getItalicGuide: () => ipcRenderer.invoke('italic:get'),
   setItalicGuide: (config) => ipcRenderer.invoke('italic:set', { config }),
 
+  // Auto-approve tool calls
+  getAutoApproveTools: () => ipcRenderer.invoke('autoApprove:get'),
+  setAutoApproveTools: (value) => ipcRenderer.invoke('autoApprove:set', { value }),
+
   // Zotero
   getZoteroConfig: () => ipcRenderer.invoke('zotero:getConfig'),
   setZoteroConfig: (config) => ipcRenderer.invoke('zotero:setConfig', { config }),
+
+  // Custom autocomplete vocabulary
+  getCustomVocab: () => ipcRenderer.invoke('vocab:get'),
+  addCustomVocabWord: (word) => ipcRenderer.invoke('vocab:addWord', { word }),
+  removeCustomVocabWord: (word) => ipcRenderer.invoke('vocab:removeWord', { word }),
+  addCustomVocabPhrase: (entry) => ipcRenderer.invoke('vocab:addPhrase', { entry }),
+  removeCustomVocabPhrase: (trigger, text) => ipcRenderer.invoke('vocab:removePhrase', { trigger, text }),
+  clearCustomVocab: () => ipcRenderer.invoke('vocab:clear'),
+
+  // Vocab pack registry
+  listVocabPacks: () => ipcRenderer.invoke('vocabPacks:list'),
+  setVocabPackEnabled: (id, enabled) => ipcRenderer.invoke('vocabPacks:setEnabled', { id, enabled }),
+  importVocabPack: (pack) => ipcRenderer.invoke('vocabPacks:import', { pack }),
+  deleteCustomVocabPack: (id) => ipcRenderer.invoke('vocabPacks:delete', { id }),
+  renameCustomVocabPack: (id, name) => ipcRenderer.invoke('vocabPacks:rename', { id, name }),
+  getCustomVocabPacks: () => ipcRenderer.invoke('vocabPacks:getCustom'),
 
   // Progress entries / Findings / Daily session
   addProgressEntry: (payload) => ipcRenderer.invoke('progress:add', { payload }),

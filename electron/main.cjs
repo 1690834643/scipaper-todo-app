@@ -1,8 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
 const {
   addAssetBlock,
+  addAnnotation,
+  updateAnnotation,
+  deleteAnnotation,
   addReviewComment,
   DATABASE_PATH,
   addReviewRound,
@@ -19,6 +22,7 @@ const {
   updateResearchContext,
   updateReviewCommentStatus,
   updateTextBlockWithStreak,
+  recordBlockVersion,
   createArticle,
   createThesis,
   updateThesisMeta,
@@ -49,6 +53,20 @@ const {
   setItalicGuide,
   getZoteroConfig,
   setZoteroConfig,
+  getCustomVocab,
+  addCustomVocabWord,
+  removeCustomVocabWord,
+  addCustomVocabPhrase,
+  removeCustomVocabPhrase,
+  clearCustomVocab,
+  listVocabPacks,
+  setVocabPackEnabled,
+  importVocabPack,
+  deleteCustomVocabPack,
+  renameCustomVocabPack,
+  getCustomVocabPacks,
+  getAutoApproveTools,
+  setAutoApproveTools,
   addProgressEntry,
   updateProgressEntry,
   deleteProgressEntry,
@@ -74,38 +92,50 @@ const {
 const llmKeyStore = require('./llmKeyStore.cjs');
 const llmClient = require('./llmClient.cjs');
 const { exportArticleDocx } = require('./docxExporter.cjs');
+const { exportArticleLatex } = require('./latexExporter.cjs');
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const isMcpMode = process.argv.includes('--mcp-server');
+const isMac = process.platform === 'darwin';
 
-function buildMcpInfo() {
-  const genericConfig = {
-    mcpServers: {
-      'scipaper-todo': {
-        command: process.execPath,
-        args: ['--mcp-server'],
-        env: {
-          SCIPAPER_MCP_CLIENT: 'Cursor',
-        },
-      },
-    },
-  };
+// macOS 打包后 GUI 二进制路径含 ".app/Contents/MacOS/<name>"，含空格 + Cursor /
+// Claude Code 在解析时容易出错。优先使用 process.resourcesPath 下解 asar 后
+// 的纯 .cjs 文件，让外部 MCP 客户端用 `node` 跑而非启动 GUI 进程。
+function mcpCliPath() {
+  if (isMac && app.isPackaged) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'mcp-cli.cjs');
+  }
+  return path.join(__dirname, 'mcp-cli.cjs');
+}
 
-  const config = {
-    mcpServers: {
-      'scipaper-todo': {
-        command: process.execPath,
-        args: ['--mcp-server'],
-        env: {
-          SCIPAPER_MCP_CLIENT: 'Cursor',
-        },
-      },
-    },
-  };
-
+function buildMcpServerEntry(clientName, options = {}) {
+  if (isMac && !options.useGuiBinary) {
+    return {
+      command: 'node',
+      args: [mcpCliPath()],
+      env: { SCIPAPER_MCP_CLIENT: clientName },
+    };
+  }
   return {
     command: process.execPath,
     args: ['--mcp-server'],
+    env: { SCIPAPER_MCP_CLIENT: clientName },
+  };
+}
+
+function buildMcpInfo() {
+  const genericEntry = buildMcpServerEntry('Cursor');
+  const genericConfig = {
+    mcpServers: { 'scipaper-todo': genericEntry },
+  };
+
+  const config = {
+    mcpServers: { 'scipaper-todo': genericEntry },
+  };
+
+  return {
+    command: genericEntry.command,
+    args: genericEntry.args,
     baseDirectory: BASE_DIRECTORY,
     configJson: JSON.stringify(config, null, 2),
     examples: {
@@ -114,13 +144,17 @@ function buildMcpInfo() {
       claudeCode: JSON.stringify(
         {
           mcpServers: {
-            'scipaper-todo': {
-              command: process.execPath,
-              args: ['--mcp-server'],
-              env: {
-                SCIPAPER_MCP_CLIENT: 'Claude Code',
-              },
-            },
+            'scipaper-todo': buildMcpServerEntry('Claude Code'),
+          },
+        },
+        null,
+        2,
+      ),
+      // 备选：直接调 GUI 二进制（macOS 下不推荐，需手动转义路径）
+      guiBinary: JSON.stringify(
+        {
+          mcpServers: {
+            'scipaper-todo': buildMcpServerEntry('Cursor', { useGuiBinary: true }),
           },
         },
         null,
@@ -130,7 +164,34 @@ function buildMcpInfo() {
   };
 }
 
+function configureApplicationMenu() {
+  if (!isMac) return;
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
+  // Force-maximize on launch — the immersive editor + section nav + AI drawer
+  // need real estate, and the previous "1520×980" default left users with a
+  // cramped layout where the AI input bar and chapter chips were unreachable.
   const window = new BrowserWindow({
     width: 1520,
     height: 980,
@@ -138,6 +199,7 @@ function createWindow() {
     minHeight: 820,
     backgroundColor: '#f4ecde',
     autoHideMenuBar: true,
+    show: false,
     title: 'SciPaper Todo',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -145,6 +207,17 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
     },
+  });
+
+  window.once('ready-to-show', () => {
+    window.maximize();
+    window.show();
+  });
+  // Re-maximize if the user un-maximizes — the layout cannot accommodate
+  // floating window sizes. Discussed with user 2026-05-03; this is the only
+  // viable workaround until a fully responsive redesign lands.
+  window.on('unmaximize', () => {
+    window.maximize();
   });
 
   if (isDev) {
@@ -218,10 +291,68 @@ function registerIpc() {
     }),
   );
   ipcMain.handle(
+    'block:recordVersion',
+    wrapStateMutation(async (_event, { articleId, blockId, changeDescription }) => {
+      recordBlockVersion(articleId, blockId, changeDescription);
+    }),
+  );
+  ipcMain.handle(
     'block:delete',
     wrapStateMutation(async (_event, { articleId, blockId }) => {
       deleteBlock(articleId, blockId);
     }),
+  );
+  ipcMain.handle(
+    'annotation:add',
+    wrapStateMutation(async (_event, { articleId, blockId, payload }) => {
+      addAnnotation(articleId, blockId, payload);
+    }),
+  );
+  ipcMain.handle(
+    'annotation:update',
+    wrapStateMutation(async (_event, { articleId, annotationId, patch }) => {
+      updateAnnotation(articleId, annotationId, patch);
+    }),
+  );
+  ipcMain.handle(
+    'annotation:delete',
+    wrapStateMutation(async (_event, { articleId, annotationId }) => {
+      deleteAnnotation(articleId, annotationId);
+    }),
+  );
+  ipcMain.handle('llm:keyStoreInfo', async () => llmKeyStore.getStorageInfo());
+  ipcMain.handle(
+    'llm:annotateText',
+    async (_event, { sectionType, anchorText, contextBefore, contextAfter, providerId, articleLanguage }) => {
+      const langDesc = articleLanguage === 'zh' ? '中文' : '英文';
+      const langSpecificFocus = articleLanguage === 'zh'
+        ? '中文学术口吻、术语规范、句式连贯'
+        : '英文学术口吻、时态/语态、术语一致性、冠词、词语搭配';
+      const SYSTEM_PROMPT =
+        `你是学术写作的批注助手，正在审阅一段 ${langDesc} SCI 论文。` +
+        '用户提供一段正文以及前后语境，你写一条简短的批注。\n\n' +
+        '要求：\n' +
+        '- 像 Word 批注或 Google Docs suggestion，绝不改写或重写原文\n' +
+        '- 一律用中文回答（用户是中文研究者，需要中文反馈）\n' +
+        `- 关注：语病、用词不准、逻辑链断裂、缺失证据、引用缺失、${langSpecificFocus}\n` +
+        '- 直接说事，不寒暄，不要"以下是我的批注"这种开场\n' +
+        '- 1 到 3 句话，不超过 80 个汉字\n\n' +
+        `- 如果要给改写示范或词语候选，用 ${langDesc}（与原文一致）\n` +
+        '- 如果原文没明显问题，给一句具体的正面观察，不要敷衍式好评\n\n' +
+        '只输出批注本体，无任何前后缀。';
+      const userMessage =
+        `章节：${sectionType}\n\n` +
+        `【前文语境】${(contextBefore || '').slice(-200) || '（开头）'}\n\n` +
+        `【批注对象】${anchorText}\n\n` +
+        `【后文语境】${(contextAfter || '').slice(0, 200) || '（末尾）'}`;
+      const text = await llmClient.simpleComplete({
+        providerId: providerId || undefined,
+        system: SYSTEM_PROMPT,
+        userMessage,
+        maxTokens: 400,
+      });
+      return { ok: true, comment: String(text || '').trim() };
+    },
   );
   ipcMain.handle(
     'block:importAsset',
@@ -247,14 +378,21 @@ function registerIpc() {
     }),
   );
   ipcMain.handle('block:openAsset', async (_event, { articleId, blockId }) => {
-    const resolvedPath = openPathForBlock(articleId, blockId);
+    try {
+      const resolvedPath = openPathForBlock(articleId, blockId);
 
-    if (!resolvedPath) {
+      if (!resolvedPath) {
+        return false;
+      }
+
+      await shell.openPath(resolvedPath);
+      return true;
+    } catch (error) {
+      // resolveBlockPath null / shell.openPath 失败统一兜底为 false，
+      // renderer 侧只看 boolean，不 reject promise。
+      console.error('block:openAsset failed', error);
       return false;
     }
-
-    await shell.openPath(resolvedPath);
-    return true;
   });
   ipcMain.handle('block:getPreview', async (_event, { articleId, blockId }) => {
     const payload = getPreviewPayload(articleId, blockId);
@@ -307,6 +445,11 @@ function registerIpc() {
   });
   ipcMain.handle('article:exportDocx', async (_event, { articleId, templateId, applyItalicGuide }) => {
     const exportPath = await exportArticleDocx(articleId, templateId, { applyItalicGuide: !!applyItalicGuide });
+    await shell.showItemInFolder(exportPath);
+    return exportPath;
+  });
+  ipcMain.handle('article:exportLatex', async (_event, { articleId }) => {
+    const exportPath = exportArticleLatex(articleId);
     await shell.showItemInFolder(exportPath);
     return exportPath;
   });
@@ -546,6 +689,26 @@ function registerIpc() {
   ipcMain.handle('zotero:getConfig', () => getZoteroConfig());
   ipcMain.handle('zotero:setConfig', (_, { config }) => setZoteroConfig(config));
 
+  // Custom autocomplete vocabulary — user-defined words & phrases that merge
+  // into the immersive editor's autocomplete suggestions on the `general`
+  // bucket. Also exposed via MCP write tools (toolRouter).
+  ipcMain.handle('vocab:get', () => getCustomVocab());
+  ipcMain.handle('vocab:addWord', (_, { word }) => addCustomVocabWord(word));
+  ipcMain.handle('vocab:removeWord', (_, { word }) => removeCustomVocabWord(word));
+  ipcMain.handle('vocab:addPhrase', (_, { entry }) => addCustomVocabPhrase(entry));
+  ipcMain.handle('vocab:removePhrase', (_, { trigger, text }) => removeCustomVocabPhrase(trigger, text));
+  ipcMain.handle('vocab:clear', () => clearCustomVocab());
+
+  // Vocab pack registry — list + enable/disable + import/delete/rename
+  ipcMain.handle('vocabPacks:list', () => listVocabPacks());
+  ipcMain.handle('vocabPacks:setEnabled', (_, { id, enabled }) => setVocabPackEnabled(id, enabled));
+  ipcMain.handle('vocabPacks:import', (_, { pack }) => importVocabPack(pack));
+  ipcMain.handle('vocabPacks:delete', (_, { id }) => deleteCustomVocabPack(id));
+  ipcMain.handle('vocabPacks:rename', (_, { id, name }) => renameCustomVocabPack(id, name));
+  ipcMain.handle('vocabPacks:getCustom', () => getCustomVocabPacks());
+  ipcMain.handle('autoApprove:get', () => getAutoApproveTools());
+  ipcMain.handle('autoApprove:set', (_, { value }) => setAutoApproveTools(value));
+
   // Progress entries / Findings / Daily session
   ipcMain.handle(
     'progress:add',
@@ -603,6 +766,7 @@ async function startApplication() {
   loadState();
   registerIpc();
   startDatabaseWatch();
+  configureApplicationMenu();
   createWindow();
 
   app.on('activate', () => {

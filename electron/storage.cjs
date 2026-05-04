@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { PRESETS } = require('./llmPresets.cjs');
+const { localIsoDate } = require('./dateUtils.cjs');
 
 const SECTION_TYPES = [
   'Title',
@@ -127,20 +128,58 @@ function readDatabase() {
 let lastBackupAt = 0;
 const BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 
+// Inter-process write guard for the GUI ↔ WSL MCP scenario. Sentinel-file lock:
+// a writer creates `database.json.lock` (O_CREAT|O_EXCL); a concurrent writer
+// sees it and aborts. Stale locks (>30s) are reclaimed; both writers crash-safe
+// because the .tmp + rename atomic write is unchanged.
+const STALE_LOCK_MS = 30_000;
+
+function acquireWriteLock() {
+  const lockPath = DATABASE_PATH + '.lock';
+  try {
+    return { fd: fs.openSync(lockPath, 'wx'), path: lockPath };
+  } catch (err) {
+    if (err.code !== 'EEXIST') throw err;
+    let stat = null;
+    try { stat = fs.statSync(lockPath); } catch {}
+    if (stat && Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
+      try { fs.unlinkSync(lockPath); } catch {}
+      return { fd: fs.openSync(lockPath, 'wx'), path: lockPath };
+    }
+    const ageMs = stat ? Date.now() - stat.mtimeMs : -1;
+    throw new Error(
+      'database is locked by another writer (' + lockPath + ', age ' + ageMs + 'ms). ' +
+      'Close the other SciPaper Todo writer (GUI app or WSL MCP) and retry. ' +
+      'If stuck, delete the .lock file manually.',
+    );
+  }
+}
+
+function releaseWriteLock(lock) {
+  if (!lock) return;
+  try { fs.closeSync(lock.fd); } catch {}
+  try { fs.unlinkSync(lock.path); } catch {}
+}
+
 function writeDatabase(data) {
   ensureStore();
   const json = JSON.stringify(normalizeStoredDatabase(data), null, 2);
   const tmpPath = DATABASE_PATH + '.tmp';
-  fs.writeFileSync(tmpPath, json, 'utf-8');
-  // Snapshot last good copy at most every BACKUP_INTERVAL_MS
-  if (fs.existsSync(DATABASE_PATH) && Date.now() - lastBackupAt > BACKUP_INTERVAL_MS) {
-    try {
-      fs.copyFileSync(DATABASE_PATH, DATABASE_PATH + '.bak');
-      lastBackupAt = Date.now();
-    } catch {}
+  const lock = acquireWriteLock();
+  try {
+    fs.writeFileSync(tmpPath, json, 'utf-8');
+    // Snapshot last good copy at most every BACKUP_INTERVAL_MS
+    if (fs.existsSync(DATABASE_PATH) && Date.now() - lastBackupAt > BACKUP_INTERVAL_MS) {
+      try {
+        fs.copyFileSync(DATABASE_PATH, DATABASE_PATH + '.bak');
+        lastBackupAt = Date.now();
+      } catch {}
+    }
+    // Atomic on POSIX; Node fs.renameSync replaces target on Windows too
+    fs.renameSync(tmpPath, DATABASE_PATH);
+  } finally {
+    releaseWriteLock(lock);
   }
-  // Atomic on POSIX; Node fs.renameSync replaces target on Windows too
-  fs.renameSync(tmpPath, DATABASE_PATH);
 }
 
 function createArticleFolder(articleId) {
@@ -180,10 +219,11 @@ function normalizeBlockType(type) {
 }
 
 function normalizeStoredBlock(block) {
+  const versions = Array.isArray(block.versions) ? block.versions : [];
   return {
     ...block,
     type: normalizeBlockType(block.type),
-    versions: Array.isArray(block.versions) ? block.versions : [],
+    versions,
   };
 }
 
@@ -311,6 +351,137 @@ function normalizeZoteroConfig(obj = {}) {
   };
 }
 
+const { BUILTIN_PACK_IDS } = require('./vocabPackRegistry.cjs');
+const VOCAB_SECTIONS = ['general', 'introduction', 'methods', 'results', 'discussion'];
+
+// User-defined autocomplete vocabulary. Merged with the built-in SCI_WORDS /
+// SCI_PHRASES at frontend AutocompleteExtension config time. Stored flat;
+// every entry surfaces in the `general` bucket so it shows up regardless of
+// the active section. Entries dedupe case-insensitively against existing
+// content on add.
+function normalizeCustomVocab(obj = {}) {
+  const rawWords = Array.isArray(obj.words) ? obj.words : [];
+  const rawPhrases = Array.isArray(obj.phrases) ? obj.phrases : [];
+  const words = [];
+  const seenWords = new Set();
+  for (const w of rawWords) {
+    if (typeof w !== 'string') continue;
+    const trimmed = w.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seenWords.has(key)) continue;
+    seenWords.add(key);
+    words.push(trimmed);
+  }
+  const phrases = [];
+  const seenPhrases = new Set();
+  for (const p of rawPhrases) {
+    if (!p || typeof p !== 'object') continue;
+    const trigger = typeof p.trigger === 'string' ? p.trigger.trim() : '';
+    const text = typeof p.text === 'string' ? p.text.trim() : '';
+    if (!trigger || !text) continue;
+    const key = trigger.toLowerCase() + '|' + text.toLowerCase();
+    if (seenPhrases.has(key)) continue;
+    seenPhrases.add(key);
+    const entry = { trigger, text };
+    if (typeof p.label === 'string' && p.label.trim()) {
+      entry.label = p.label.trim();
+    }
+    phrases.push(entry);
+  }
+  return { words, phrases };
+}
+
+// User-imported vocab packs. Each pack carries its own words/phrases per
+// IMRaD section. Builtin packs live in src/data/vocab-packs/ on the
+// renderer side; here we only persist user-imported ones plus a per-id
+// enabled override for both kinds.
+function normalizeImportedVocabPack(obj = {}) {
+  const id = typeof obj.id === 'string' && obj.id.trim() ? obj.id.trim() : '';
+  const name = typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : 'Untitled pack';
+  const description = typeof obj.description === 'string' ? obj.description.trim() : '';
+  const wordsBucket = obj.words && typeof obj.words === 'object' && !Array.isArray(obj.words)
+    ? obj.words
+    : { general: Array.isArray(obj.words) ? obj.words : [] };
+  const phrasesBucket = obj.phrases && typeof obj.phrases === 'object' && !Array.isArray(obj.phrases)
+    ? obj.phrases
+    : { general: Array.isArray(obj.phrases) ? obj.phrases : [] };
+
+  const words = {};
+  const phrases = {};
+  for (const section of VOCAB_SECTIONS) {
+    const wRaw = Array.isArray(wordsBucket[section]) ? wordsBucket[section] : [];
+    const wOut = [];
+    const wSeen = new Set();
+    for (const entry of wRaw) {
+      if (typeof entry !== 'string') continue;
+      const trimmed = entry.trim();
+      if (!trimmed) continue;
+      if (trimmed.length > 60) continue;
+      const key = trimmed.toLowerCase();
+      if (wSeen.has(key)) continue;
+      wSeen.add(key);
+      wOut.push(trimmed);
+    }
+    if (wOut.length) words[section] = wOut;
+
+    const pRaw = Array.isArray(phrasesBucket[section]) ? phrasesBucket[section] : [];
+    const pOut = [];
+    const pSeen = new Set();
+    for (const entry of pRaw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const trigger = typeof entry.trigger === 'string' ? entry.trigger.trim() : '';
+      const text = typeof entry.text === 'string' ? entry.text.trim() : '';
+      if (!trigger || !text) continue;
+      if (trigger.length > 30 || text.length > 160) continue;
+      const key = trigger.toLowerCase();
+      if (pSeen.has(key)) continue;
+      pSeen.add(key);
+      const out = { trigger, text };
+      if (typeof entry.label === 'string' && entry.label.trim()) out.label = entry.label.trim();
+      pOut.push(out);
+    }
+    if (pOut.length) phrases[section] = pOut;
+  }
+
+  const generatedId = 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  const safeId = id && !BUILTIN_PACK_IDS.includes(id) ? id : generatedId;
+
+  return {
+    id: safeId,
+    name: name.length > 60 ? name.slice(0, 60) : name,
+    description: description.length > 200 ? description.slice(0, 200) : description,
+    builtin: false,
+    defaultEnabled: typeof obj.defaultEnabled === 'boolean' ? obj.defaultEnabled : true,
+    words,
+    phrases,
+  };
+}
+
+function normalizeVocabPackPrefs(obj = {}) {
+  if (!obj || typeof obj !== 'object') return {};
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof k !== 'string' || !k.trim()) continue;
+    if (typeof v !== 'boolean') continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+function normalizeCustomVocabPacks(arr = []) {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const entry of arr) {
+    const pack = normalizeImportedVocabPack(entry);
+    if (seen.has(pack.id)) continue;
+    seen.add(pack.id);
+    out.push(pack);
+  }
+  return out;
+}
+
 function normalizeFinding(finding = {}) {
   const validStatus = ['planned', 'inProgress', 'done'];
   return {
@@ -329,7 +500,7 @@ function normalizeProgressEntry(entry = {}) {
   const validKinds = ['read', 'experiment', 'writing', 'idea', 'cite', 'analysis', 'focus', 'mood'];
   return {
     id: typeof entry.id === 'string' ? entry.id : createId(),
-    date: typeof entry.date === 'string' ? entry.date : new Date().toISOString().slice(0, 10),
+    date: typeof entry.date === 'string' ? entry.date : localIsoDate(),
     articleId: typeof entry.articleId === 'string' ? entry.articleId : '',
     kind: validKinds.includes(entry.kind) ? entry.kind : 'idea',
     title: normalizeText(entry.title),
@@ -345,7 +516,7 @@ function normalizeProgressEntry(entry = {}) {
 
 function normalizeDailySession(session = {}) {
   return {
-    date: typeof session.date === 'string' ? session.date : new Date().toISOString().slice(0, 10),
+    date: typeof session.date === 'string' ? session.date : localIsoDate(),
     planText: normalizeText(session.planText),
     summaryText: normalizeText(session.summaryText),
     startedAt: typeof session.startedAt === 'string' ? session.startedAt : now(),
@@ -376,7 +547,7 @@ function normalizeStoredDatabase(data) {
     })),
     writingStreak: normalizeWritingStreak(data.writingStreak),
     pomodoroSessions: data.pomodoroSessions ?? [],
-    theme: data.theme ?? 'light',
+    theme: data.theme ?? 'claude',
     llmProviders: normalizeLlmProviders(data.llmProviders),
     activeLlmProviderId: typeof data.activeLlmProviderId === 'string' ? data.activeLlmProviderId : null,
     writingScenarios: normalizeWritingScenarios(data.writingScenarios),
@@ -384,6 +555,10 @@ function normalizeStoredDatabase(data) {
     zoteroConfig: normalizeZoteroConfig(data.zoteroConfig),
     progressEntries: Array.isArray(data.progressEntries) ? data.progressEntries.map(normalizeProgressEntry) : [],
     dailySessions: Array.isArray(data.dailySessions) ? data.dailySessions.map(normalizeDailySession) : [],
+    autoApproveTools: typeof data.autoApproveTools === 'boolean' ? data.autoApproveTools : false,
+    customVocab: normalizeCustomVocab(data.customVocab),
+    vocabPackPrefs: normalizeVocabPackPrefs(data.vocabPackPrefs),
+    customVocabPacks: normalizeCustomVocabPacks(data.customVocabPacks),
   };
 }
 
@@ -395,14 +570,41 @@ function normalizeRelativeAssetPath(value) {
   return value.split(/[\\/]+/).filter(Boolean).join(path.sep);
 }
 
+// macOS 用户从 Windows 备份导入数据库时，block.content 里可能保留 `C:\...`
+// 绝对路径。WSL 下能通过 /mnt/c 还原，但 macOS 没有这个映射，硬试会拼出
+// 不存在的路径。返回 null 让 enrichBlock 标记 assetError，提示用户重新关联。
+const WINDOWS_IMPORT_RELINK_MESSAGE =
+  'This attachment was imported from Windows; please re-link it on this Mac.';
+const warnedWindowsImportPaths = new Set();
+
+function warnWindowsImportPath(value) {
+  if (warnedWindowsImportPaths.has(value)) return;
+  warnedWindowsImportPaths.add(value);
+  console.warn(WINDOWS_IMPORT_RELINK_MESSAGE + ' Original path: ' + value);
+}
+
 function windowsPathToCurrentPlatform(value) {
   if (process.platform === 'win32') {
     return value;
   }
 
+  if (process.platform === 'darwin') {
+    warnWindowsImportPath(value);
+    return null;
+  }
+
   const drive = value[0].toLowerCase();
   const rest = value.slice(2).split(/[\\/]+/).filter(Boolean);
   return path.join('/mnt', drive, ...rest);
+}
+
+function getAssetPathError(block) {
+  if (normalizeBlockType(block.type) === 'Text') return null;
+  if (process.platform === 'darwin' && isWindowsAbsolutePath(block.content)) {
+    warnWindowsImportPath(block.content);
+    return WINDOWS_IMPORT_RELINK_MESSAGE;
+  }
+  return null;
 }
 
 function createSection(type, orderIndex) {
@@ -445,6 +647,7 @@ function createArticle(input) {
     title: normalizeText(input.title) || '未命名研究',
     targetJournal: normalizeText(input.targetJournal),
     status: ARTICLE_STATUSES.includes(input.status) ? input.status : 'Drafting',
+    language: input.language === 'zh' ? 'zh' : 'en',
     createdAt: timestamp,
     updatedAt: timestamp,
     researchContext: {
@@ -612,7 +815,7 @@ function applyWritingStreak(streakInput, deltaInput) {
   }
 
   const netWords = delta.added - delta.removed;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate();
 
   if (streak.lastWriteDate === today) {
     streak.todayWords += netWords;
@@ -625,7 +828,7 @@ function applyWritingStreak(streakInput, deltaInput) {
       streak.todayByManual += changedWords;
     }
   } else {
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yesterday = localIsoDate(new Date(Date.now() - 86400000));
 
     if (streak.lastWriteDate === yesterday) {
       streak.currentStreak += 1;
@@ -729,24 +932,41 @@ function resolveBlockPath(articleId, block) {
     return null;
   }
 
+  if (typeof block.content !== 'string' || !block.content) {
+    return null;
+  }
+
+  let candidate;
   if (path.isAbsolute(block.content)) {
-    return block.content;
+    candidate = block.content;
+  } else if (isWindowsAbsolutePath(block.content)) {
+    candidate = windowsPathToCurrentPlatform(block.content);
+    if (candidate === null) return null;
+  } else {
+    candidate = path.join(getArticleDirectory(articleId), normalizeRelativeAssetPath(block.content));
   }
 
-  if (isWindowsAbsolutePath(block.content)) {
-    return windowsPathToCurrentPlatform(block.content);
+  // 安全：阻止路径遍历。block.content 可能来自历史数据或 LLM/MCP 工具输入，
+  // 必须保证最终落点在该 article 目录内（含子目录），否则 IPC 暴露任意 fs 读取。
+  const resolved = path.resolve(candidate);
+  const root = path.resolve(getArticleDirectory(articleId));
+  const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+  if (resolved !== root && !resolved.startsWith(rootWithSep)) {
+    return null;
   }
 
-  return path.join(getArticleDirectory(articleId), normalizeRelativeAssetPath(block.content));
+  return candidate;
 }
 
 function enrichBlock(articleId, block) {
   const normalizedBlock = normalizeStoredBlock(block);
+  const assetError = getAssetPathError(normalizedBlock);
   const resolvedPath = resolveBlockPath(articleId, normalizedBlock);
   const stats = resolvedPath && fs.existsSync(resolvedPath) ? fs.statSync(resolvedPath) : null;
 
   return {
     ...normalizedBlock,
+    assetError,
     resolvedPath,
     previewUrl: resolvedPath ? pathToFileURL(resolvedPath).toString() : null,
     fileName: resolvedPath ? path.basename(resolvedPath) : null,
@@ -771,7 +991,7 @@ function enrichArticle(article) {
 
 function addMoodEntry(mood, note = '') {
   const database = readDatabase();
-  const today = new Date().toISOString().split('T')[0];
+  const today = localIsoDate();
   
   if (!database.writingStreak.moodHistory) {
     database.writingStreak.moodHistory = [];
@@ -786,7 +1006,7 @@ function addMoodEntry(mood, note = '') {
   });
   
   // Keep only last 365 days
-  const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0];
+  const oneYearAgo = localIsoDate(new Date(Date.now() - 365 * 86400000));
   database.writingStreak.moodHistory = database.writingStreak.moodHistory.filter(
     entry => entry.date >= oneYearAgo
   );
@@ -802,7 +1022,7 @@ function getMoodHistory() {
 
 function addPomodoroSession(duration, articleId = '', sectionType = '') {
   const database = readDatabase();
-  const today = new Date().toISOString().split('T')[0];
+  const today = localIsoDate();
   
   if (!database.pomodoroSessions) {
     database.pomodoroSessions = [];
@@ -821,7 +1041,7 @@ function addPomodoroSession(duration, articleId = '', sectionType = '') {
   database.pomodoroSessions.push(session);
   
   // Keep only last 365 days
-  const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0];
+  const oneYearAgo = localIsoDate(new Date(Date.now() - 365 * 86400000));
   database.pomodoroSessions = database.pomodoroSessions.filter(
     s => s.startTime >= oneYearAgo
   );
@@ -833,7 +1053,7 @@ function addPomodoroSession(duration, articleId = '', sectionType = '') {
 function getPomodoroStats() {
   const database = readDatabase();
   const sessions = database.pomodoroSessions || [];
-  const today = new Date().toISOString().split('T')[0];
+  const today = localIsoDate();
   
   const todaySessions = sessions.filter(s => s.startTime.startsWith(today));
   const todayMinutes = todaySessions.reduce((sum, s) => sum + s.duration, 0);
@@ -850,16 +1070,33 @@ function getPomodoroStats() {
   };
 }
 
+const SUPPORTED_THEMES = ['claude', 'pixel', 'fresh'];
+
 function getTheme() {
   const database = readDatabase();
-  return database.theme || 'light';
+  return database.theme || 'claude';
 }
 
 function setTheme(theme) {
+  if (!SUPPORTED_THEMES.includes(theme)) {
+    throw new Error('Invalid theme: ' + theme + '. Supported: ' + SUPPORTED_THEMES.join(' / '));
+  }
   const database = readDatabase();
   database.theme = theme;
   writeDatabase(database);
   return database;
+}
+
+function getAutoApproveTools() {
+  const database = readDatabase();
+  return Boolean(database.autoApproveTools);
+}
+
+function setAutoApproveTools(value) {
+  const database = readDatabase();
+  database.autoApproveTools = Boolean(value);
+  writeDatabase(database);
+  return database.autoApproveTools;
 }
 
 function listProviders() {
@@ -909,6 +1146,11 @@ function addProvider(input = {}) {
   };
 
   db.llmProviders.push(provider);
+  // If no provider is active yet, the new one becomes active automatically.
+  // Adding a Provider and then having to "活动" it again is unintuitive UX.
+  if (!db.activeLlmProviderId) {
+    db.activeLlmProviderId = provider.id;
+  }
   writeDatabase(db);
   return provider;
 }
@@ -1089,6 +1331,210 @@ function setItalicGuide(config = {}) {
   return db.italicGuide;
 }
 
+function getCustomVocab() {
+  const db = readDatabase();
+  return db.customVocab || normalizeCustomVocab();
+}
+
+function addCustomVocabWord(word) {
+  if (typeof word !== 'string' || !word.trim()) {
+    throw new Error('addCustomVocabWord: word must be a non-empty string');
+  }
+  const trimmed = word.trim();
+  if (trimmed.length > 60) throw new Error('Word too long (>60 chars).');
+  const db = readDatabase();
+  const current = db.customVocab || normalizeCustomVocab();
+  const lc = trimmed.toLowerCase();
+  if (current.words.some((w) => w.toLowerCase() === lc)) {
+    return current; // idempotent: already there
+  }
+  const next = { ...current, words: [...current.words, trimmed] };
+  db.customVocab = normalizeCustomVocab(next);
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+function removeCustomVocabWord(word) {
+  if (typeof word !== 'string' || !word.trim()) {
+    throw new Error('removeCustomVocabWord: word must be a non-empty string');
+  }
+  const lc = word.trim().toLowerCase();
+  const db = readDatabase();
+  const current = db.customVocab || normalizeCustomVocab();
+  const next = {
+    ...current,
+    words: current.words.filter((w) => w.toLowerCase() !== lc),
+  };
+  db.customVocab = normalizeCustomVocab(next);
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+function addCustomVocabPhrase(entry = {}) {
+  const trigger = typeof entry.trigger === 'string' ? entry.trigger.trim() : '';
+  const text = typeof entry.text === 'string' ? entry.text.trim() : '';
+  const label = typeof entry.label === 'string' ? entry.label.trim() : undefined;
+  if (!trigger) throw new Error('addCustomVocabPhrase: trigger is required');
+  if (!text) throw new Error('addCustomVocabPhrase: text is required');
+  if (trigger.length > 30) throw new Error('Trigger too long (>30 chars).');
+  if (text.length > 160) throw new Error('Phrase too long (>160 chars).');
+  const db = readDatabase();
+  const current = db.customVocab || normalizeCustomVocab();
+  const key = trigger.toLowerCase() + '|' + text.toLowerCase();
+  const exists = current.phrases.some(
+    (p) => (p.trigger.toLowerCase() + '|' + p.text.toLowerCase()) === key,
+  );
+  if (exists) return current; // idempotent
+  const phrase = label ? { trigger, text, label } : { trigger, text };
+  const next = { ...current, phrases: [...current.phrases, phrase] };
+  db.customVocab = normalizeCustomVocab(next);
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+function removeCustomVocabPhrase(trigger, text) {
+  if (typeof trigger !== 'string' || !trigger.trim()) {
+    throw new Error('removeCustomVocabPhrase: trigger is required');
+  }
+  const tLc = trigger.trim().toLowerCase();
+  const xLc = typeof text === 'string' ? text.trim().toLowerCase() : null;
+  const db = readDatabase();
+  const current = db.customVocab || normalizeCustomVocab();
+  const next = {
+    ...current,
+    phrases: current.phrases.filter((p) => {
+      if (p.trigger.toLowerCase() !== tLc) return true;
+      if (xLc !== null && p.text.toLowerCase() !== xLc) return true;
+      return false;
+    }),
+  };
+  db.customVocab = normalizeCustomVocab(next);
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+function clearCustomVocab() {
+  const db = readDatabase();
+  db.customVocab = normalizeCustomVocab();
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+// Vocab pack registry
+const { BUILTIN_PACK_META } = require('./vocabPackRegistry.cjs');
+
+function listVocabPacks() {
+  const db = readDatabase();
+  const prefs = db.vocabPackPrefs || {};
+  const customPacks = db.customVocabPacks || [];
+  const out = [];
+  for (const meta of BUILTIN_PACK_META) {
+    const enabled = Object.prototype.hasOwnProperty.call(prefs, meta.id) ? !!prefs[meta.id] : !!meta.defaultEnabled;
+    out.push({
+      id: meta.id,
+      name: meta.name,
+      description: meta.description,
+      builtin: true,
+      defaultEnabled: !!meta.defaultEnabled,
+      enabled,
+    });
+  }
+  for (const pack of customPacks) {
+    const enabled = Object.prototype.hasOwnProperty.call(prefs, pack.id) ? !!prefs[pack.id] : !!pack.defaultEnabled;
+    out.push({
+      id: pack.id,
+      name: pack.name,
+      description: pack.description || '',
+      builtin: false,
+      defaultEnabled: !!pack.defaultEnabled,
+      enabled,
+    });
+  }
+  return out;
+}
+
+function setVocabPackEnabled(id, enabled) {
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error('setVocabPackEnabled: id is required');
+  }
+  if (typeof enabled !== 'boolean') {
+    throw new Error('setVocabPackEnabled: enabled must be boolean');
+  }
+  const db = readDatabase();
+  const knownIds = new Set(BUILTIN_PACK_IDS);
+  for (const pack of (db.customVocabPacks || [])) knownIds.add(pack.id);
+  if (!knownIds.has(id)) {
+    throw new Error('setVocabPackEnabled: unknown pack id ' + id);
+  }
+  const next = { ...(db.vocabPackPrefs || {}), [id]: enabled };
+  db.vocabPackPrefs = normalizeVocabPackPrefs(next);
+  writeDatabase(db);
+  return listVocabPacks();
+}
+
+function importVocabPack(payload = {}) {
+  const pack = normalizeImportedVocabPack(payload);
+  const totalWords = Object.values(pack.words || {}).reduce((n, arr) => n + arr.length, 0);
+  const totalPhrases = Object.values(pack.phrases || {}).reduce((n, arr) => n + arr.length, 0);
+  if (totalWords === 0 && totalPhrases === 0) {
+    throw new Error('importVocabPack: pack contains no words or phrases');
+  }
+  const db = readDatabase();
+  const existing = (db.customVocabPacks || []).filter((p) => p.id !== pack.id);
+  existing.push(pack);
+  db.customVocabPacks = normalizeCustomVocabPacks(existing);
+  writeDatabase(db);
+  return pack;
+}
+
+function deleteCustomVocabPack(id) {
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error('deleteCustomVocabPack: id is required');
+  }
+  if (BUILTIN_PACK_IDS.includes(id)) {
+    throw new Error('Cannot delete a built-in pack');
+  }
+  const db = readDatabase();
+  const before = (db.customVocabPacks || []).length;
+  db.customVocabPacks = (db.customVocabPacks || []).filter((p) => p.id !== id);
+  if (db.customVocabPacks.length === before) {
+    throw new Error('deleteCustomVocabPack: pack not found');
+  }
+  if (db.vocabPackPrefs && Object.prototype.hasOwnProperty.call(db.vocabPackPrefs, id)) {
+    const next = { ...db.vocabPackPrefs };
+    delete next[id];
+    db.vocabPackPrefs = next;
+  }
+  writeDatabase(db);
+  return listVocabPacks();
+}
+
+function renameCustomVocabPack(id, name) {
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error('renameCustomVocabPack: id is required');
+  }
+  if (BUILTIN_PACK_IDS.includes(id)) {
+    throw new Error('Cannot rename a built-in pack');
+  }
+  if (typeof name !== 'string' || !name.trim()) {
+    throw new Error('renameCustomVocabPack: name is required');
+  }
+  const trimmed = name.trim().slice(0, 60);
+  const db = readDatabase();
+  const packs = (db.customVocabPacks || []).slice();
+  const idx = packs.findIndex((p) => p.id === id);
+  if (idx === -1) throw new Error('renameCustomVocabPack: pack not found');
+  packs[idx] = { ...packs[idx], name: trimmed };
+  db.customVocabPacks = packs;
+  writeDatabase(db);
+  return packs[idx];
+}
+
+function getCustomVocabPacks() {
+  const db = readDatabase();
+  return (db.customVocabPacks || []).slice();
+}
+
 function getZoteroConfig() {
   const db = readDatabase();
   return db.zoteroConfig;
@@ -1244,15 +1690,30 @@ function updateArticleMeta(articleId, patch) {
 function updateResearchContext(articleId, researchContext) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
+  const incoming = researchContext || {};
 
-  article.researchContext = {
-    ...article.researchContext,
-    scientificQuestion: normalizeText(researchContext.scientificQuestion),
-    observedPhenomenon: normalizeText(researchContext.observedPhenomenon),
-    hypothesis: normalizeText(researchContext.hypothesis),
-    approach: normalizeText(researchContext.approach),
-    updatedAt: now(),
-  };
+  // 部分字段更新：缺字段保持原值（早期实现把 undefined → 空串覆盖，
+  // 导致 LLM 调一次 update_research_context 就清掉 3 个未传字段）。
+  const validKeys = ['scientificQuestion', 'observedPhenomenon', 'hypothesis', 'approach'];
+  const merged = { ...article.researchContext };
+  let touched = 0;
+  for (const key of validKeys) {
+    if (Object.prototype.hasOwnProperty.call(incoming, key)) {
+      merged[key] = normalizeText(incoming[key]);
+      touched += 1;
+    }
+  }
+  if (touched === 0) {
+    // 没命中任何已知字段：可能调用方用了过时 schema (background/objectives/
+    // keyMethods)，必须报错而非静默 no-op，否则 AI 自以为成功了。
+    const got = Object.keys(incoming).join(', ') || '(空)';
+    throw new Error(
+      `updateResearchContext: 未识别任何字段（收到：${got}）。当前 schema 仅接受 ${validKeys.join(' / ')}。`,
+    );
+  }
+  merged.updatedAt = now();
+
+  article.researchContext = merged;
   touchArticle(article);
 
   writeDatabase(database);
@@ -1285,11 +1746,6 @@ function addTextBlock(articleId, sectionType, content, description = '', modifie
   });
 
   touchArticle(article);
-  database.writingStreak = applyWritingStreak(database.writingStreak, {
-    added: countWords(cleanContent),
-    removed: 0,
-    source: source || 'manual',
-  });
   writeDatabase(database);
 }
 
@@ -1386,11 +1842,6 @@ function updateTextBlock(articleId, blockId, content, description = '', modified
   block.description = normalizeText(description);
   block.updatedAt = now();
   block.updatedBy = modifiedBy;
-
-  if (oldContent !== cleanContent) {
-    block.versions = block.versions ?? [];
-    block.versions.unshift(createTextVersion(cleanContent, modifiedBy, '更新文本块'));
-  }
 
   const diff = diffWords(oldContent, cleanContent);
   database.writingStreak = applyWritingStreak(database.writingStreak, {
@@ -1517,6 +1968,29 @@ function diffWords(oldText, newText) {
   };
 }
 
+const MAX_BLOCK_VERSIONS = 3;
+
+function recordBlockVersion(articleId, blockId, changeDescription = '快照', modifiedBy = 'SciPaper Todo') {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const { block } = findBlock(article, blockId);
+  if (block.type !== 'Text') {
+    throw new Error('Only text blocks can have version snapshots');
+  }
+  block.versions = block.versions ?? [];
+  const latest = block.versions[0];
+  if (latest && latest.content === block.content) {
+    return database;
+  }
+  block.versions.unshift(createTextVersion(block.content, modifiedBy, changeDescription));
+  if (block.versions.length > MAX_BLOCK_VERSIONS) {
+    block.versions = block.versions.slice(0, MAX_BLOCK_VERSIONS);
+  }
+  touchArticle(article);
+  writeDatabase(database);
+  return database;
+}
+
 function updateTextBlockWithStreak(articleId, blockId, content, description = '', modifiedBy = 'SciPaper Todo') {
   return updateTextBlock(articleId, blockId, content, description, modifiedBy, 'manual');
 }
@@ -1579,6 +2053,96 @@ function deleteBlock(articleId, blockId, source = 'manual') {
   throw new Error('Content block not found');
 }
 
+// ---- Block annotations (sprint v2.2) -------------------------------------
+// Annotations live on the block they reference. We persist:
+//   { id, blockId, anchorText, comment, author, status, createdAt, updatedAt }
+// anchorText is the verbatim quote — positions are recomputed in the renderer
+// because text drifts as the user edits.
+
+function findBlockAcrossSections(article, blockId) {
+  for (const section of article.sections) {
+    const block = section.contentBlocks.find((b) => b.id === blockId);
+    if (block) return { section, block };
+  }
+  return { section: null, block: null };
+}
+
+function findBlockByAnnotationId(article, annotationId) {
+  for (const section of article.sections) {
+    for (const block of section.contentBlocks) {
+      if (Array.isArray(block.annotations)) {
+        const idx = block.annotations.findIndex((a) => a.id === annotationId);
+        if (idx >= 0) return { section, block, annotationIndex: idx };
+      }
+    }
+  }
+  return { section: null, block: null, annotationIndex: -1 };
+}
+
+function addAnnotation(articleId, blockId, payload) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const { block } = findBlockAcrossSections(article, blockId);
+
+  if (!block) throw new Error('Content block not found');
+  if (block.type !== 'Text') throw new Error('Annotations are only supported on text blocks');
+
+  const anchorText = String(payload && payload.anchorText ? payload.anchorText : '').trim();
+  const comment = String(payload && payload.comment ? payload.comment : '').trim();
+  if (!anchorText) throw new Error('anchorText is required');
+  if (!comment) throw new Error('comment is required');
+
+  const author = payload && payload.author === 'ai' ? 'ai' : 'user';
+  const timestamp = now();
+  const annotation = {
+    id: createId(),
+    blockId,
+    anchorText,
+    comment,
+    author,
+    status: 'open',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  if (!Array.isArray(block.annotations)) block.annotations = [];
+  block.annotations.push(annotation);
+  block.updatedAt = timestamp;
+  touchArticle(article);
+  writeDatabase(database);
+}
+
+function updateAnnotation(articleId, annotationId, patch) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const { block, annotationIndex } = findBlockByAnnotationId(article, annotationId);
+
+  if (!block || annotationIndex < 0) throw new Error('Annotation not found');
+
+  const annotation = block.annotations[annotationIndex];
+  if (patch && typeof patch.comment === 'string') annotation.comment = patch.comment.trim();
+  if (patch && (patch.status === 'open' || patch.status === 'resolved')) {
+    annotation.status = patch.status;
+  }
+  annotation.updatedAt = now();
+  block.updatedAt = annotation.updatedAt;
+  touchArticle(article);
+  writeDatabase(database);
+}
+
+function deleteAnnotation(articleId, annotationId) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const { block, annotationIndex } = findBlockByAnnotationId(article, annotationId);
+
+  if (!block || annotationIndex < 0) throw new Error('Annotation not found');
+
+  block.annotations.splice(annotationIndex, 1);
+  block.updatedAt = now();
+  touchArticle(article);
+  writeDatabase(database);
+}
+
 function inferPreviewKind(filePath) {
   const extension = path.extname(filePath).toLowerCase();
 
@@ -1638,7 +2202,7 @@ function addProgressEntry(payload, createdBy = 'user') {
   if (!payload.title) throw new Error('title is required');
 
   const article = findArticle(database, payload.articleId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate();
   const entry = normalizeProgressEntry({
     id: createId(),
     date: payload.date || today,
@@ -1785,7 +2349,7 @@ function listFindings(articleId, sectionType) {
 function startDailySession(date, planText = '') {
   const database = readDatabase();
   database.dailySessions = database.dailySessions || [];
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || localIsoDate();
   const existing = database.dailySessions.find((s) => s.date === targetDate);
   if (existing) {
     if (planText) existing.planText = String(planText);
@@ -1806,7 +2370,7 @@ function startDailySession(date, planText = '') {
 function setDailyPlan(date, planText) {
   const database = readDatabase();
   database.dailySessions = database.dailySessions || [];
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || localIsoDate();
   let session = database.dailySessions.find((s) => s.date === targetDate);
   if (!session) {
     session = normalizeDailySession({ date: targetDate, planText, startedAt: now(), progressEntryIds: [] });
@@ -1821,7 +2385,7 @@ function setDailyPlan(date, planText) {
 function endDailySession(date, summaryText = '') {
   const database = readDatabase();
   database.dailySessions = database.dailySessions || [];
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || localIsoDate();
   let session = database.dailySessions.find((s) => s.date === targetDate);
   if (!session) {
     session = normalizeDailySession({
@@ -1839,7 +2403,7 @@ function endDailySession(date, summaryText = '') {
 
 function getDailySession(date) {
   const database = readDatabase();
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || localIsoDate();
   return (database.dailySessions || []).find((s) => s.date === targetDate) || null;
 }
 
@@ -1856,7 +2420,7 @@ function addReviewRound(articleId, payload) {
     id: createId(),
     articleId,
     roundNumber: nextRoundNumber,
-    submittedAt: payload.submittedAt || now().slice(0, 10),
+    submittedAt: payload.submittedAt || localIsoDate(),
     journalName: normalizeText(payload.journalName) || article.targetJournal || '未填写',
     manuscriptNumber: normalizeText(payload.manuscriptNumber),
     reviewReceivedAt: payload.reviewReceivedAt || '',
@@ -1892,7 +2456,7 @@ function addReviewComment(articleId, roundId, payload) {
   });
 
   if (!round.reviewReceivedAt) {
-    round.reviewReceivedAt = now().slice(0, 10);
+    round.reviewReceivedAt = localIsoDate();
   }
 
   article.status = 'UnderReview';
@@ -2013,6 +2577,8 @@ function getPreviewPayload(articleId, blockId) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
   const { block } = findBlock(article, blockId);
+  const assetError = getAssetPathError(block);
+  if (assetError) throw new Error(assetError);
   const resolvedPath = resolveBlockPath(articleId, block);
 
   if (!resolvedPath || !fs.existsSync(resolvedPath)) {
@@ -2268,11 +2834,15 @@ module.exports = {
   updateSectionContent,
   updateTextBlock,
   updateTextBlockWithStreak,
+  recordBlockVersion,
   updateWritingStreak,
   countWords,
   addCitation,
   deleteBlock,
   addAssetBlock,
+  addAnnotation,
+  updateAnnotation,
+  deleteAnnotation,
   addProgressEntry,
   updateProgressEntry,
   deleteProgressEntry,
@@ -2324,10 +2894,25 @@ module.exports = {
   setItalicGuide,
   getZoteroConfig,
   setZoteroConfig,
+  getCustomVocab,
+  addCustomVocabWord,
+  removeCustomVocabWord,
+  addCustomVocabPhrase,
+  removeCustomVocabPhrase,
+  clearCustomVocab,
+  listVocabPacks,
+  setVocabPackEnabled,
+  importVocabPack,
+  deleteCustomVocabPack,
+  renameCustomVocabPack,
+  getCustomVocabPacks,
   getWritingStats,
   addTag,
   removeTag,
   exportToHTML,
   exportToJSON,
   createSharePackage,
+  SUPPORTED_THEMES,
+  getAutoApproveTools,
+  setAutoApproveTools,
 };

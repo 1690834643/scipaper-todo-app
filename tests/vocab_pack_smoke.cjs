@@ -53,5 +53,51 @@ const tmp = '/tmp/vocab-pack-smoke-bundle.mjs';
     console.log(`  ${s.padEnd(13)} all=${SCI_WORDS[s].length}  default-only=${defaultOnly[s].length}`);
   }
 
+  // ---- storage layer (commit 2) ----
+  console.log('\n--- storage layer ---');
+  const fs = require('fs');
+  const tmpHome = '/tmp/scipaper-vocab-pack-test-' + Date.now();
+  fs.mkdirSync(tmpHome, { recursive: true });
+  process.env.HOME = tmpHome;
+  const storage = require(path.join(process.cwd(), 'electron/storage.cjs'));
+  const registry = require(path.join(process.cwd(), 'electron/vocabPackRegistry.cjs'));
+
+  eq('registry id count', registry.BUILTIN_PACK_IDS.length, BUILTIN_PACKS.length);
+  const fromTs = BUILTIN_PACKS.map(p => p.id).slice().sort().join(',');
+  const fromCjs = registry.BUILTIN_PACK_IDS.slice().sort().join(',');
+  eq('registry IDs match TS BUILTIN_PACKS', fromCjs, fromTs);
+
+  const packs0 = storage.listVocabPacks();
+  eq('listVocabPacks count (fresh db)', packs0.length, 11);
+  eq('default-on returned correctly', packs0.filter(p => p.enabled).length, 6);
+
+  const afterToggle = storage.setVocabPackEnabled('sex-determination', true);
+  eq('setVocabPackEnabled flips state',
+     afterToggle.find(p => p.id === 'sex-determination').enabled, true);
+
+  const imported = storage.importVocabPack({
+    name: 'lab vocab', words: ['AOX', 'Cscaspase'],
+  });
+  eq('imported pack carries words', imported.words.general.includes('AOX'), true);
+
+  const afterRename = storage.renameCustomVocabPack(imported.id, 'My lab');
+  eq('rename works', afterRename.name, 'My lab');
+
+  const afterDelete = storage.deleteCustomVocabPack(imported.id);
+  eq('delete removes custom pack',
+     afterDelete.filter(p => !p.builtin).length, 0);
+
+  let threw = false;
+  try { storage.deleteCustomVocabPack('core-academic'); } catch { threw = true; }
+  eq('delete builtin rejected', threw, true);
+
+  threw = false;
+  try { storage.setVocabPackEnabled('nonexistent', true); } catch { threw = true; }
+  eq('setEnabled unknown rejected', threw, true);
+
+  threw = false;
+  try { storage.importVocabPack({ name: 'empty' }); } catch { threw = true; }
+  eq('empty pack rejected', threw, true);
+
   process.exit(pass ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(2); });
