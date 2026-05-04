@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="build/icon-1024.png" alt="SciPaper Todo" width="160" height="160">
+</p>
+
 <h1 align="center">SciPaper Todo</h1>
 
 <p align="center">
@@ -6,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/1690834643/scipaper-todo-app/releases/latest"><img src="https://img.shields.io/github/v/release/1690834643/scipaper-todo-app?style=flat-square&color=2ea44f" alt="release"></a>
-  <a href="https://github.com/1690834643/scipaper-todo-app/releases/latest"><img src="https://img.shields.io/badge/platform-Windows%20x64-0078D6?style=flat-square" alt="platform"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue?style=flat-square" alt="platform">
   <img src="https://img.shields.io/badge/electron-37-47848F?style=flat-square" alt="electron">
   <img src="https://img.shields.io/badge/react-19-61DAFB?style=flat-square" alt="react">
   <img src="https://img.shields.io/badge/MCP-stdio-F46036?style=flat-square" alt="mcp">
@@ -15,8 +19,28 @@
 <p align="center">
   <a href="#中文"><strong>中文说明</strong></a> ·
   <a href="#english"><strong>English</strong></a> ·
+  <a href="#截图--screenshots"><strong>截图 / Screenshots</strong></a> ·
   <a href="https://github.com/1690834643/scipaper-todo-app/releases/latest"><strong>下载 / Download</strong></a>
 </p>
+
+---
+
+## 截图 / Screenshots
+
+> 写作主战场（沉浸模式）+ 双侧栏可折叠 + AI 抽屉 + IMRaD 章节导航 + 审稿管理 + 多主题。
+> Immersive writing canvas + collapsible sidebars + AI drawer + IMRaD nav + review tracking + theme switch.
+
+| 视图 / View | 说明 / What it shows |
+|---|---|
+| `docs/screenshots/home.png` | 首页：今日写作字数 / 治愈短句 / 快捷入口 — Home dashboard with today's word count and shortcuts |
+| `docs/screenshots/library.png` | Library：稿件卡片网格 — Manuscript library grid |
+| `docs/screenshots/focus-mode.png` | 沉浸写作：正文区 + 折叠侧栏 + 版本时间线 — Immersive editor with collapsed sidebars + version rail |
+| `docs/screenshots/ai-drawer.png` | AI 抽屉 + 工具调用确认 — AI drawer with tool-use approval dialog |
+| `docs/screenshots/review.png` | 审稿管理：意见 → ContentBlock 修改关联 — Review workflow linking comments to content blocks |
+| `docs/screenshots/settings.png` | Settings：AI Provider / 主题 / Zotero / MCP — Settings (AI / theme / Zotero / MCP) |
+
+截图持续补齐中。欢迎贡献：1080p 截图放到 `docs/screenshots/` 后提 PR / 或贴到 issue 即可。
+Screenshots are still being captured. Contributions welcome — drop 1080p PNGs into `docs/screenshots/` via PR or attach in an issue.
 
 ---
 
@@ -24,7 +48,7 @@
 
 ### 这是什么
 
-**SciPaper Todo** 是一款面向生命科学研究者的 Windows 桌面应用，把"写论文"当成一个软件工程项目来管理：
+**SciPaper Todo** 是一款面向生命科学研究者的桌面应用（Windows + macOS），把"写论文"当成一个软件工程项目来管理：
 
 - 一篇论文 = 一个仓库，按 IMRaD 结构组织（Title / Abstract / Introduction / Methods / Results / Discussion / References）
 - 数据本地，不上云；附件、版本、修改记录全部留在你机器上
@@ -50,8 +74,10 @@
 ### 安装与使用
 
 1. 到 [Releases](https://github.com/1690834643/scipaper-todo-app/releases/latest) 下载：
-   - **Setup**：标准 NSIS 安装包，会写入 Start Menu / 卸载条目
-   - **Portable**：单文件免安装版，双击即用
+   - **Windows**：`Setup-x.x.x.exe`（NSIS 安装包，写入 Start Menu / 卸载条目）或 `Portable-x.x.x.exe`（单文件免安装）
+   - **macOS arm64**（M1/M2/M3）：`x.x.x-arm64.dmg` 或 `x.x.x-arm64.zip`
+   - **macOS x64**（Intel）：`x.x.x-x64.dmg` 或 `x.x.x-x64.zip`
+   - 注：macOS 包未签名，首次打开请右键→"打开"，或在终端运行 `xattr -dr com.apple.quarantine /Applications/SciPaper\ Todo.app`
 2. 首次启动会在 `%USERPROFILE%\Documents\SciPaperTodo\` 创建数据目录
 3. 进 **Settings → AI Provider** 添加你的 LLM（DeepSeek V4 Flash / Pro 已内置预设，粘贴 API Key 即可）
 4. 进 **Settings → Zotero 接入**（可选）启用 Zotero 集成
@@ -74,12 +100,13 @@
 ### 技术栈
 
 - **桌面壳**：Electron 37（Chromium 130+，原生 Canvas 2D L2 / safeStorage / contextBridge 全用上）
-- **渲染层**：React 19 + TypeScript 6 + Vite 8（65 modules，gzipped JS 127 KB）
+- **渲染层**：React 19 + TypeScript 6 + Vite 8（121 modules，gzipped JS 267 KB）
+- **写作引擎**：TipTap (ProseMirror) + 自动补全（科研词库 ~1100 词跨 6 学科）+ 行内批注 mark
 - **存储**：本地 JSON 数据库 + safeStorage 加密 API Key
 - **AI 协议**：OpenAI-compat 与 Anthropic 双协议流式，支持 thinking mode 的 `reasoning_content` 重放
-- **MCP**：基于 `@modelcontextprotocol/sdk` 的 stdio server
-- **导出**：`docx` v9 纯 JS 包，无 native 依赖
-- **打包**：electron-builder 出 NSIS + Portable 双产物，每次约 90 秒
+- **MCP**：基于 `@modelcontextprotocol/sdk` 的 stdio server（27 读 / 41 写工具，写工具需环境变量开启）
+- **导出**：`docx` v9 纯 JS 包；LaTeX 工程（.tex + references.bib）；HTML / JSON / 分享包
+- **打包**：electron-builder 出 NSIS + Portable + macOS arm64/x64 共 6 产物，CI 矩阵 ~2.5 分钟
 
 ### 路径速查
 
@@ -102,7 +129,8 @@
 
 ### 反馈与已知
 
-- 暂不支持 macOS / Linux 二进制（代码跨平台，需自编译）
+- macOS 包未签名 / 未公证（暂无 Apple Developer 证书）；首次打开 Gatekeeper 拦截需右键→"打开"，或 `xattr -dr com.apple.quarantine` 解除
+- Linux 暂无二进制（代码跨平台，需自编译）
 - 旧 `deepseek-chat` / `deepseek-reasoner` model id 已在 V4 文档里被标记为 legacy；预设直接给 `deepseek-v4-flash` / `deepseek-v4-pro`
 - WSL 下 safeStorage 拒保存 API Key（Windows 实机用 DPAPI 正常）；如遇此情况只在 Windows 跑
 - **Portable .exe 用作 MCP server 路径不稳定**：Windows portable NSIS 会把 .exe 自解压到 `%LOCALAPPDATA%\Temp\<随机 hash>\`，关闭后被清理，hash 每次启动可能变；任何外部 MCP 客户端把这个临时路径写死，下次连接就会找不到。要把 SciPaper Todo 当 MCP 服务器，请用 Setup 版（路径固定到安装目录），或把 Portable .exe 拷到自己常驻的固定文件夹再在 MCP 配置里指向那条路径。
@@ -113,7 +141,7 @@
 
 ### What is this
 
-**SciPaper Todo** is a Windows desktop app for life-science researchers that treats manuscript writing like a software project:
+**SciPaper Todo** is a desktop app (Windows + macOS) for life-science researchers that treats manuscript writing like a software project:
 
 - One paper = one repository, organised by IMRaD (Title / Abstract / Introduction / Methods / Results / Discussion / References)
 - Local-first. Attachments, versions, edit history all stay on your machine
@@ -139,8 +167,10 @@
 ### Install
 
 1. Grab from [Releases](https://github.com/1690834643/scipaper-todo-app/releases/latest):
-   - **Setup**: standard NSIS installer with Start Menu and uninstall entry
-   - **Portable**: single-file binary, no install
+   - **Windows**: `Setup-x.x.x.exe` (NSIS installer with Start Menu / uninstall entry) or `Portable-x.x.x.exe` (single-file binary)
+   - **macOS arm64** (M1/M2/M3): `x.x.x-arm64.dmg` or `x.x.x-arm64.zip`
+   - **macOS x64** (Intel): `x.x.x-x64.dmg` or `x.x.x-x64.zip`
+   - macOS builds are unsigned. First open: right-click → "Open", or run `xattr -dr com.apple.quarantine /Applications/SciPaper\ Todo.app`
 2. First launch creates `%USERPROFILE%\Documents\SciPaperTodo\`
 3. **Settings → AI Provider**: add your LLM (DeepSeek V4 Flash / Pro presets included, paste your API key)
 4. **Settings → Zotero** (optional): enable Zotero integration
@@ -163,12 +193,13 @@
 ### Stack
 
 - **Shell**: Electron 37 (Chromium 130+, uses Canvas 2D Level 2, safeStorage, contextBridge)
-- **Renderer**: React 19 + TypeScript 6 + Vite 8 (65 modules, ~127 KB gzipped JS)
+- **Renderer**: React 19 + TypeScript 6 + Vite 8 (121 modules, ~267 KB gzipped JS)
+- **Editor**: TipTap (ProseMirror) with autocomplete (~1100 sci-vocab words across 6 disciplines) and inline annotation marks
 - **Storage**: local JSON database + encrypted API key store
 - **AI**: dual-protocol streaming (OpenAI-compat + Anthropic), with `reasoning_content` replay for thinking-mode models
-- **MCP**: stdio server on top of `@modelcontextprotocol/sdk`
-- **Export**: `docx` v9 (pure JS, no native deps)
-- **Packaging**: electron-builder, NSIS + Portable twin output, ~90 s per build
+- **MCP**: stdio server on `@modelcontextprotocol/sdk` (27 read tools / 41 write tools, writes gated by env flag)
+- **Export**: `docx` v9 (pure JS); LaTeX project (.tex + references.bib); HTML / JSON / share bundle
+- **Packaging**: electron-builder ships NSIS + Portable + macOS arm64 / x64 — 6 artifacts, CI matrix ~2.5 minutes
 
 ### Paths
 
@@ -191,7 +222,8 @@
 
 ### Caveats
 
-- Windows x64 binaries only; the codebase is cross-platform, build from source for macOS / Linux
+- macOS builds are unsigned / un-notarised (no Apple Developer cert yet). First launch hits Gatekeeper — right-click → "Open", or run `xattr -dr com.apple.quarantine` to clear the quarantine attribute
+- No Linux binaries (codebase is cross-platform, build from source)
 - Legacy `deepseek-chat` / `deepseek-reasoner` model IDs are deprecated per DeepSeek docs; presets ship with `deepseek-v4-flash` / `deepseek-v4-pro`
 - safeStorage refuses to persist API keys under WSL; run the actual binary on Windows for full functionality
 - **Portable .exe is unstable as an MCP server target.** The Windows NSIS portable wrapper self-extracts to `%LOCALAPPDATA%\Temp\<random-hash>\`, gets cleaned up on close, and may pick a new hash on the next run. Any external MCP client config pinned to that path will fail next session. To use SciPaper Todo as an MCP server, install via Setup (stable path), or copy the Portable .exe into a fixed folder of your own and point the MCP config there.
