@@ -118,6 +118,15 @@ export const AutocompleteExtension = Extension.create<AutocompleteOptions>({
             if (meta?.dismissed === true) {
               return { ...prev, dismissed: true, active: false, items: [], coords: null }
             }
+            // Skip recompute for transactions that don't actually change the
+            // document (e.g. PM's autofocus:'end' selection-set on mount, pure
+            // cursor moves with arrow keys, or annotation mark applies). Only
+            // typing or programmatic edits should be able to surface the
+            // popup. Without this, reopening a session that ended mid-word
+            // ("consist") would pop autocomplete the moment the editor mounts.
+            // acceptItem dispatches an insertText (docChanged) so it still
+            // recomputes; setContent() also docChanges → still recomputes.
+            if (!tr.docChanged && !meta) return prev
             // Everything else (incl. acceptItem's `dismissed: false` reset):
             // recompute from the new doc/selection. The reset clears any
             // prior dismiss flag BEFORE recomputing so a fresh popup can show.
