@@ -29,7 +29,7 @@ import {
   type AutocompleteState,
 } from '../utils/autocompleteExtension'
 import { AutocompleteList } from './AutocompleteList'
-import { SCI_PHRASES, SCI_WORDS, type SciSection } from '../data/sci-vocab'
+import { SCI_PHRASES, SCI_WORDS, type SciPhrase, type SciSection } from '../data/sci-vocab'
 import type {
   AnnotationAuthor,
   AnnotationStatus,
@@ -77,6 +77,12 @@ export interface FocusModeEditorProps {
   // straight into edit mode without a second click on the toggle.
   viewMode?: 'edit' | 'preview'
   onViewModeChange?: (mode: 'edit' | 'preview') => void
+  // ---- Pre-aggregated autocomplete dictionary (sprint 15 / commit 4) ---
+  // App.tsx merges enabled vocab packs + the legacy customVocab user pack
+  // into a per-IMRaD-section view here. When omitted (e.g. unit tests)
+  // we fall back to the legacy SCI_WORDS / SCI_PHRASES union.
+  mergedWords?: Record<SciSection, string[]>
+  mergedPhrases?: Record<SciSection, SciPhrase[]>
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved'
@@ -284,6 +290,8 @@ export function FocusModeEditor({
   onDeleteAnnotation,
   onExit,
   onRecordVersion,
+  mergedWords,
+  mergedPhrases,
   previewSlot,
   viewMode: viewModeProp,
   onViewModeChange,
@@ -375,8 +383,12 @@ export function FocusModeEditor({
       AutocompleteExtension.configure({
         getSection: () => sectionRef.current,
         onStateChange: setAutocompleteState,
-        words: SCI_WORDS,
-        phrases: SCI_PHRASES,
+        // App.tsx feeds the per-pack-merged dictionary; SCI_WORDS /
+        // SCI_PHRASES are the legacy fallback (union of every built-in
+        // pack including default-off ones — only used in the absence of
+        // a real merged view).
+        words: mergedWords ?? SCI_WORDS,
+        phrases: mergedPhrases ?? SCI_PHRASES,
       }),
     ],
     content: initialContent,

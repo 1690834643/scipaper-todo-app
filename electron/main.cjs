@@ -53,6 +53,18 @@ const {
   setItalicGuide,
   getZoteroConfig,
   setZoteroConfig,
+  getCustomVocab,
+  addCustomVocabWord,
+  removeCustomVocabWord,
+  addCustomVocabPhrase,
+  removeCustomVocabPhrase,
+  clearCustomVocab,
+  listVocabPacks,
+  setVocabPackEnabled,
+  importVocabPack,
+  deleteCustomVocabPack,
+  renameCustomVocabPack,
+  getCustomVocabPacks,
   getAutoApproveTools,
   setAutoApproveTools,
   addProgressEntry,
@@ -676,6 +688,24 @@ function registerIpc() {
   ipcMain.handle('italic:set', (_, { config }) => setItalicGuide(config));
   ipcMain.handle('zotero:getConfig', () => getZoteroConfig());
   ipcMain.handle('zotero:setConfig', (_, { config }) => setZoteroConfig(config));
+
+  // Custom autocomplete vocabulary — user-defined words & phrases that merge
+  // into the immersive editor's autocomplete suggestions on the `general`
+  // bucket. Also exposed via MCP write tools (toolRouter).
+  ipcMain.handle('vocab:get', () => getCustomVocab());
+  ipcMain.handle('vocab:addWord', (_, { word }) => addCustomVocabWord(word));
+  ipcMain.handle('vocab:removeWord', (_, { word }) => removeCustomVocabWord(word));
+  ipcMain.handle('vocab:addPhrase', (_, { entry }) => addCustomVocabPhrase(entry));
+  ipcMain.handle('vocab:removePhrase', (_, { trigger, text }) => removeCustomVocabPhrase(trigger, text));
+  ipcMain.handle('vocab:clear', () => clearCustomVocab());
+
+  // Vocab pack registry — list + enable/disable + import/delete/rename
+  ipcMain.handle('vocabPacks:list', () => listVocabPacks());
+  ipcMain.handle('vocabPacks:setEnabled', (_, { id, enabled }) => setVocabPackEnabled(id, enabled));
+  ipcMain.handle('vocabPacks:import', (_, { pack }) => importVocabPack(pack));
+  ipcMain.handle('vocabPacks:delete', (_, { id }) => deleteCustomVocabPack(id));
+  ipcMain.handle('vocabPacks:rename', (_, { id, name }) => renameCustomVocabPack(id, name));
+  ipcMain.handle('vocabPacks:getCustom', () => getCustomVocabPacks());
   ipcMain.handle('autoApprove:get', () => getAutoApproveTools());
   ipcMain.handle('autoApprove:set', (_, { value }) => setAutoApproveTools(value));
 

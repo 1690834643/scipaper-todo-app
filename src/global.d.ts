@@ -216,6 +216,28 @@ declare global {
       getZoteroConfig: () => Promise<ZoteroConfig>
       setZoteroConfig: (config: ZoteroConfig) => Promise<ZoteroConfig>
 
+      // Custom autocomplete vocabulary (merges into general bucket)
+      getCustomVocab: () => Promise<import('./types').CustomVocab>
+      addCustomVocabWord: (word: string) => Promise<import('./types').CustomVocab>
+      removeCustomVocabWord: (word: string) => Promise<import('./types').CustomVocab>
+      addCustomVocabPhrase: (entry: import('./types').CustomVocabPhrase) => Promise<import('./types').CustomVocab>
+      removeCustomVocabPhrase: (trigger: string, text?: string) => Promise<import('./types').CustomVocab>
+      clearCustomVocab: () => Promise<import('./types').CustomVocab>
+
+      // Vocab pack registry
+      listVocabPacks: () => Promise<import('./types').VocabPackSummary[]>
+      setVocabPackEnabled: (id: string, enabled: boolean) => Promise<import('./types').VocabPackSummary[]>
+      importVocabPack: (pack: {
+        id?: string
+        name: string
+        description?: string
+        words: Partial<Record<import('./types').SciSection, string[]>> | string[]
+        phrases?: Partial<Record<import('./types').SciSection, import('./types').SciPhrase[]>> | import('./types').SciPhrase[]
+      }) => Promise<import('./types').VocabPack>
+      deleteCustomVocabPack: (id: string) => Promise<import('./types').VocabPackSummary[]>
+      renameCustomVocabPack: (id: string, name: string) => Promise<import('./types').VocabPack>
+      getCustomVocabPacks: () => Promise<import('./types').VocabPack[]>
+
       // Auto-approve tool calls
       getAutoApproveTools: () => Promise<boolean>
       setAutoApproveTools: (value: boolean) => Promise<boolean>

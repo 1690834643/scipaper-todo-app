@@ -351,6 +351,137 @@ function normalizeZoteroConfig(obj = {}) {
   };
 }
 
+const { BUILTIN_PACK_IDS } = require('./vocabPackRegistry.cjs');
+const VOCAB_SECTIONS = ['general', 'introduction', 'methods', 'results', 'discussion'];
+
+// User-defined autocomplete vocabulary. Merged with the built-in SCI_WORDS /
+// SCI_PHRASES at frontend AutocompleteExtension config time. Stored flat;
+// every entry surfaces in the `general` bucket so it shows up regardless of
+// the active section. Entries dedupe case-insensitively against existing
+// content on add.
+function normalizeCustomVocab(obj = {}) {
+  const rawWords = Array.isArray(obj.words) ? obj.words : [];
+  const rawPhrases = Array.isArray(obj.phrases) ? obj.phrases : [];
+  const words = [];
+  const seenWords = new Set();
+  for (const w of rawWords) {
+    if (typeof w !== 'string') continue;
+    const trimmed = w.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seenWords.has(key)) continue;
+    seenWords.add(key);
+    words.push(trimmed);
+  }
+  const phrases = [];
+  const seenPhrases = new Set();
+  for (const p of rawPhrases) {
+    if (!p || typeof p !== 'object') continue;
+    const trigger = typeof p.trigger === 'string' ? p.trigger.trim() : '';
+    const text = typeof p.text === 'string' ? p.text.trim() : '';
+    if (!trigger || !text) continue;
+    const key = trigger.toLowerCase() + '|' + text.toLowerCase();
+    if (seenPhrases.has(key)) continue;
+    seenPhrases.add(key);
+    const entry = { trigger, text };
+    if (typeof p.label === 'string' && p.label.trim()) {
+      entry.label = p.label.trim();
+    }
+    phrases.push(entry);
+  }
+  return { words, phrases };
+}
+
+// User-imported vocab packs. Each pack carries its own words/phrases per
+// IMRaD section. Builtin packs live in src/data/vocab-packs/ on the
+// renderer side; here we only persist user-imported ones plus a per-id
+// enabled override for both kinds.
+function normalizeImportedVocabPack(obj = {}) {
+  const id = typeof obj.id === 'string' && obj.id.trim() ? obj.id.trim() : '';
+  const name = typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : 'Untitled pack';
+  const description = typeof obj.description === 'string' ? obj.description.trim() : '';
+  const wordsBucket = obj.words && typeof obj.words === 'object' && !Array.isArray(obj.words)
+    ? obj.words
+    : { general: Array.isArray(obj.words) ? obj.words : [] };
+  const phrasesBucket = obj.phrases && typeof obj.phrases === 'object' && !Array.isArray(obj.phrases)
+    ? obj.phrases
+    : { general: Array.isArray(obj.phrases) ? obj.phrases : [] };
+
+  const words = {};
+  const phrases = {};
+  for (const section of VOCAB_SECTIONS) {
+    const wRaw = Array.isArray(wordsBucket[section]) ? wordsBucket[section] : [];
+    const wOut = [];
+    const wSeen = new Set();
+    for (const entry of wRaw) {
+      if (typeof entry !== 'string') continue;
+      const trimmed = entry.trim();
+      if (!trimmed) continue;
+      if (trimmed.length > 60) continue;
+      const key = trimmed.toLowerCase();
+      if (wSeen.has(key)) continue;
+      wSeen.add(key);
+      wOut.push(trimmed);
+    }
+    if (wOut.length) words[section] = wOut;
+
+    const pRaw = Array.isArray(phrasesBucket[section]) ? phrasesBucket[section] : [];
+    const pOut = [];
+    const pSeen = new Set();
+    for (const entry of pRaw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const trigger = typeof entry.trigger === 'string' ? entry.trigger.trim() : '';
+      const text = typeof entry.text === 'string' ? entry.text.trim() : '';
+      if (!trigger || !text) continue;
+      if (trigger.length > 30 || text.length > 160) continue;
+      const key = trigger.toLowerCase();
+      if (pSeen.has(key)) continue;
+      pSeen.add(key);
+      const out = { trigger, text };
+      if (typeof entry.label === 'string' && entry.label.trim()) out.label = entry.label.trim();
+      pOut.push(out);
+    }
+    if (pOut.length) phrases[section] = pOut;
+  }
+
+  const generatedId = 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  const safeId = id && !BUILTIN_PACK_IDS.includes(id) ? id : generatedId;
+
+  return {
+    id: safeId,
+    name: name.length > 60 ? name.slice(0, 60) : name,
+    description: description.length > 200 ? description.slice(0, 200) : description,
+    builtin: false,
+    defaultEnabled: typeof obj.defaultEnabled === 'boolean' ? obj.defaultEnabled : true,
+    words,
+    phrases,
+  };
+}
+
+function normalizeVocabPackPrefs(obj = {}) {
+  if (!obj || typeof obj !== 'object') return {};
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof k !== 'string' || !k.trim()) continue;
+    if (typeof v !== 'boolean') continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+function normalizeCustomVocabPacks(arr = []) {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const entry of arr) {
+    const pack = normalizeImportedVocabPack(entry);
+    if (seen.has(pack.id)) continue;
+    seen.add(pack.id);
+    out.push(pack);
+  }
+  return out;
+}
+
 function normalizeFinding(finding = {}) {
   const validStatus = ['planned', 'inProgress', 'done'];
   return {
@@ -425,6 +556,9 @@ function normalizeStoredDatabase(data) {
     progressEntries: Array.isArray(data.progressEntries) ? data.progressEntries.map(normalizeProgressEntry) : [],
     dailySessions: Array.isArray(data.dailySessions) ? data.dailySessions.map(normalizeDailySession) : [],
     autoApproveTools: typeof data.autoApproveTools === 'boolean' ? data.autoApproveTools : false,
+    customVocab: normalizeCustomVocab(data.customVocab),
+    vocabPackPrefs: normalizeVocabPackPrefs(data.vocabPackPrefs),
+    customVocabPacks: normalizeCustomVocabPacks(data.customVocabPacks),
   };
 }
 
@@ -1195,6 +1329,210 @@ function setItalicGuide(config = {}) {
   db.italicGuide = normalizeItalicGuide(next);
   writeDatabase(db);
   return db.italicGuide;
+}
+
+function getCustomVocab() {
+  const db = readDatabase();
+  return db.customVocab || normalizeCustomVocab();
+}
+
+function addCustomVocabWord(word) {
+  if (typeof word !== 'string' || !word.trim()) {
+    throw new Error('addCustomVocabWord: word must be a non-empty string');
+  }
+  const trimmed = word.trim();
+  if (trimmed.length > 60) throw new Error('Word too long (>60 chars).');
+  const db = readDatabase();
+  const current = db.customVocab || normalizeCustomVocab();
+  const lc = trimmed.toLowerCase();
+  if (current.words.some((w) => w.toLowerCase() === lc)) {
+    return current; // idempotent: already there
+  }
+  const next = { ...current, words: [...current.words, trimmed] };
+  db.customVocab = normalizeCustomVocab(next);
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+function removeCustomVocabWord(word) {
+  if (typeof word !== 'string' || !word.trim()) {
+    throw new Error('removeCustomVocabWord: word must be a non-empty string');
+  }
+  const lc = word.trim().toLowerCase();
+  const db = readDatabase();
+  const current = db.customVocab || normalizeCustomVocab();
+  const next = {
+    ...current,
+    words: current.words.filter((w) => w.toLowerCase() !== lc),
+  };
+  db.customVocab = normalizeCustomVocab(next);
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+function addCustomVocabPhrase(entry = {}) {
+  const trigger = typeof entry.trigger === 'string' ? entry.trigger.trim() : '';
+  const text = typeof entry.text === 'string' ? entry.text.trim() : '';
+  const label = typeof entry.label === 'string' ? entry.label.trim() : undefined;
+  if (!trigger) throw new Error('addCustomVocabPhrase: trigger is required');
+  if (!text) throw new Error('addCustomVocabPhrase: text is required');
+  if (trigger.length > 30) throw new Error('Trigger too long (>30 chars).');
+  if (text.length > 160) throw new Error('Phrase too long (>160 chars).');
+  const db = readDatabase();
+  const current = db.customVocab || normalizeCustomVocab();
+  const key = trigger.toLowerCase() + '|' + text.toLowerCase();
+  const exists = current.phrases.some(
+    (p) => (p.trigger.toLowerCase() + '|' + p.text.toLowerCase()) === key,
+  );
+  if (exists) return current; // idempotent
+  const phrase = label ? { trigger, text, label } : { trigger, text };
+  const next = { ...current, phrases: [...current.phrases, phrase] };
+  db.customVocab = normalizeCustomVocab(next);
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+function removeCustomVocabPhrase(trigger, text) {
+  if (typeof trigger !== 'string' || !trigger.trim()) {
+    throw new Error('removeCustomVocabPhrase: trigger is required');
+  }
+  const tLc = trigger.trim().toLowerCase();
+  const xLc = typeof text === 'string' ? text.trim().toLowerCase() : null;
+  const db = readDatabase();
+  const current = db.customVocab || normalizeCustomVocab();
+  const next = {
+    ...current,
+    phrases: current.phrases.filter((p) => {
+      if (p.trigger.toLowerCase() !== tLc) return true;
+      if (xLc !== null && p.text.toLowerCase() !== xLc) return true;
+      return false;
+    }),
+  };
+  db.customVocab = normalizeCustomVocab(next);
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+function clearCustomVocab() {
+  const db = readDatabase();
+  db.customVocab = normalizeCustomVocab();
+  writeDatabase(db);
+  return db.customVocab;
+}
+
+// Vocab pack registry
+const { BUILTIN_PACK_META } = require('./vocabPackRegistry.cjs');
+
+function listVocabPacks() {
+  const db = readDatabase();
+  const prefs = db.vocabPackPrefs || {};
+  const customPacks = db.customVocabPacks || [];
+  const out = [];
+  for (const meta of BUILTIN_PACK_META) {
+    const enabled = Object.prototype.hasOwnProperty.call(prefs, meta.id) ? !!prefs[meta.id] : !!meta.defaultEnabled;
+    out.push({
+      id: meta.id,
+      name: meta.name,
+      description: meta.description,
+      builtin: true,
+      defaultEnabled: !!meta.defaultEnabled,
+      enabled,
+    });
+  }
+  for (const pack of customPacks) {
+    const enabled = Object.prototype.hasOwnProperty.call(prefs, pack.id) ? !!prefs[pack.id] : !!pack.defaultEnabled;
+    out.push({
+      id: pack.id,
+      name: pack.name,
+      description: pack.description || '',
+      builtin: false,
+      defaultEnabled: !!pack.defaultEnabled,
+      enabled,
+    });
+  }
+  return out;
+}
+
+function setVocabPackEnabled(id, enabled) {
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error('setVocabPackEnabled: id is required');
+  }
+  if (typeof enabled !== 'boolean') {
+    throw new Error('setVocabPackEnabled: enabled must be boolean');
+  }
+  const db = readDatabase();
+  const knownIds = new Set(BUILTIN_PACK_IDS);
+  for (const pack of (db.customVocabPacks || [])) knownIds.add(pack.id);
+  if (!knownIds.has(id)) {
+    throw new Error('setVocabPackEnabled: unknown pack id ' + id);
+  }
+  const next = { ...(db.vocabPackPrefs || {}), [id]: enabled };
+  db.vocabPackPrefs = normalizeVocabPackPrefs(next);
+  writeDatabase(db);
+  return listVocabPacks();
+}
+
+function importVocabPack(payload = {}) {
+  const pack = normalizeImportedVocabPack(payload);
+  const totalWords = Object.values(pack.words || {}).reduce((n, arr) => n + arr.length, 0);
+  const totalPhrases = Object.values(pack.phrases || {}).reduce((n, arr) => n + arr.length, 0);
+  if (totalWords === 0 && totalPhrases === 0) {
+    throw new Error('importVocabPack: pack contains no words or phrases');
+  }
+  const db = readDatabase();
+  const existing = (db.customVocabPacks || []).filter((p) => p.id !== pack.id);
+  existing.push(pack);
+  db.customVocabPacks = normalizeCustomVocabPacks(existing);
+  writeDatabase(db);
+  return pack;
+}
+
+function deleteCustomVocabPack(id) {
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error('deleteCustomVocabPack: id is required');
+  }
+  if (BUILTIN_PACK_IDS.includes(id)) {
+    throw new Error('Cannot delete a built-in pack');
+  }
+  const db = readDatabase();
+  const before = (db.customVocabPacks || []).length;
+  db.customVocabPacks = (db.customVocabPacks || []).filter((p) => p.id !== id);
+  if (db.customVocabPacks.length === before) {
+    throw new Error('deleteCustomVocabPack: pack not found');
+  }
+  if (db.vocabPackPrefs && Object.prototype.hasOwnProperty.call(db.vocabPackPrefs, id)) {
+    const next = { ...db.vocabPackPrefs };
+    delete next[id];
+    db.vocabPackPrefs = next;
+  }
+  writeDatabase(db);
+  return listVocabPacks();
+}
+
+function renameCustomVocabPack(id, name) {
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error('renameCustomVocabPack: id is required');
+  }
+  if (BUILTIN_PACK_IDS.includes(id)) {
+    throw new Error('Cannot rename a built-in pack');
+  }
+  if (typeof name !== 'string' || !name.trim()) {
+    throw new Error('renameCustomVocabPack: name is required');
+  }
+  const trimmed = name.trim().slice(0, 60);
+  const db = readDatabase();
+  const packs = (db.customVocabPacks || []).slice();
+  const idx = packs.findIndex((p) => p.id === id);
+  if (idx === -1) throw new Error('renameCustomVocabPack: pack not found');
+  packs[idx] = { ...packs[idx], name: trimmed };
+  db.customVocabPacks = packs;
+  writeDatabase(db);
+  return packs[idx];
+}
+
+function getCustomVocabPacks() {
+  const db = readDatabase();
+  return (db.customVocabPacks || []).slice();
 }
 
 function getZoteroConfig() {
@@ -2556,6 +2894,18 @@ module.exports = {
   setItalicGuide,
   getZoteroConfig,
   setZoteroConfig,
+  getCustomVocab,
+  addCustomVocabWord,
+  removeCustomVocabWord,
+  addCustomVocabPhrase,
+  removeCustomVocabPhrase,
+  clearCustomVocab,
+  listVocabPacks,
+  setVocabPackEnabled,
+  importVocabPack,
+  deleteCustomVocabPack,
+  renameCustomVocabPack,
+  getCustomVocabPacks,
   getWritingStats,
   addTag,
   removeTag,

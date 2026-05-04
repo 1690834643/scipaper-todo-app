@@ -379,6 +379,34 @@ export interface WritingStats {
 
 export type ThemeType = 'claude' | 'pixel' | 'fresh'
 
+export interface CustomVocabPhrase {
+  trigger: string
+  text: string
+  label?: string
+}
+
+export interface CustomVocab {
+  words: string[]
+  phrases: CustomVocabPhrase[]
+}
+
+export type { VocabPack, SciSection, SciPhrase } from './data/sci-vocab'
+
+/** Per-pack enabled override. Missing keys fall back to pack.defaultEnabled. */
+export type VocabPackPrefs = Record<string, boolean>
+
+/** Pack registry entry returned by IPC `vocabPacks:list`. Effective enabled
+ *  state is resolved on the backend by merging vocabPackPrefs over each
+ *  pack's defaultEnabled. */
+export interface VocabPackSummary {
+  id: string
+  name: string
+  description: string
+  builtin: boolean
+  defaultEnabled: boolean
+  enabled: boolean
+}
+
 export interface AppState {
   baseDirectory: string
   articles: Article[]
@@ -388,6 +416,7 @@ export interface AppState {
   theme: ThemeType
   progressEntries?: ProgressEntry[]
   dailySessions?: DailySession[]
+  customVocab?: CustomVocab
 }
 
 export interface McpInfo {

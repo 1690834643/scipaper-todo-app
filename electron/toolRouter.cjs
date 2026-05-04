@@ -186,6 +186,8 @@ const READ_DISPATCH = {
   get_italic_guide: (fn) => fn(),
   get_zotero_config: (fn) => fn(),
   get_auto_approve_tools: (fn) => fn(),
+  list_vocab: (fn) => fn(),
+  list_vocab_packs: (fn) => fn(),
 };
 
 const WRITE_DISPATCH = {
@@ -237,6 +239,19 @@ const WRITE_DISPATCH = {
   reset_scenario: (fn, args) => fn(args.id),
   set_italic_guide: (fn, args) => fn(args),
   set_zotero_config: (fn, args) => fn(args),
+  add_vocab_word: (fn, args) => fn(args.word),
+  remove_vocab_word: (fn, args) => fn(args.word),
+  add_vocab_phrase: (fn, args) => fn({ trigger: args.trigger, text: args.text, label: args.label }),
+  remove_vocab_phrase: (fn, args) => fn(args.trigger, args.text),
+  set_vocab_pack_enabled: (fn, args) => fn(args.id, args.enabled),
+  import_vocab_pack: (fn, args) => fn({
+    name: args.name,
+    description: args.description,
+    words: args.words,
+    phrases: args.phrases,
+  }),
+  delete_vocab_pack: (fn, args) => fn(args.id),
+  rename_vocab_pack: (fn, args) => fn(args.id, args.name),
   update_thesis_meta: (fn, args) => fn(args.thesisId, args.patch),
   add_thesis_section: (fn, args) => fn(args.thesisId, args.sectionType, args.title),
   unlink_article_from_thesis: (fn, args) => fn(args.thesisId, args.articleId),
@@ -451,6 +466,23 @@ function summarizeForApproval(name, args) {
     case 'unlink_article_from_thesis': return '把论文 ' + input.articleId + ' 从学位论文 ' + input.thesisId + ' 解关联';
     case 'add_pomodoro_session': return '记录番茄钟（' + (input.duration || '?') + ' 分钟）';
     case 'add_mood_entry': return '记心情：' + (input.mood || '?');
+    case 'list_vocab': return '列出用户自定义补全词';
+    case 'add_vocab_word': return '加入自定义补全词：' + (input.word || '?');
+    case 'remove_vocab_word': return '删除自定义补全词：' + (input.word || '?');
+    case 'add_vocab_phrase': return '加入自定义补全短语：' + (input.trigger || '?') + ' → ' + (input.text || '?');
+    case 'remove_vocab_phrase': return '删除自定义补全短语：' + (input.trigger || '?');
+    case 'list_vocab_packs': return '列出全部补全词库 pack';
+    case 'set_vocab_pack_enabled': return (input.enabled ? '启用' : '禁用') + ' pack：' + (input.id || '?');
+    case 'import_vocab_pack': {
+      const wc = Array.isArray(input.words)
+        ? input.words.length
+        : (input.words && typeof input.words === 'object'
+            ? Object.values(input.words).reduce((n, arr) => n + (Array.isArray(arr) ? arr.length : 0), 0)
+            : 0);
+      return '导入新词库 pack：' + (input.name || '?') + '（' + wc + ' 词）';
+    }
+    case 'delete_vocab_pack': return '删除 custom pack：' + (input.id || '?');
+    case 'rename_vocab_pack': return '重命名 pack ' + (input.id || '?') + ' → ' + (input.name || '?');
     default: return '执行工具调用：' + name;
   }
 }

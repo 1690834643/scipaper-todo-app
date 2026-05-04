@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { ArticleWizard } from './components/ArticleWizard'
 import { CitationManager } from './components/CitationManager'
 import { OutlineView } from './components/OutlineView'
@@ -18,7 +18,8 @@ import { ApprovalDialog } from './components/ApprovalDialog'
 import { SplashScreen } from './components/SplashScreen'
 import { ShareCard } from './components/ShareCard'
 import { pickJoke, pickAnalogy } from './utils/jokesAndAnalogies'
-import type { AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig } from './types'
+import type { AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig, VocabPack, VocabPackSummary, SciSection, SciPhrase } from './types'
+import { BUILTIN_PACKS, aggregatePackWords, aggregatePackPhrases } from './data/sci-vocab'
 import type { BibTeXEntry } from './utils/bibtexParser'
 import { ARTICLE_STATUS_LABEL_ZH } from './utils/articleUtils'
 import { localIsoDate } from './utils/dateUtils'
@@ -151,6 +152,17 @@ function App() {
 
   // Auto-approve all in-app AI tool calls
   const [autoApproveTools, setAutoApproveToolsState] = useState(false)
+
+  // Vocab pack registry — populated from IPC at startup. summaries carry
+  // each pack's effective enabled state (user override or pack default);
+  // customVocabPacks holds user-imported packs' full word/phrase content.
+  const [vocabPackSummaries, setVocabPackSummaries] = useState<VocabPackSummary[]>(() => {
+    return BUILTIN_PACKS.map((p) => ({
+      id: p.id, name: p.name, description: p.description,
+      builtin: true, defaultEnabled: p.defaultEnabled, enabled: p.defaultEnabled,
+    }))
+  })
+  const [customVocabPacks, setCustomVocabPacks] = useState<VocabPack[]>([])
 
   // Pending Settings module focus (e.g. AI panel jumps to "AI Provider" submodule)
   const [pendingSettingsFocus, setPendingSettingsFocus] = useState<import('./components/SettingsView').SettingsModule | null>(null)
@@ -367,6 +379,97 @@ function App() {
       })
       .catch((error) => console.error(error))
   }, [])
+
+  // Load vocab pack registry on mount. Falls back to BUILTIN_PACKS-only
+  // defaults (set in initial state) if IPC is unavailable.
+  useEffect(() => {
+    Promise.all([
+      window.scipaper.listVocabPacks(),
+      window.scipaper.getCustomVocabPacks(),
+    ])
+      .then(([summaries, custom]) => {
+        setVocabPackSummaries(summaries)
+        setCustomVocabPacks(custom)
+      })
+      .catch((error) => console.error('vocabPacks load failed:', error))
+  }, [])
+
+  // Resolve enabled packs (builtin + custom) into the per-section dictionary
+  // the autocomplete extension consumes. customVocab (legacy user-default)
+  // is appended to the `general` bucket.
+  const enabledPacks = useMemo<VocabPack[]>(() => {
+    const enabledIds = new Set(vocabPackSummaries.filter((s) => s.enabled).map((s) => s.id))
+    const builtin = BUILTIN_PACKS.filter((p) => enabledIds.has(p.id))
+    const custom = customVocabPacks.filter((p) => enabledIds.has(p.id))
+    return [...builtin, ...custom]
+  }, [vocabPackSummaries, customVocabPacks])
+
+  const mergedVocabWords = useMemo<Record<SciSection, string[]>>(() => {
+    const out = aggregatePackWords(enabledPacks)
+    const extra = state?.customVocab?.words ?? []
+    if (extra.length === 0) return out
+    const seen = new Set(out.general.map((w) => w.toLowerCase()))
+    const general = out.general.slice()
+    for (const w of extra) {
+      const key = w.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      general.push(w)
+    }
+    return { ...out, general }
+  }, [enabledPacks, state?.customVocab])
+
+  const mergedVocabPhrases = useMemo<Record<SciSection, SciPhrase[]>>(() => {
+    const out = aggregatePackPhrases(enabledPacks)
+    const extra = state?.customVocab?.phrases ?? []
+    if (extra.length === 0) return out
+    const seen = new Set(out.general.map((p) => p.trigger.toLowerCase()))
+    const general = out.general.slice()
+    for (const p of extra) {
+      const key = p.trigger.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      general.push(p)
+    }
+    return { ...out, general }
+  }, [enabledPacks, state?.customVocab])
+
+  async function handleToggleVocabPack(id: string, enabled: boolean) {
+    try {
+      const updated = await window.scipaper.setVocabPackEnabled(id, enabled)
+      setVocabPackSummaries(updated)
+    } catch (error) {
+      console.error('setVocabPackEnabled failed:', error)
+    }
+  }
+
+  async function handleImportVocabPack(payload: {
+    name: string
+    description?: string
+    words: string[] | Partial<Record<SciSection, string[]>>
+  }): Promise<VocabPack> {
+    const newPack = await window.scipaper.importVocabPack(payload)
+    const [summaries, custom] = await Promise.all([
+      window.scipaper.listVocabPacks(),
+      window.scipaper.getCustomVocabPacks(),
+    ])
+    setVocabPackSummaries(summaries)
+    setCustomVocabPacks(custom)
+    return newPack
+  }
+
+  async function handleDeleteVocabPack(id: string) {
+    const updated = await window.scipaper.deleteCustomVocabPack(id)
+    setVocabPackSummaries(updated)
+    const custom = await window.scipaper.getCustomVocabPacks()
+    setCustomVocabPacks(custom)
+  }
+
+  async function handleRenameVocabPack(id: string, name: string) {
+    await window.scipaper.renameCustomVocabPack(id, name)
+    const custom = await window.scipaper.getCustomVocabPacks()
+    setCustomVocabPacks(custom)
+  }
 
   // Subscribe to LLM stream events
   useEffect(() => {
@@ -1165,6 +1268,12 @@ function App() {
                 const saved = await window.scipaper.setAutoApproveTools(value)
                 setAutoApproveToolsState(Boolean(saved))
               }}
+              vocabPackSummaries={vocabPackSummaries}
+              customVocabPacks={customVocabPacks}
+              onToggleVocabPack={handleToggleVocabPack}
+              onImportVocabPack={handleImportVocabPack}
+              onDeleteVocabPack={handleDeleteVocabPack}
+              onRenameVocabPack={handleRenameVocabPack}
               initialFocus={pendingSettingsFocus}
               onFocusConsumed={() => setPendingSettingsFocus(null)}
             />
@@ -1381,6 +1490,8 @@ function App() {
                       }}
                       viewMode={focusViewMode}
                       onViewModeChange={setFocusViewMode}
+                      mergedWords={mergedVocabWords}
+                      mergedPhrases={mergedVocabPhrases}
                       previewSlot={
                         <SectionEditor
                           article={selectedArticle}

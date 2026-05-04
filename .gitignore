@@ -33,9 +33,9 @@ release
 *.sw?
 
 # Internal planning / handover / working-memory docs — never publish.
-# These accumulate during multi-session sprints and historically have leaked
-# in via rsync to the public repo (see GitHub commits c1a7750 / e55f951 /
-# 7b581eb where handover/, .codex, HANDOVER-* were retroactively deleted).
+# Mirrors the scipaper-todo-app cleanup so the rsync release path naturally
+# drops these. Anyone pushing to the public repo: do NOT remove these
+# entries without checking with the user first.
 HANDOFF.md
 HANDOVER-*.md
 plan.md

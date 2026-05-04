@@ -72,6 +72,12 @@ if (target === 'exe') {
     'set_italic_guide',
     'get_zotero_config',
     'add_thesis_section',
+    // Vocab pack registry (commit 3 of sprint 15)
+    'list_vocab_packs',
+    'set_vocab_pack_enabled',
+    'import_vocab_pack',
+    'delete_vocab_pack',
+    'rename_vocab_pack',
   ];
   const missing = expected.filter((n) => !names.includes(n));
   console.log('expected-set missing: ' + (missing.length ? missing.join(', ') : 'NONE'));
@@ -83,6 +89,7 @@ if (target === 'exe') {
     ['list_articles', {}],
     ['list_scenarios', {}],
     ['get_writing_stats', {}],
+    ['list_vocab_packs', {}],
   ];
 
   const results = [];

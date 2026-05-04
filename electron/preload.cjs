@@ -119,6 +119,22 @@ contextBridge.exposeInMainWorld('scipaper', {
   getZoteroConfig: () => ipcRenderer.invoke('zotero:getConfig'),
   setZoteroConfig: (config) => ipcRenderer.invoke('zotero:setConfig', { config }),
 
+  // Custom autocomplete vocabulary
+  getCustomVocab: () => ipcRenderer.invoke('vocab:get'),
+  addCustomVocabWord: (word) => ipcRenderer.invoke('vocab:addWord', { word }),
+  removeCustomVocabWord: (word) => ipcRenderer.invoke('vocab:removeWord', { word }),
+  addCustomVocabPhrase: (entry) => ipcRenderer.invoke('vocab:addPhrase', { entry }),
+  removeCustomVocabPhrase: (trigger, text) => ipcRenderer.invoke('vocab:removePhrase', { trigger, text }),
+  clearCustomVocab: () => ipcRenderer.invoke('vocab:clear'),
+
+  // Vocab pack registry
+  listVocabPacks: () => ipcRenderer.invoke('vocabPacks:list'),
+  setVocabPackEnabled: (id, enabled) => ipcRenderer.invoke('vocabPacks:setEnabled', { id, enabled }),
+  importVocabPack: (pack) => ipcRenderer.invoke('vocabPacks:import', { pack }),
+  deleteCustomVocabPack: (id) => ipcRenderer.invoke('vocabPacks:delete', { id }),
+  renameCustomVocabPack: (id, name) => ipcRenderer.invoke('vocabPacks:rename', { id, name }),
+  getCustomVocabPacks: () => ipcRenderer.invoke('vocabPacks:getCustom'),
+
   // Progress entries / Findings / Daily session
   addProgressEntry: (payload) => ipcRenderer.invoke('progress:add', { payload }),
   updateProgressEntry: (entryId, patch) => ipcRenderer.invoke('progress:update', { entryId, patch }),

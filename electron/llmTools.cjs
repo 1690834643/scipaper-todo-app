@@ -1397,6 +1397,163 @@ const TOOLS = [
     storageCall: 'setZoteroConfig',
   },
   {
+    name: 'list_vocab',
+    description: '列出用户自定义的补全词与短语。沉浸写作时这些会与内置 sci-vocab 合并到 general 桶里随时可见。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'getCustomVocab',
+  },
+  {
+    name: 'add_vocab_word',
+    description: '把一个新词加入用户自定义补全库。重复（大小写不敏感）会被忽略。建议是 single token 或 hyphen 复合（≤30 字符），如 spermatheca / cis-regulatory / Cscaspase-3。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        word: { type: 'string', description: '要加入的词。' },
+      },
+      required: ['word'],
+      additionalProperties: false,
+    },
+    storageCall: 'addCustomVocabWord',
+  },
+  {
+    name: 'remove_vocab_word',
+    description: '从用户自定义补全库删除一个词（大小写不敏感）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        word: { type: 'string' },
+      },
+      required: ['word'],
+      additionalProperties: false,
+    },
+    storageCall: 'removeCustomVocabWord',
+  },
+  {
+    name: 'add_vocab_phrase',
+    description: '把一个短语加入用户自定义补全库。trigger 是用户键入≥2 字符的前缀，text 是被插入的完整短语。例：trigger="weshow", text="we show that"。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        trigger: { type: 'string', description: '触发前缀，≥2 字符。' },
+        text: { type: 'string', description: '完整插入文本。' },
+        label: { type: 'string', description: '弹窗里显示的简短标签（可选）。' },
+      },
+      required: ['trigger', 'text'],
+      additionalProperties: false,
+    },
+    storageCall: 'addCustomVocabPhrase',
+  },
+  {
+    name: 'remove_vocab_phrase',
+    description: '从用户自定义补全库删除短语。仅给 trigger 会删该 trigger 下所有短语；给 trigger+text 精确删一条。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        trigger: { type: 'string' },
+        text: { type: 'string' },
+      },
+      required: ['trigger'],
+      additionalProperties: false,
+    },
+    storageCall: 'removeCustomVocabPhrase',
+  },
+  {
+    name: 'list_vocab_packs',
+    description: '列出全部补全词库 pack（内置 + 用户导入），含每个 pack 的 id / 名称 / 描述 / 是否内置 / 默认开关 / 用户当前的启用状态。',
+    isWrite: false,
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    storageCall: 'listVocabPacks',
+  },
+  {
+    name: 'set_vocab_pack_enabled',
+    description: '启用或禁用某个补全 pack（内置 / 用户导入皆可）。仅影响沉浸写作时的补全候选；不删除该 pack 内容。返回更新后的 pack 列表。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'pack id，参考 list_vocab_packs。' },
+        enabled: { type: 'boolean' },
+      },
+      required: ['id', 'enabled'],
+      additionalProperties: false,
+    },
+    storageCall: 'setVocabPackEnabled',
+  },
+  {
+    name: 'import_vocab_pack',
+    description: '从用户给的 words / phrases 创建一个新的 custom pack。words 可以是字符串数组（默认归到 general 段），也可以是按 IMRaD 段（general/introduction/methods/results/discussion）分桶的对象。导入后默认启用，立即生效。返回新 pack。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '展示名（≤60 字）。' },
+        description: { type: 'string', description: '可选的简短描述。' },
+        words: {
+          description: '字符串数组（直接合到 general 段），或 {general?, introduction?, methods?, results?, discussion?} 形式。',
+          oneOf: [
+            { type: 'array', items: { type: 'string' } },
+            { type: 'object', additionalProperties: { type: 'array', items: { type: 'string' } } },
+          ],
+        },
+        phrases: {
+          description: '可选。短语数组（合到 general 段）或按 IMRaD 段分桶。每条 {trigger, text, label?}。',
+          oneOf: [
+            {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  trigger: { type: 'string' },
+                  text: { type: 'string' },
+                  label: { type: 'string' },
+                },
+                required: ['trigger', 'text'],
+              },
+            },
+            { type: 'object' },
+          ],
+        },
+      },
+      required: ['name', 'words'],
+      additionalProperties: false,
+    },
+    storageCall: 'importVocabPack',
+  },
+  {
+    name: 'delete_vocab_pack',
+    description: '删除一个用户导入的 custom pack（内置 pack 不可删）。删除后该 pack 的启用偏好也一并清除。返回更新后的 pack 列表。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    storageCall: 'deleteCustomVocabPack',
+  },
+  {
+    name: 'rename_vocab_pack',
+    description: '重命名用户导入的 custom pack（内置不可改）。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+      },
+      required: ['id', 'name'],
+      additionalProperties: false,
+    },
+    storageCall: 'renameCustomVocabPack',
+  },
+  {
     name: 'update_thesis_meta',
     description: '更新学位论文元信息（title / status / 等）。',
     isWrite: true,

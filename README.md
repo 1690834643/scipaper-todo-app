@@ -61,7 +61,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 | 特色 | 说明 |
 |---|---|
-| 🧠 **MCP 双向协议** | 内置 stdio MCP server 暴露 27 个工具（22 本地 + 5 Zotero），任何兼容 MCP 的 AI 客户端都能查/写你的论文 |
+| 🧠 **MCP 双向协议** | 内置 stdio MCP server 暴露 78 个工具（73 本地 + 5 Zotero），任何兼容 MCP 的 AI 客户端都能查/写你的论文，包括按学科启停补全词库与导入自定义词库 |
 | 📚 **IMRaD 一等公民** | 创建论文先回答 4 个研究问题（科学问题 / 现象 / 假设 / 方案），自动生成七章节骨架；ContentBlock 支持文本 / 图片 / 文件链接，每次修改自动版本快照 |
 | 🤖 **内置 AI 助手 + 8 场景** | 右侧 Cmd+K Drawer，预置 Abstract / Introduction / Methods / Results / Discussion / Conclusion / Reply Reviewer / Distill 八个场景 prompt，可自定义；支持 OpenAI 与 Anthropic 双协议、思考模式（reasoning_content）流式渲染、工具调用 + 二次确认 |
 | 📝 **docx 三模板 + 拉丁斜体规范** | Times New Roman 通用学术 / 宋体 1.5 行距中文学位 / Arial 紧凑 Nature 风格三套模板；勾选"套斜体规范"即可让 LLM 在导出前按学术英语惯例自动给学名 / 拉丁短语 / 统计变量打斜体 |
@@ -70,6 +70,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🎨 **多主题 + 海报分享** | claude / pixel / fresh 三主题 token 化切换；1080×1440 写作打卡海报（含 Latin 引文、印章、波浪线、渐变进度条） |
 | 💾 **本地数据安全** | JSON 数据库 + 原子写入（.tmp + rename）+ 5 分钟周期 .bak 备份 + safeStorage 加密的 API Key |
 | 🔥 **写作激励** | streak 连续打卡 / 番茄钟会话计数 / 打字字数 / 心情记录 / 每日字数目标 |
+| 🅰️ **补全词库分领域可选**（1.0.35） | 11 个内置 pack：核心学术 / 通用分子生物 / IMRaD 四段为默认开；生信工具 / 统计方法 / 鳞翅目昆虫 / 性别决定 / 表观与 RNA 默认关。Settings 里勾选启停，或上传 .txt（一行一词）/ .json 创建自己的 pack；MCP 端 `list_vocab_packs` / `set_vocab_pack_enabled` / `import_vocab_pack` 程序化操作。默认装包不再弹出 doublesex / DSX 这类高度专业的词，泛用性优先 |
 
 ### 安装与使用
 
@@ -83,7 +84,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 4. 进 **Settings → Zotero 接入**（可选）启用 Zotero 集成
 5. 进 **Settings → MCP 协议** 复制配置粘到 Cursor / Claude Code 即可在外部 AI 里读写论文
    - ⚠️ **Windows MCP 配置请用 Setup 版的 .exe**。Portable 版每次启动都会解压到 `%LOCALAPPDATA%\Temp\<随机 hash>\` 一个临时目录，关闭后通常被回收；MCP 配置写的临时路径下次启动就失效。要么用 NSIS Setup（路径固定），要么把 Portable .exe 自己拷到 `C:\Tools\SciPaperTodo\` 这种固定文件夹，MCP 配置指向那个稳定路径。
-   - 🐧 **WSL / Linux 用户用 Node 直接跑 MCP**：源码里有一个 `electron/mcp-cli.cjs` 是不带 Electron 壳的 stdio MCP 入口，启动 230 ms，66 个工具全部可用。把客户端 (Claude Code in WSL / Cursor in WSL) 的 MCP 配置改成：
+   - 🐧 **WSL / Linux 用户用 Node 直接跑 MCP**：源码里有一个 `electron/mcp-cli.cjs` 是不带 Electron 壳的 stdio MCP 入口，启动 230 ms，78 个工具全部可用。把客户端 (Claude Code in WSL / Cursor in WSL) 的 MCP 配置改成：
      ```json
      {
        "mcpServers": {
@@ -101,10 +102,10 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 - **桌面壳**：Electron 37（Chromium 130+，原生 Canvas 2D L2 / safeStorage / contextBridge 全用上）
 - **渲染层**：React 19 + TypeScript 6 + Vite 8（121 modules，gzipped JS 267 KB）
-- **写作引擎**：TipTap (ProseMirror) + 自动补全（科研词库 ~1100 词跨 6 学科）+ 行内批注 mark
+- **写作引擎**：TipTap (ProseMirror) + 自动补全（11 个可启停 pack，默认开 6 个 ≈ 1400 词；启用全部 ≈ 2100 词）+ 行内批注 mark
 - **存储**：本地 JSON 数据库 + safeStorage 加密 API Key
 - **AI 协议**：OpenAI-compat 与 Anthropic 双协议流式，支持 thinking mode 的 `reasoning_content` 重放
-- **MCP**：基于 `@modelcontextprotocol/sdk` 的 stdio server（27 读 / 41 写工具，写工具需环境变量开启）
+- **MCP**：基于 `@modelcontextprotocol/sdk` 的 stdio server（78 工具：32 读 / 46 写，写工具需环境变量开启）
 - **导出**：`docx` v9 纯 JS 包；LaTeX 工程（.tex + references.bib）；HTML / JSON / 分享包
 - **打包**：electron-builder 出 NSIS + Portable + macOS arm64/x64 共 6 产物，CI 矩阵 ~2.5 分钟
 
@@ -154,7 +155,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 | Feature | What it does |
 |---|---|
-| 🧠 **Bidirectional MCP** | Built-in stdio MCP server exposes 27 tools (22 local + 5 Zotero). Any MCP-compatible AI client can query and write to your manuscripts |
+| 🧠 **Bidirectional MCP** | Built-in stdio MCP server exposes 78 tools (73 local + 5 Zotero). Any MCP-compatible AI client can query and write to your manuscripts, including toggling per-discipline autocomplete packs and importing custom vocabulary |
 | 📚 **IMRaD as a first-class citizen** | Creating a paper starts with 4 research questions (problem / phenomenon / hypothesis / approach) that auto-generate the 7-section skeleton. Content blocks support text / image / file link, with automatic version snapshots on every edit |
 | 🤖 **Built-in AI drawer + 8 scenarios** | Right-side Cmd+K drawer with preset prompts for Abstract / Introduction / Methods / Results / Discussion / Conclusion / Reply Reviewer / Distill, all customisable. OpenAI and Anthropic protocols, streaming `reasoning_content` for thinking-mode models, tool-calling with confirm-before-write |
 | 📝 **3 docx templates + Latin italic guide** | Times New Roman academic / SimSun 1.5-spacing thesis / Arial Nature-style. Tick "apply italic guide" and the exporter calls the LLM to mark italics on species names, Latin phrases, and statistical variables before writing the docx |
@@ -163,6 +164,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🎨 **Themes + share posters** | Three token-based themes (claude / pixel / fresh). Generates 1080×1440 daily-writing posters with Latin epigraph, seal, waveform, gradient progress |
 | 💾 **Safe local storage** | JSON database with atomic writes (.tmp + rename), rolling 5-minute .bak snapshot, API keys encrypted via safeStorage |
 | 🔥 **Writing motivation** | Streak counter, pomodoro session log, daily word target, mood log, typing-burst stats |
+| 🅰️ **Pluggable vocabulary packs** (1.0.35) | 11 built-in packs. Default-on: core-academic, molecular-biology, four IMRaD section packs. Default-off: bioinformatics-tools, statistics-methods, lepidoptera-insect, sex-determination, epigenetics-rna. Toggle in Settings, or upload .txt (one word per line) / .json to create your own pack. The MCP surface mirrors this with `list_vocab_packs` / `set_vocab_pack_enabled` / `import_vocab_pack`. Out of the box, highly specialised terms (doublesex, DMRT, m6A …) no longer surface — opt in per discipline |
 
 ### Install
 
@@ -176,7 +178,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 4. **Settings → Zotero** (optional): enable Zotero integration
 5. **Settings → MCP**: copy the config block into Cursor / Claude Code to give external AIs access
    - ⚠️ **On Windows, use the Setup .exe for MCP integration, not Portable.** Portable launches by self-extracting to `%LOCALAPPDATA%\Temp\<random-hash>\` and the hash changes between runs; an MCP config pinned to that temp path breaks the next time you reopen the app. Either install via NSIS Setup (stable install path), or copy the Portable .exe into a fixed folder such as `C:\Tools\SciPaperTodo\` and point your MCP config there.
-   - 🐧 **WSL / Linux: skip the .exe bridge and run the MCP server natively via Node.** The repo ships `electron/mcp-cli.cjs`, an Electron-free stdio MCP entry. ~230 ms cold start, all 66 tools live. Point your WSL-side client at:
+   - 🐧 **WSL / Linux: skip the .exe bridge and run the MCP server natively via Node.** The repo ships `electron/mcp-cli.cjs`, an Electron-free stdio MCP entry. ~230 ms cold start, all 78 tools live. Point your WSL-side client at:
      ```json
      {
        "mcpServers": {
@@ -194,10 +196,10 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 - **Shell**: Electron 37 (Chromium 130+, uses Canvas 2D Level 2, safeStorage, contextBridge)
 - **Renderer**: React 19 + TypeScript 6 + Vite 8 (121 modules, ~267 KB gzipped JS)
-- **Editor**: TipTap (ProseMirror) with autocomplete (~1100 sci-vocab words across 6 disciplines) and inline annotation marks
+- **Editor**: TipTap (ProseMirror) with pluggable autocomplete (11 toggleable packs; ~1400 words active by default, ~2100 words across the full registry) and inline annotation marks
 - **Storage**: local JSON database + encrypted API key store
 - **AI**: dual-protocol streaming (OpenAI-compat + Anthropic), with `reasoning_content` replay for thinking-mode models
-- **MCP**: stdio server on `@modelcontextprotocol/sdk` (27 read tools / 41 write tools, writes gated by env flag)
+- **MCP**: stdio server on `@modelcontextprotocol/sdk` (78 tools: 32 read / 46 write, writes gated by env flag)
 - **Export**: `docx` v9 (pure JS); LaTeX project (.tex + references.bib); HTML / JSON / share bundle
 - **Packaging**: electron-builder ships NSIS + Portable + macOS arm64 / x64 — 6 artifacts, CI matrix ~2.5 minutes
 

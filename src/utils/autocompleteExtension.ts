@@ -174,7 +174,14 @@ export const AutocompleteExtension = Extension.create<AutocompleteOptions>({
               return true
             }
             if (event.key === 'Escape') {
+              // stopPropagation is critical: PM's `return true` stops the PM
+              // handler chain but the native KeyboardEvent still bubbles to
+              // the window-level FocusModeEditor Esc listener, which would
+              // exit immersive mode. We want Esc to *only* close the popup
+              // when one is open; user has to press Esc again (popup gone)
+              // to actually exit. stopPropagation breaks the bubble.
               event.preventDefault()
+              event.stopPropagation()
               view.dispatch(view.state.tr.setMeta(PLUGIN_KEY, { dismissed: true }))
               return true
             }

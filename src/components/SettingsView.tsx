@@ -9,6 +9,9 @@ import type {
   ItalicGuide,
   ZoteroConfig,
   WritingStats as WritingStatsType,
+  VocabPack,
+  VocabPackSummary,
+  SciSection,
 } from '../types'
 import { WritingStats } from './WritingStats'
 import { ThemeSwitcher } from './ThemeSwitcher'
@@ -17,6 +20,7 @@ import { ProviderManager } from './ProviderManager'
 import { ScenarioLibrary } from './ScenarioLibrary'
 import { ItalicGuidePanel } from './ItalicGuidePanel'
 import { ZoteroConfigPanel } from './ZoteroConfigPanel'
+import { VocabPackSettings } from './VocabPackSettings'
 
 type FontScale = 'sm' | 'md' | 'lg' | 'xl'
 
@@ -50,11 +54,21 @@ interface SettingsViewProps {
   writingStats: WritingStatsType | null
   autoApproveTools: boolean
   onSetAutoApproveTools: (value: boolean) => Promise<void>
+  vocabPackSummaries: VocabPackSummary[]
+  customVocabPacks: VocabPack[]
+  onToggleVocabPack: (id: string, enabled: boolean) => Promise<void>
+  onImportVocabPack: (payload: {
+    name: string
+    description?: string
+    words: string[] | Partial<Record<SciSection, string[]>>
+  }) => Promise<VocabPack>
+  onDeleteVocabPack: (id: string) => Promise<void>
+  onRenameVocabPack: (id: string, name: string) => Promise<void>
   initialFocus?: SettingsModule | null
   onFocusConsumed?: () => void
 }
 
-export type SettingsModule = 'theme' | 'fontScale' | 'storage' | 'ai' | 'scenarios' | 'italic' | 'zotero' | 'mcp' | 'stats' | 'autoApprove'
+export type SettingsModule = 'theme' | 'fontScale' | 'storage' | 'ai' | 'scenarios' | 'italic' | 'zotero' | 'mcp' | 'stats' | 'autoApprove' | 'vocabPacks'
 
 const MODULE_LABEL: Record<SettingsModule, string> = {
   theme: '主题',
@@ -67,6 +81,7 @@ const MODULE_LABEL: Record<SettingsModule, string> = {
   mcp: 'MCP 接入',
   stats: '写作统计',
   autoApprove: 'AI 自动批准',
+  vocabPacks: '补全词库',
 }
 
 const FONT_SCALE_OPTIONS: { id: FontScale; label: string; px: number; sample: string }[] = [
@@ -212,6 +227,17 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
 
           {active === 'stats' && props.writingStats && <WritingStats stats={props.writingStats} />}
 
+          {active === 'vocabPacks' && (
+            <VocabPackSettings
+              summaries={props.vocabPackSummaries}
+              customPacks={props.customVocabPacks}
+              onToggle={props.onToggleVocabPack}
+              onImport={props.onImportVocabPack}
+              onDelete={props.onDeleteVocabPack}
+              onRename={props.onRenameVocabPack}
+            />
+          )}
+
           {active === 'autoApprove' && (
             <section className="panel-card">
               <div className="section-heading">
@@ -334,6 +360,15 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
           <h3 className="module-card-title">AI 自动批准</h3>
           <p className="module-card-desc">内置 AI 写入工具的批准开关</p>
           <p className="module-card-status">{props.autoApproveTools ? '自动批准（开）' : '每次确认（默认）'}</p>
+        </button>
+
+        <button className="module-card" onClick={() => setActive('vocabPacks')} type="button">
+          <span className="module-card-icon">𝑨</span>
+          <h3 className="module-card-title">补全词库</h3>
+          <p className="module-card-desc">11 个分领域内置 + 自定义导入，按需开关</p>
+          <p className="module-card-status">
+            {props.vocabPackSummaries.filter((s) => s.enabled).length} 启用 / {props.vocabPackSummaries.length} 总数
+          </p>
         </button>
       </div>
     </div>
