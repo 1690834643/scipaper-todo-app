@@ -1,10 +1,11 @@
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { ArticleWizard } from './components/ArticleWizard'
 import { CitationManager } from './components/CitationManager'
 import { OutlineView } from './components/OutlineView'
 import { ResearchContextPanel } from './components/ResearchContextPanel'
 import { ReviewPanel } from './components/ReviewPanel'
 import { SectionEditor } from './components/SectionEditor'
+import { FocusModeEditor } from './components/FocusModeEditor'
 import { ThesisWizard } from './components/ThesisWizard'
 import { TagManager } from './components/TagManager'
 import { HomeView } from './components/HomeView'
@@ -14,11 +15,14 @@ import { SettingsView } from './components/SettingsView'
 import { AppSidebar, type AppRoute } from './components/AppSidebar'
 import { AIAssistantPanel, type AssistantMessage } from './components/AIAssistantPanel'
 import { ApprovalDialog } from './components/ApprovalDialog'
+import { SplashScreen } from './components/SplashScreen'
 import { ShareCard } from './components/ShareCard'
 import { pickJoke, pickAnalogy } from './utils/jokesAndAnalogies'
-import type { AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig } from './types'
+import type { AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig, VocabPack, VocabPackSummary, SciSection, SciPhrase } from './types'
+import { BUILTIN_PACKS, aggregatePackWords, aggregatePackPhrases } from './data/sci-vocab'
 import type { BibTeXEntry } from './utils/bibtexParser'
 import { ARTICLE_STATUS_LABEL_ZH } from './utils/articleUtils'
+import { localIsoDate } from './utils/dateUtils'
 
 const SECTION_LABELS: Record<SectionType, string> = {
   Title: '题目',
@@ -59,19 +63,11 @@ function getGreeting() {
 }
 
 
-const VALID_ROUTES: AppRoute[] = ['home', 'library', 'article', 'settings', 'daily']
-const ROUTE_STORAGE_KEY = 'scipaper.route'
 const ARTICLE_STORAGE_KEY = 'scipaper.selectedArticleId'
-
-function readSavedRoute(): AppRoute {
-  if (typeof window === 'undefined') return 'home'
-  const saved = window.localStorage.getItem(ROUTE_STORAGE_KEY)
-  return VALID_ROUTES.includes(saved as AppRoute) ? (saved as AppRoute) : 'home'
-}
 
 function readSavedArticleId(): string | null {
   if (typeof window === 'undefined') return null
-  return window.localStorage.getItem(ARTICLE_STORAGE_KEY)
+  try { return window.localStorage.getItem(ARTICLE_STORAGE_KEY) } catch { return null }
 }
 
 function App() {
@@ -85,7 +81,45 @@ function App() {
   const [wizardOpen, setWizardOpen] = useState(false)
   const [thesisWizardOpen, setThesisWizardOpen] = useState(false)
   const [theme, setTheme] = useState<ThemeType>('claude')
-  const [route, setRoute] = useState<AppRoute>(() => readSavedRoute())
+  const [splashVisible, setSplashVisible] = useState(true)
+  // While the splash is on screen, hide the rest of the app via a body class.
+  // Without this, React mounts the home view first and the user sees a flash
+  // of the "晚上好" greeting before the splash paints over it.
+  useEffect(() => {
+    if (splashVisible) document.body.classList.add('splash-active')
+    else document.body.classList.remove('splash-active')
+    return () => document.body.classList.remove('splash-active')
+  }, [splashVisible])
+  const [fontScale, setFontScale] = useState<'sm' | 'md' | 'lg' | 'xl'>(() => {
+    if (typeof window === 'undefined') return 'md'
+    try {
+      const saved = window.localStorage.getItem('scipaper.fontScale')
+      if (saved === 'sm' || saved === 'md' || saved === 'lg' || saved === 'xl') return saved
+    } catch {}
+    return 'md'
+  })
+  useEffect(() => {
+    document.documentElement.dataset.fontScale = fontScale
+    try { window.localStorage.setItem('scipaper.fontScale', fontScale) } catch {}
+  }, [fontScale])
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try { return window.localStorage.getItem('scipaper.sidebarCollapsed') === '1' } catch { return false }
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem('scipaper.sidebarCollapsed', sidebarCollapsed ? '1' : '0') } catch {}
+  }, [sidebarCollapsed])
+
+  const [sectionNavCollapsed, setSectionNavCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try { return window.localStorage.getItem('scipaper.sectionNavCollapsed') === '1' } catch { return false }
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem('scipaper.sectionNavCollapsed', sectionNavCollapsed ? '1' : '0') } catch {}
+  }, [sectionNavCollapsed])
+
+  const [route, setRoute] = useState<AppRoute>('home')
   const [writingStats, setWritingStats] = useState<WritingStatsType | null>(null)
   const [metaDraft, setMetaDraft] = useState({
     title: '',
@@ -116,6 +150,57 @@ function App() {
     enabled: false,
   })
 
+  // Auto-approve all in-app AI tool calls
+  const [autoApproveTools, setAutoApproveToolsState] = useState(false)
+
+  // Vocab pack registry — populated from IPC at startup. summaries carry
+  // each pack's effective enabled state (user override or pack default);
+  // customVocabPacks holds user-imported packs' full word/phrase content.
+  const [vocabPackSummaries, setVocabPackSummaries] = useState<VocabPackSummary[]>(() => {
+    return BUILTIN_PACKS.map((p) => ({
+      id: p.id, name: p.name, description: p.description,
+      builtin: true, defaultEnabled: p.defaultEnabled, enabled: p.defaultEnabled,
+    }))
+  })
+  const [customVocabPacks, setCustomVocabPacks] = useState<VocabPack[]>([])
+
+  // Pending Settings module focus (e.g. AI panel jumps to "AI Provider" submodule)
+  const [pendingSettingsFocus, setPendingSettingsFocus] = useState<import('./components/SettingsView').SettingsModule | null>(null)
+
+  // Section tab view mode: 'preview' (default — see images / manuscript /
+  // findings) or 'edit' (immersive writing). User explicitly enters edit by
+  // clicking the manuscript card in the preview. Resets to 'preview' on
+  // every section-tab switch.
+  const [focusViewMode, setFocusViewMode] = useState<'edit' | 'preview'>('preview')
+  useEffect(() => {
+    setFocusViewMode('preview')
+  }, [articleTab])
+
+  // Entering edit mode (writing) → reclaim screen for the canvas: collapse
+  // both left columns and pop the AI drawer. User can still manually expand
+  // them back during the session if they want to see the nav.
+  useEffect(() => {
+    if (focusViewMode === 'edit') {
+      setSidebarCollapsed(true)
+      setSectionNavCollapsed(true)
+      setAiOpen(true)
+    }
+  }, [focusViewMode])
+
+  // Leaving the article route while focusViewMode is still 'edit' would carry
+  // immersive collapse semantics into Home/Daily/Settings unexpectedly. Reset
+  // when navigating away.
+  useEffect(() => {
+    if (route !== 'article') setFocusViewMode('preview')
+  }, [route])
+
+  // Single-block-per-section policy: focusBlock is derived directly from the
+  // active section's first text block (created lazily on first save). No
+  // focusBlockId / focusNewSection state needed any more.
+  // Article header meta (title/journal/status/导出) defaults to collapsed so
+  // the Section tab gets maximum vertical space for writing.
+  const [metaExpanded, setMetaExpanded] = useState(false)
+
   // docx export template
   const [docxTemplate, setDocxTemplate] = useState<string>('academic-en')
   const [docxApplyItalic, setDocxApplyItalic] = useState(false)
@@ -133,13 +218,18 @@ function App() {
     setState(nextState)
     setWritingStats(await window.scipaper.getWritingStats())
 
+    let articleVanished = false
     setSelectedArticleId((currentId) => {
       if (currentId && nextState.articles.some((article) => article.id === currentId)) {
         return currentId
       }
-
+      articleVanished = true
       return nextState.articles[0]?.id ?? null
     })
+    // Article was deleted externally — pivot to fallback or null. Don't drop
+    // the user into immersive edit on a brand-new article they didn't open.
+    // (setFocusViewMode lives outside the updater to keep the setter pure.)
+    if (articleVanished) setFocusViewMode('preview')
   }
 
   useEffect(() => {
@@ -160,15 +250,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(ROUTE_STORAGE_KEY, route)
-  }, [route])
-
-  useEffect(() => {
-    if (selectedArticleId) {
-      window.localStorage.setItem(ARTICLE_STORAGE_KEY, selectedArticleId)
-    } else {
-      window.localStorage.removeItem(ARTICLE_STORAGE_KEY)
-    }
+    try {
+      if (selectedArticleId) {
+        window.localStorage.setItem(ARTICLE_STORAGE_KEY, selectedArticleId)
+      } else {
+        window.localStorage.removeItem(ARTICLE_STORAGE_KEY)
+      }
+    } catch {}
   }, [selectedArticleId])
 
   useEffect(() => {
@@ -257,6 +345,7 @@ function App() {
       }
 
       if (mod && (event.key === 'k' || event.key === 'K')) {
+        if (isInputFocused()) return
         event.preventDefault()
         setAiOpen(true)
       }
@@ -276,18 +365,111 @@ function App() {
     refreshScenarios().catch((error) => console.error(error))
   }, [])
 
-  // Load italic guide & zotero config on mount
+  // Load italic guide, zotero config, auto-approve flag on mount
   useEffect(() => {
     Promise.all([
       window.scipaper.getItalicGuide(),
       window.scipaper.getZoteroConfig(),
+      window.scipaper.getAutoApproveTools(),
     ])
-      .then(([italic, zotero]) => {
+      .then(([italic, zotero, autoApprove]) => {
         setItalicGuide(italic)
         setZoteroConfig(zotero)
+        setAutoApproveToolsState(Boolean(autoApprove))
       })
       .catch((error) => console.error(error))
   }, [])
+
+  // Load vocab pack registry on mount. Falls back to BUILTIN_PACKS-only
+  // defaults (set in initial state) if IPC is unavailable.
+  useEffect(() => {
+    Promise.all([
+      window.scipaper.listVocabPacks(),
+      window.scipaper.getCustomVocabPacks(),
+    ])
+      .then(([summaries, custom]) => {
+        setVocabPackSummaries(summaries)
+        setCustomVocabPacks(custom)
+      })
+      .catch((error) => console.error('vocabPacks load failed:', error))
+  }, [])
+
+  // Resolve enabled packs (builtin + custom) into the per-section dictionary
+  // the autocomplete extension consumes. customVocab (legacy user-default)
+  // is appended to the `general` bucket.
+  const enabledPacks = useMemo<VocabPack[]>(() => {
+    const enabledIds = new Set(vocabPackSummaries.filter((s) => s.enabled).map((s) => s.id))
+    const builtin = BUILTIN_PACKS.filter((p) => enabledIds.has(p.id))
+    const custom = customVocabPacks.filter((p) => enabledIds.has(p.id))
+    return [...builtin, ...custom]
+  }, [vocabPackSummaries, customVocabPacks])
+
+  const mergedVocabWords = useMemo<Record<SciSection, string[]>>(() => {
+    const out = aggregatePackWords(enabledPacks)
+    const extra = state?.customVocab?.words ?? []
+    if (extra.length === 0) return out
+    const seen = new Set(out.general.map((w) => w.toLowerCase()))
+    const general = out.general.slice()
+    for (const w of extra) {
+      const key = w.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      general.push(w)
+    }
+    return { ...out, general }
+  }, [enabledPacks, state?.customVocab])
+
+  const mergedVocabPhrases = useMemo<Record<SciSection, SciPhrase[]>>(() => {
+    const out = aggregatePackPhrases(enabledPacks)
+    const extra = state?.customVocab?.phrases ?? []
+    if (extra.length === 0) return out
+    const seen = new Set(out.general.map((p) => p.trigger.toLowerCase()))
+    const general = out.general.slice()
+    for (const p of extra) {
+      const key = p.trigger.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      general.push(p)
+    }
+    return { ...out, general }
+  }, [enabledPacks, state?.customVocab])
+
+  async function handleToggleVocabPack(id: string, enabled: boolean) {
+    try {
+      const updated = await window.scipaper.setVocabPackEnabled(id, enabled)
+      setVocabPackSummaries(updated)
+    } catch (error) {
+      console.error('setVocabPackEnabled failed:', error)
+    }
+  }
+
+  async function handleImportVocabPack(payload: {
+    name: string
+    description?: string
+    words: string[] | Partial<Record<SciSection, string[]>>
+  }): Promise<VocabPack> {
+    const newPack = await window.scipaper.importVocabPack(payload)
+    const [summaries, custom] = await Promise.all([
+      window.scipaper.listVocabPacks(),
+      window.scipaper.getCustomVocabPacks(),
+    ])
+    setVocabPackSummaries(summaries)
+    setCustomVocabPacks(custom)
+    return newPack
+  }
+
+  async function handleDeleteVocabPack(id: string) {
+    const updated = await window.scipaper.deleteCustomVocabPack(id)
+    setVocabPackSummaries(updated)
+    const custom = await window.scipaper.getCustomVocabPacks()
+    setCustomVocabPacks(custom)
+  }
+
+  async function handleRenameVocabPack(id: string, name: string) {
+    await window.scipaper.renameCustomVocabPack(id, name)
+    const custom = await window.scipaper.getCustomVocabPacks()
+    setCustomVocabPacks(custom)
+  }
 
   // Subscribe to LLM stream events
   useEffect(() => {
@@ -497,7 +679,16 @@ function App() {
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: 'text' in m ? m.text : '' }))
     setAiMessages((prev) => [...prev, userMsg])
 
-    const currentSection = selectedArticle && isSectionTab(articleTab)
+    // When the immersive editor is open, prefer its focus context — the
+    // user is actively editing one block and AI suggestions should center
+    // on that block, not the whole section excerpt.
+    const currentSection = focusSection
+      ? {
+          type: focusSection.type,
+          contentExcerpt: (focusBlock?.content ?? '').slice(0, 800),
+          currentBlockId: focusBlock?.id ?? null,
+        }
+      : selectedArticle && isSectionTab(articleTab)
       ? {
           type: articleTab,
           contentExcerpt: (selectedArticle.sections.find((s) => s.type === articleTab)?.contentBlocks || [])
@@ -518,45 +709,80 @@ function App() {
         }
       : null
 
-    const result = await window.scipaper.llmStartChat({
-      sessionId,
-      userMessage: text,
-      history,
-      currentArticle,
-      currentSection,
-      scenarioId: currentScenarioId,
-    })
+    try {
+      const result = await window.scipaper.llmStartChat({
+        sessionId,
+        userMessage: text,
+        history,
+        currentArticle,
+        currentSection,
+        scenarioId: currentScenarioId,
+      })
 
-    if (!result.ok) {
+      if (!result.ok) {
+        setAiBusy(false)
+        aiSessionRef.current = null
+        setAiMessages((prev) => [
+          ...prev,
+          { id: `sys_${Date.now()}`, role: 'system', text: '启动失败: ' + (result.error || '未知错误') },
+        ])
+      }
+    } catch (error) {
+      // 不 catch 会让 aiBusy 永久 true，AI 助手锁死直到重启。
       setAiBusy(false)
       aiSessionRef.current = null
+      const message = error instanceof Error ? error.message : String(error)
       setAiMessages((prev) => [
         ...prev,
-        { id: `sys_${Date.now()}`, role: 'system', text: '启动失败: ' + (result.error || '未知错误') },
+        { id: `sys_${Date.now()}`, role: 'system', text: '启动异常: ' + message },
       ])
     }
   }
 
   async function handleAiCancel() {
-    if (aiSessionRef.current) {
-      await window.scipaper.llmCancelSession(aiSessionRef.current)
-      aiSessionRef.current = null
-      setAiBusy(false)
+    const sessionId = aiSessionRef.current
+    aiSessionRef.current = null
+    setAiBusy(false)
+    if (!sessionId) return
+    try {
+      await window.scipaper.llmCancelSession(sessionId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setAiMessages((prev) => [
+        ...prev,
+        { id: `sys_${Date.now()}`, role: 'system', text: '取消失败: ' + message },
+      ])
     }
   }
 
   async function handleApprove(callId: string, alwaysAllow: boolean) {
-    if (aiSessionRef.current) {
-      await window.scipaper.llmApprove(aiSessionRef.current, callId, true, alwaysAllow)
-    }
+    const sessionId = aiSessionRef.current
     setApprovalRequest(null)
+    if (!sessionId) return
+    try {
+      await window.scipaper.llmApprove(sessionId, callId, true, alwaysAllow)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setAiMessages((prev) => [
+        ...prev,
+        { id: `sys_${Date.now()}`, role: 'system', text: '批准失败: ' + message },
+      ])
+    }
   }
 
   async function handleReject(callId: string) {
-    if (aiSessionRef.current) {
-      await window.scipaper.llmApprove(aiSessionRef.current, callId, false, false)
-    }
+    const sessionId = aiSessionRef.current
     setApprovalRequest(null)
+    if (!sessionId) return
+    try {
+      await window.scipaper.llmApprove(sessionId, callId, false, false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setAiMessages((prev) => [
+        ...prev,
+        { id: `sys_${Date.now()}`, role: 'system', text: '拒绝失败: ' + message },
+      ])
+    }
   }
 
   const selectedArticle = state?.articles.find((article) => article.id === selectedArticleId) ?? null
@@ -590,6 +816,19 @@ function App() {
         .join(' ')
         .toLowerCase()
 
+      return haystack.includes(keyword)
+    }) ?? []
+
+  // theses 也按 sidebar 搜索框过滤；之前只过滤 articles → Library 视图下
+  // 搜索学位论文时永远显示全部，与 articles 的行为不一致。
+  const filteredTheses =
+    state?.theses.filter((thesis) => {
+      const keyword = deferredSearch.trim().toLowerCase()
+      if (!keyword) return true
+      const haystack = [thesis.title, thesis.titleEn, thesis.author, thesis.institution, thesis.department]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
       return haystack.includes(keyword)
     }) ?? []
 
@@ -700,6 +939,17 @@ function App() {
     }, '标签已删除')
   }
 
+  async function handleExportLatex() {
+    if (!selectedArticle) return
+    try {
+      await window.scipaper.exportArticleLatex(selectedArticle.id)
+      setNotice('LaTeX 导出成功')
+    } catch (error) {
+      console.error(error)
+      setNotice(error instanceof Error ? error.message : 'LaTeX 导出失败')
+    }
+  }
+
   async function handleExportHTML() {
     if (!selectedArticle) return
     try {
@@ -738,6 +988,41 @@ function App() {
       ? selectedArticle.sections.find((section) => section.type === articleTab) ?? null
       : null
 
+  // Inline focus mode: focusSection = the active Section tab; focusBlock =
+  // its (single) text block. Lazy-created on first save.
+  const focusSection = activeSection
+  const focusBlock = focusSection
+    ? focusSection.contentBlocks.find((b) => b.type === 'Text') ?? null
+    : null
+
+  // Silent save for focus mode — bypass `mutate` to avoid the busy spinner
+  // interrupting the typing rhythm. Single-block policy: lazily create the
+  // section's text block on first non-empty save; otherwise update it in
+  // place. focusBlock is derived synchronously from state, so React handles
+  // the pivot automatically once the new block lands.
+  async function focusModeSave(content: string, description: string) {
+    if (!selectedArticle || !focusSection) return
+    if (focusBlock) {
+      const next = await window.scipaper.updateTextBlock(
+        selectedArticle.id,
+        focusBlock.id,
+        content,
+        description,
+      )
+      setState(next)
+      return
+    }
+    if (content.trim()) {
+      const next = await window.scipaper.addTextBlock(
+        selectedArticle.id,
+        focusSection.type,
+        content,
+        description,
+      )
+      setState(next)
+    }
+  }
+
   function openArticle(id: string) {
     setSelectedArticleId(id)
     setArticleTab('Introduction')
@@ -761,18 +1046,18 @@ function App() {
   }
 
   async function handleSetDailyPlan(planText: string) {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = localIsoDate()
     const newState = await window.scipaper.setDailyPlan(today, planText)
     setState(newState)
   }
 
   async function handleEndDailySession(summaryText: string) {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = localIsoDate()
     const newState = await window.scipaper.endDailySession(today, summaryText)
     setState(newState)
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localIsoDate()
   const todayWords = state?.writingStreak.todayWords ?? 0
   const todayEntries = (state?.progressEntries ?? []).filter((entry) => entry.date === today)
   const kindOrder: ProgressEntryKind[] = ['read', 'experiment', 'writing', 'analysis', 'idea', 'cite', 'focus', 'mood']
@@ -812,6 +1097,7 @@ function App() {
 
   return (
     <>
+      {splashVisible ? <SplashScreen onDone={() => setSplashVisible(false)} /> : null}
       <ArticleWizard busy={busy} onClose={() => setWizardOpen(false)} onSubmit={handleCreateArticle} open={wizardOpen} />
       <ThesisWizard busy={busy} onClose={() => setThesisWizardOpen(false)} onSubmit={handleCreateThesis} open={thesisWizardOpen} />
 
@@ -842,6 +1128,7 @@ function App() {
         }
         onOpenSettings={() => {
           setAiOpen(false)
+          setPendingSettingsFocus('ai')
           setRoute('settings')
         }}
         scenarios={scenarios.filter((s) => s.enabled)}
@@ -879,7 +1166,7 @@ function App() {
         />
       ) : null}
 
-      <div className="app-shell">
+      <div className={`app-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
         <AppSidebar
           route={route}
           onNavigate={(next) => {
@@ -898,6 +1185,8 @@ function App() {
           dailyGoal={state?.writingStreak.dailyGoal ?? 1000}
           hasOpenArticle={!!selectedArticle}
           openArticleTitle={selectedArticle?.title ?? null}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
         />
 
         <main className="route-main">
@@ -915,7 +1204,6 @@ function App() {
             <HomeView
               state={state}
               onResume={openArticle}
-              onNewArticle={() => setWizardOpen(true)}
               onNavigate={setRoute}
             />
           ) : null}
@@ -923,7 +1211,7 @@ function App() {
           {state && route === 'library' ? (
             <LibraryView
               articles={filteredArticles}
-              theses={state.theses}
+              theses={filteredTheses}
               onOpenArticle={openArticle}
               onOpenThesis={() => {
                 setNotice('学位论文专属编辑视图待补,先看 Library 卡片信息。')
@@ -954,6 +1242,8 @@ function App() {
               state={state}
               theme={theme}
               onThemeChange={handleThemeChange}
+              fontScale={fontScale}
+              onFontScaleChange={setFontScale}
               mcpInfo={mcpInfo}
               providers={providers}
               activeProviderId={activeProviderId}
@@ -973,6 +1263,19 @@ function App() {
               zoteroConfig={zoteroConfig}
               onUpdateZoteroConfig={handleUpdateZoteroConfig}
               writingStats={writingStats}
+              autoApproveTools={autoApproveTools}
+              onSetAutoApproveTools={async (value) => {
+                const saved = await window.scipaper.setAutoApproveTools(value)
+                setAutoApproveToolsState(Boolean(saved))
+              }}
+              vocabPackSummaries={vocabPackSummaries}
+              customVocabPacks={customVocabPacks}
+              onToggleVocabPack={handleToggleVocabPack}
+              onImportVocabPack={handleImportVocabPack}
+              onDeleteVocabPack={handleDeleteVocabPack}
+              onRenameVocabPack={handleRenameVocabPack}
+              initialFocus={pendingSettingsFocus}
+              onFocusConsumed={() => setPendingSettingsFocus(null)}
             />
           ) : null}
 
@@ -986,10 +1289,20 @@ function App() {
 
           {state && route === 'article' && selectedArticle ? (
             <div className="workspace article-view">
-              <header className="workspace-top">
+              <header className={`workspace-top${metaExpanded ? '' : ' workspace-top--collapsed'}`}>
                 <div className="meta-heading">
                   <p className="eyebrow">Manuscript Dashboard</p>
                   <h2>{selectedArticle.title}</h2>
+                </div>
+                <div className="meta-toggle-row">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setMetaExpanded((v) => !v)}
+                    title={metaExpanded ? '折叠元信息' : '展开以编辑标题/期刊/状态'}
+                  >
+                    {metaExpanded ? '折叠元信息' : '展开元信息'}
+                  </button>
                 </div>
 
                 <div className="meta-grid">
@@ -1072,6 +1385,9 @@ function App() {
                   >
                     {docxBusy ? '导出中…' : '导出 docx'}
                   </button>
+                  <button className="ghost-button" onClick={handleExportLatex} type="button" title="导出 LaTeX 工程（.tex + references.bib + 图片）">
+                    导出 LaTeX
+                  </button>
                   <button className="ghost-button" onClick={handleExportHTML} type="button">
                     导出 HTML
                   </button>
@@ -1087,8 +1403,18 @@ function App() {
                 </div>
               </header>
 
-              <div className="workspace-grid">
-                <nav className="section-nav">
+              <div className={`workspace-grid${sectionNavCollapsed ? ' is-nav-collapsed' : ''}`}>
+                <nav className={`section-nav${sectionNavCollapsed ? ' is-collapsed' : ''}`}>
+                  <button
+                    type="button"
+                    className="section-nav-toggle"
+                    onClick={() => setSectionNavCollapsed((v) => !v)}
+                    title={sectionNavCollapsed ? '展开章节导航' : '收起章节导航'}
+                    aria-label={sectionNavCollapsed ? '展开章节导航' : '收起章节导航'}
+                  >
+                    {sectionNavCollapsed ? '»' : '«'}
+                  </button>
+
                   <div className="nav-group">
                     {selectedArticle.sections.map((section) => (
                       <button
@@ -1096,8 +1422,10 @@ function App() {
                         className={`nav-chip ${articleTab === section.type ? 'active' : ''}`}
                         onClick={() => setArticleTab(section.type)}
                         type="button"
+                        title={SECTION_LABELS[section.type]}
                       >
-                        <span>{SECTION_LABELS[section.type]}</span>
+                        <span className="nav-chip-label">{SECTION_LABELS[section.type]}</span>
+                        <span className="nav-chip-glyph" aria-hidden>{SECTION_LABELS[section.type].slice(0, 1)}</span>
                         <em>{section.contentBlocks.length}</em>
                       </button>
                     ))}
@@ -1111,64 +1439,104 @@ function App() {
                       className={`nav-chip utility ${articleTab === tab ? 'active' : ''}`}
                       onClick={() => setArticleTab(tab)}
                       type="button"
+                      title={label}
                     >
-                      {label}
+                      <span className="nav-chip-label">{label}</span>
+                      <span className="nav-chip-glyph" aria-hidden>{label.slice(0, 1)}</span>
                     </button>
                   ))}
                 </nav>
 
                 <section className="content-stage">
-                  {activeSection ? (
-                    <SectionEditor
+                  {activeSection && focusSection ? (
+                    <FocusModeEditor
+                      // 强制按 block.id / section.id 切换时 remount。否则 dirty
+                      // 守卫在 P0-6 加上后，外部 sync 会跳过覆盖，旧 block 的
+                      // ProseMirror 状态会被错位写到新 block 上。
+                      key={`${focusSection.id}:${focusBlock?.id ?? 'empty'}`}
                       article={selectedArticle}
-                      section={activeSection}
-                      onAddFile={() =>
-                        mutate(
-                          () => window.scipaper.importAssetBlock(selectedArticle.id, activeSection.type, 'file'),
-                          '已导入并备份文件',
+                      section={focusSection}
+                      block={focusBlock}
+                      annotations={focusBlock?.annotations ?? []}
+                      onSave={focusModeSave}
+                      onAddAnnotation={async (payload) => {
+                        if (!selectedArticleId || !focusBlock) return
+                        const next = await window.scipaper.addAnnotation(
+                          selectedArticleId,
+                          focusBlock.id,
+                          payload,
                         )
-                      }
-                      onAddImage={() =>
-                        mutate(
-                          () => window.scipaper.importAssetBlock(selectedArticle.id, activeSection.type, 'image'),
-                          '已添加图片附件',
-                        )
-                      }
-                      onAddText={(content, description) =>
-                        mutate(
-                          () => window.scipaper.addTextBlock(selectedArticle.id, activeSection.type, content, description),
-                          '文本块已添加',
-                        )
-                      }
-                      onDeleteBlock={(blockId) =>
-                        mutate(() => window.scipaper.deleteBlock(selectedArticle.id, blockId), '内容块已删除')
-                      }
-                      onOpenAsset={async (blockId) => {
-                        await window.scipaper.openBlockAsset(selectedArticle.id, blockId)
+                        setState(next)
                       }}
-                      onUpdateBlock={(blockId, content, description) =>
-                        mutate(
-                          () => window.scipaper.updateTextBlock(selectedArticle.id, blockId, content, description),
-                          '文本块已更新',
+                      onUpdateAnnotation={async (id, patch) => {
+                        if (!selectedArticleId) return
+                        const next = await window.scipaper.updateAnnotation(selectedArticleId, id, patch)
+                        setState(next)
+                      }}
+                      onDeleteAnnotation={async (id) => {
+                        if (!selectedArticleId) return
+                        const next = await window.scipaper.deleteAnnotation(selectedArticleId, id)
+                        setState(next)
+                      }}
+                      onExit={() => setArticleTab('Outline')}
+                      onRecordVersion={async (changeDescription) => {
+                        if (!selectedArticleId || !focusBlock) return
+                        const next = await window.scipaper.recordBlockVersion(
+                          selectedArticleId,
+                          focusBlock.id,
+                          changeDescription,
                         )
-                      }
-                      onAddFinding={(title) =>
-                        mutate(
-                          () => window.scipaper.addFinding(selectedArticle.id, activeSection.type, { title }),
-                          '已新增 finding',
-                        )
-                      }
-                      onUpdateFinding={(findingId, patch) =>
-                        mutate(
-                          () => window.scipaper.updateFinding(selectedArticle.id, findingId, patch),
-                          'finding 已更新',
-                        )
-                      }
-                      onDeleteFinding={(findingId) =>
-                        mutate(
-                          () => window.scipaper.deleteFinding(selectedArticle.id, findingId),
-                          'finding 已删除',
-                        )
+                        setState(next)
+                      }}
+                      viewMode={focusViewMode}
+                      onViewModeChange={setFocusViewMode}
+                      mergedWords={mergedVocabWords}
+                      mergedPhrases={mergedVocabPhrases}
+                      previewSlot={
+                        <SectionEditor
+                          article={selectedArticle}
+                          section={focusSection}
+                          onEnterEdit={() => setFocusViewMode('edit')}
+                          onAddImage={() =>
+                            mutate(
+                              () => window.scipaper.importAssetBlock(selectedArticle.id, focusSection.type, 'image'),
+                              '已添加图片附件',
+                            )
+                          }
+                          onAddFile={() =>
+                            mutate(
+                              () => window.scipaper.importAssetBlock(selectedArticle.id, focusSection.type, 'file'),
+                              '已导入并备份文件',
+                            )
+                          }
+                          onDeleteBlock={(blockId) =>
+                            mutate(
+                              () => window.scipaper.deleteBlock(selectedArticle.id, blockId),
+                              '内容块已删除',
+                            )
+                          }
+                          onOpenAsset={async (blockId) => {
+                            await window.scipaper.openBlockAsset(selectedArticle.id, blockId)
+                          }}
+                          onAddFinding={(title) =>
+                            mutate(
+                              () => window.scipaper.addFinding(selectedArticle.id, focusSection.type, { title }),
+                              '已新增 finding',
+                            )
+                          }
+                          onUpdateFinding={(findingId, patch) =>
+                            mutate(
+                              () => window.scipaper.updateFinding(selectedArticle.id, findingId, patch),
+                              'finding 已更新',
+                            )
+                          }
+                          onDeleteFinding={(findingId) =>
+                            mutate(
+                              () => window.scipaper.deleteFinding(selectedArticle.id, findingId),
+                              'finding 已删除',
+                            )
+                          }
+                        />
                       }
                     />
                   ) : null}
