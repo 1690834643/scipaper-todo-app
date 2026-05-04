@@ -22,6 +22,70 @@
   overflow-y: auto;
 }
 
+/* ---------- Collapse toggle ---------- */
+.section-nav-toggle {
+  align-self: flex-end;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--c-ink-muted);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.section-nav-toggle:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+.section-nav-toggle:hover {
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
+  border-color: var(--c-accent);
+}
+.section-nav.is-collapsed .section-nav-toggle {
+  align-self: center;
+}
+[data-theme="pixel"] .section-nav-toggle {
+  border-radius: 0;
+  border-width: 2px;
+}
+
+/* ---------- Collapsed mode: chips become icon-only ---------- */
+.section-nav.is-collapsed {
+  padding: var(--sp-2);
+  align-items: stretch;
+}
+.nav-chip-glyph { display: none; }
+.section-nav.is-collapsed .nav-chip {
+  justify-content: center;
+  padding: 8px 4px;
+  gap: 4px;
+}
+.section-nav.is-collapsed .nav-chip-label { display: none; }
+.section-nav.is-collapsed .nav-chip-glyph {
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-heading);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-md);
+}
+.section-nav.is-collapsed .nav-chip.utility::before { display: none; }
+.section-nav.is-collapsed .nav-chip em { display: none; }
+/* The base .nav-divider uses calc(var(--sp-3) * -1) horizontal margin to span
+ * the expanded nav padding. In collapsed mode padding shrinks to sp-2; without
+ * this override the divider bleeds 4px past each side and triggers a hidden
+ * horizontal scroll. */
+.section-nav.is-collapsed .nav-divider {
+  margin-left: calc(var(--sp-2) * -1);
+  margin-right: calc(var(--sp-2) * -1);
+}
+
 [data-theme="pixel"] .section-nav {
   background: #FFF;
   border: 2px solid #000;

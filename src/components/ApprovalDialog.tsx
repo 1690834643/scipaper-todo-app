@@ -34,6 +34,22 @@ export function ApprovalDialog({ request, onApprove, onReject }: ApprovalDialogP
     }
   }, [request])
 
+  // Esc rejects the request. Without this, the FocusModeEditor's modal-overlay
+  // guard would defer to us but we'd swallow the keystroke silently — a
+  // keyboard dead-end while the dialog is open.
+  useEffect(() => {
+    if (!request) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (event.isComposing || event.keyCode === 229) return
+      event.preventDefault()
+      onReject(request.callId)
+      setAlwaysAllow(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [request, onReject])
+
   if (!request) {
     return null
   }

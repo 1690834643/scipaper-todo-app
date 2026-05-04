@@ -1,7 +1,9 @@
 /* ---------- AI Drawer (right-side resizable panel) ---------- */
 body.ai-drawer-open .app-shell {
   padding-right: var(--ai-drawer-width, 0);
-  transition: padding-right .12s ease;
+  /* Keep grid-template-columns transition from shell.css alive when drawer is
+   * open; otherwise sidebar collapse loses its animation. */
+  transition: padding-right .12s ease, grid-template-columns var(--t-fast);
 }
 
 .ai-drawer {

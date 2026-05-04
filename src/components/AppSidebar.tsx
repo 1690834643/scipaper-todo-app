@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import * as React from 'react'
 
 export type AppRoute = 'home' | 'library' | 'article' | 'settings' | 'daily'
 
@@ -14,6 +15,8 @@ interface AppSidebarProps {
   dailyGoal: number
   hasOpenArticle: boolean
   openArticleTitle?: string | null
+  collapsed?: boolean
+  onToggleCollapsed?: () => void
 }
 
 function aiShortcutLabel(): string {
@@ -25,6 +28,17 @@ function aiShortcutLabel(): string {
 
 function navClass(route: AppRoute, current: AppRoute) {
   return route === current ? 'home-nav-item is-active' : 'home-nav-item'
+}
+
+// ARIA button keyboard contract: both Enter AND Space activate. Without Space
+// support, screen-reader users navigating with arrow keys can't trigger nav.
+function activateOn(handler: () => void) {
+  return (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handler()
+    }
+  }
 }
 
 export function AppSidebar({
@@ -39,15 +53,34 @@ export function AppSidebar({
   dailyGoal,
   hasOpenArticle,
   openArticleTitle,
+  collapsed = false,
+  onToggleCollapsed,
 }: AppSidebarProps): JSX.Element {
   return (
-    <aside className='home-sidebar'>
-      <div className='home-brand'>
-        <div className='home-brand-glyph'>P</div>
-        <div className='home-brand-name'>papertodo</div>
+    <aside className={`home-sidebar${collapsed ? ' is-collapsed' : ''}`}>
+      <div className='home-sidebar-top'>
+        <div className='home-brand'>
+          <div className='home-brand-glyph'>P</div>
+          {!collapsed && <div className='home-brand-name'>papertodo</div>}
+        </div>
+        {/* Always render the toggle so a `collapsed=true` sidebar without an
+         * onToggleCollapsed handler isn't a permanent dead-end. Disabled state
+         * is visible to screen readers via aria-disabled. */}
+        <button
+          type='button'
+          className='home-sidebar-collapse'
+          onClick={onToggleCollapsed}
+          disabled={!onToggleCollapsed}
+          aria-disabled={!onToggleCollapsed}
+          title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? '»' : '«'}
+        </button>
       </div>
 
-      {route === 'library' ? (
+      {!collapsed && route === 'library' ? (
         <input
           className='sidebar-search'
           type='search'
@@ -58,101 +91,123 @@ export function AppSidebar({
       ) : null}
 
       <nav>
-        <p className='home-section-label'>Workspace</p>
+        {!collapsed && <p className='home-section-label'>Workspace</p>}
         <ul className='home-nav'>
           <li
             className={navClass(route, 'home')}
             onClick={() => onNavigate('home')}
-            onKeyDown={(e) => e.key === 'Enter' && onNavigate('home')}
+            onKeyDown={activateOn(() => onNavigate('home'))}
             role='button'
             tabIndex={0}
+            title='Home'
+            aria-label='Home'
           >
-            <span className='home-nav-icon'>◐</span>Home
+            <span className='home-nav-icon'>◐</span>
+            {!collapsed && <span className='home-nav-label'>Home</span>}
           </li>
           <li
             className={navClass(route, 'library')}
             onClick={() => onNavigate('library')}
-            onKeyDown={(e) => e.key === 'Enter' && onNavigate('library')}
+            onKeyDown={activateOn(() => onNavigate('library'))}
             role='button'
             tabIndex={0}
+            title='Library'
+            aria-label='Library'
           >
-            <span className='home-nav-icon'>▤</span>Library
+            <span className='home-nav-icon'>▤</span>
+            {!collapsed && <span className='home-nav-label'>Library</span>}
           </li>
           <li
             className={`${navClass(route, 'article')}${!hasOpenArticle ? ' is-disabled' : ''}`}
             onClick={() => hasOpenArticle && onNavigate('article')}
-            onKeyDown={(e) => e.key === 'Enter' && hasOpenArticle && onNavigate('article')}
+            onKeyDown={activateOn(() => { if (hasOpenArticle) onNavigate('article') })}
             role='button'
             tabIndex={hasOpenArticle ? 0 : -1}
             aria-disabled={!hasOpenArticle}
+            title={hasOpenArticle && openArticleTitle ? `Article — ${openArticleTitle}` : 'Article'}
+            aria-label={hasOpenArticle && openArticleTitle ? `Article — ${openArticleTitle}` : 'Article'}
           >
             <span className='home-nav-icon'>✎</span>
-            Article
-            {hasOpenArticle && openArticleTitle ? (
+            {!collapsed && <span className='home-nav-label'>Article</span>}
+            {!collapsed && hasOpenArticle && openArticleTitle ? (
               <span className='home-nav-aside'>{openArticleTitle.slice(0, 14)}</span>
             ) : null}
           </li>
         </ul>
 
-        <p className='home-section-label' style={{ marginTop: 'var(--sp-5)' }}>Tools</p>
+        {!collapsed && <p className='home-section-label' style={{ marginTop: 'var(--sp-5)' }}>Tools</p>}
         <ul className='home-nav'>
           <li
             className={navClass(route, 'daily')}
             onClick={() => onNavigate('daily')}
-            onKeyDown={(e) => e.key === 'Enter' && onNavigate('daily')}
+            onKeyDown={activateOn(() => onNavigate('daily'))}
             role='button'
             tabIndex={0}
+            title='Daily Log'
+            aria-label='Daily Log'
           >
-            <span className='home-nav-icon'>☉</span>Daily Log
+            <span className='home-nav-icon'>☉</span>
+            {!collapsed && <span className='home-nav-label'>Daily Log</span>}
           </li>
           <li
             className={navClass(route, 'settings')}
             onClick={() => onNavigate('settings')}
-            onKeyDown={(e) => e.key === 'Enter' && onNavigate('settings')}
+            onKeyDown={activateOn(() => onNavigate('settings'))}
             role='button'
             tabIndex={0}
+            title='Settings'
+            aria-label='Settings'
           >
-            <span className='home-nav-icon'>⚙</span>Settings
+            <span className='home-nav-icon'>⚙</span>
+            {!collapsed && <span className='home-nav-label'>Settings</span>}
           </li>
           <li
             className='home-nav-item'
             onClick={onOpenAi}
-            onKeyDown={(e) => e.key === 'Enter' && onOpenAi()}
+            onKeyDown={activateOn(onOpenAi)}
             role='button'
             tabIndex={0}
+            title={`AI 助手 (${aiShortcutLabel()})`}
+            aria-label={`AI 助手 (${aiShortcutLabel()})`}
           >
             <span className='home-nav-icon'>✦</span>
-            AI 助手
-            <span className='home-nav-aside'>{aiShortcutLabel()}</span>
+            {!collapsed && <span className='home-nav-label'>AI 助手</span>}
+            {!collapsed && <span className='home-nav-aside'>{aiShortcutLabel()}</span>}
           </li>
         </ul>
 
-        <p className='home-section-label' style={{ marginTop: 'var(--sp-5)' }}>Create</p>
-        <div className='sidebar-create'>
-          <button className='ghost-button full-width' onClick={onNewArticle} type='button'>
-            + 新建文章
-          </button>
-          <button className='ghost-button full-width' onClick={onNewThesis} type='button'>
-            + 新建学位论文
-          </button>
-        </div>
+        {!collapsed && (
+          <>
+            <p className='home-section-label' style={{ marginTop: 'var(--sp-5)' }}>Create</p>
+            <div className='sidebar-create'>
+              <button className='ghost-button full-width' onClick={onNewArticle} type='button'>
+                + 新建文章
+              </button>
+              <button className='ghost-button full-width' onClick={onNewThesis} type='button'>
+                + 新建学位论文
+              </button>
+            </div>
+          </>
+        )}
       </nav>
 
-      <div className='home-mini-card sidebar-progress'>
-        <span className='sidebar-progress-line'>
-          <span className='sidebar-progress-num'>{todayWords.toLocaleString()}</span>
-          <span className='sidebar-progress-goal'> / {dailyGoal.toLocaleString()} 字</span>
-        </span>
-        <span className='home-mini-card-label'>今日写作进度</span>
-        <div className='sidebar-progress-bar'>
-          <div
-            className='sidebar-progress-fill'
-            style={{
-              width: `${dailyGoal > 0 ? Math.min(100, Math.round((todayWords / dailyGoal) * 100)) : 0}%`,
-            }}
-          />
+      {!collapsed && (
+        <div className='home-mini-card sidebar-progress'>
+          <span className='sidebar-progress-line'>
+            <span className='sidebar-progress-num'>{todayWords.toLocaleString()}</span>
+            <span className='sidebar-progress-goal'> / {dailyGoal.toLocaleString()} 字</span>
+          </span>
+          <span className='home-mini-card-label'>今日写作进度</span>
+          <div className='sidebar-progress-bar'>
+            <div
+              className='sidebar-progress-fill'
+              style={{
+                width: `${dailyGoal > 0 ? Math.min(100, Math.round((todayWords / dailyGoal) * 100)) : 0}%`,
+              }}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   )
 }

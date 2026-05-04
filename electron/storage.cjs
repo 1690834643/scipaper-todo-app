@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { PRESETS } = require('./llmPresets.cjs');
+const { localIsoDate } = require('./dateUtils.cjs');
 
 const SECTION_TYPES = [
   'Title',
@@ -218,10 +219,11 @@ function normalizeBlockType(type) {
 }
 
 function normalizeStoredBlock(block) {
+  const versions = Array.isArray(block.versions) ? block.versions : [];
   return {
     ...block,
     type: normalizeBlockType(block.type),
-    versions: Array.isArray(block.versions) ? block.versions : [],
+    versions,
   };
 }
 
@@ -367,7 +369,7 @@ function normalizeProgressEntry(entry = {}) {
   const validKinds = ['read', 'experiment', 'writing', 'idea', 'cite', 'analysis', 'focus', 'mood'];
   return {
     id: typeof entry.id === 'string' ? entry.id : createId(),
-    date: typeof entry.date === 'string' ? entry.date : new Date().toISOString().slice(0, 10),
+    date: typeof entry.date === 'string' ? entry.date : localIsoDate(),
     articleId: typeof entry.articleId === 'string' ? entry.articleId : '',
     kind: validKinds.includes(entry.kind) ? entry.kind : 'idea',
     title: normalizeText(entry.title),
@@ -383,7 +385,7 @@ function normalizeProgressEntry(entry = {}) {
 
 function normalizeDailySession(session = {}) {
   return {
-    date: typeof session.date === 'string' ? session.date : new Date().toISOString().slice(0, 10),
+    date: typeof session.date === 'string' ? session.date : localIsoDate(),
     planText: normalizeText(session.planText),
     summaryText: normalizeText(session.summaryText),
     startedAt: typeof session.startedAt === 'string' ? session.startedAt : now(),
@@ -434,14 +436,41 @@ function normalizeRelativeAssetPath(value) {
   return value.split(/[\\/]+/).filter(Boolean).join(path.sep);
 }
 
+// macOS 用户从 Windows 备份导入数据库时，block.content 里可能保留 `C:\...`
+// 绝对路径。WSL 下能通过 /mnt/c 还原，但 macOS 没有这个映射，硬试会拼出
+// 不存在的路径。返回 null 让 enrichBlock 标记 assetError，提示用户重新关联。
+const WINDOWS_IMPORT_RELINK_MESSAGE =
+  'This attachment was imported from Windows; please re-link it on this Mac.';
+const warnedWindowsImportPaths = new Set();
+
+function warnWindowsImportPath(value) {
+  if (warnedWindowsImportPaths.has(value)) return;
+  warnedWindowsImportPaths.add(value);
+  console.warn(WINDOWS_IMPORT_RELINK_MESSAGE + ' Original path: ' + value);
+}
+
 function windowsPathToCurrentPlatform(value) {
   if (process.platform === 'win32') {
     return value;
   }
 
+  if (process.platform === 'darwin') {
+    warnWindowsImportPath(value);
+    return null;
+  }
+
   const drive = value[0].toLowerCase();
   const rest = value.slice(2).split(/[\\/]+/).filter(Boolean);
   return path.join('/mnt', drive, ...rest);
+}
+
+function getAssetPathError(block) {
+  if (normalizeBlockType(block.type) === 'Text') return null;
+  if (process.platform === 'darwin' && isWindowsAbsolutePath(block.content)) {
+    warnWindowsImportPath(block.content);
+    return WINDOWS_IMPORT_RELINK_MESSAGE;
+  }
+  return null;
 }
 
 function createSection(type, orderIndex) {
@@ -484,6 +513,7 @@ function createArticle(input) {
     title: normalizeText(input.title) || '未命名研究',
     targetJournal: normalizeText(input.targetJournal),
     status: ARTICLE_STATUSES.includes(input.status) ? input.status : 'Drafting',
+    language: input.language === 'zh' ? 'zh' : 'en',
     createdAt: timestamp,
     updatedAt: timestamp,
     researchContext: {
@@ -651,7 +681,7 @@ function applyWritingStreak(streakInput, deltaInput) {
   }
 
   const netWords = delta.added - delta.removed;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate();
 
   if (streak.lastWriteDate === today) {
     streak.todayWords += netWords;
@@ -664,7 +694,7 @@ function applyWritingStreak(streakInput, deltaInput) {
       streak.todayByManual += changedWords;
     }
   } else {
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yesterday = localIsoDate(new Date(Date.now() - 86400000));
 
     if (streak.lastWriteDate === yesterday) {
       streak.currentStreak += 1;
@@ -768,24 +798,41 @@ function resolveBlockPath(articleId, block) {
     return null;
   }
 
+  if (typeof block.content !== 'string' || !block.content) {
+    return null;
+  }
+
+  let candidate;
   if (path.isAbsolute(block.content)) {
-    return block.content;
+    candidate = block.content;
+  } else if (isWindowsAbsolutePath(block.content)) {
+    candidate = windowsPathToCurrentPlatform(block.content);
+    if (candidate === null) return null;
+  } else {
+    candidate = path.join(getArticleDirectory(articleId), normalizeRelativeAssetPath(block.content));
   }
 
-  if (isWindowsAbsolutePath(block.content)) {
-    return windowsPathToCurrentPlatform(block.content);
+  // 安全：阻止路径遍历。block.content 可能来自历史数据或 LLM/MCP 工具输入，
+  // 必须保证最终落点在该 article 目录内（含子目录），否则 IPC 暴露任意 fs 读取。
+  const resolved = path.resolve(candidate);
+  const root = path.resolve(getArticleDirectory(articleId));
+  const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+  if (resolved !== root && !resolved.startsWith(rootWithSep)) {
+    return null;
   }
 
-  return path.join(getArticleDirectory(articleId), normalizeRelativeAssetPath(block.content));
+  return candidate;
 }
 
 function enrichBlock(articleId, block) {
   const normalizedBlock = normalizeStoredBlock(block);
+  const assetError = getAssetPathError(normalizedBlock);
   const resolvedPath = resolveBlockPath(articleId, normalizedBlock);
   const stats = resolvedPath && fs.existsSync(resolvedPath) ? fs.statSync(resolvedPath) : null;
 
   return {
     ...normalizedBlock,
+    assetError,
     resolvedPath,
     previewUrl: resolvedPath ? pathToFileURL(resolvedPath).toString() : null,
     fileName: resolvedPath ? path.basename(resolvedPath) : null,
@@ -810,7 +857,7 @@ function enrichArticle(article) {
 
 function addMoodEntry(mood, note = '') {
   const database = readDatabase();
-  const today = new Date().toISOString().split('T')[0];
+  const today = localIsoDate();
   
   if (!database.writingStreak.moodHistory) {
     database.writingStreak.moodHistory = [];
@@ -825,7 +872,7 @@ function addMoodEntry(mood, note = '') {
   });
   
   // Keep only last 365 days
-  const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0];
+  const oneYearAgo = localIsoDate(new Date(Date.now() - 365 * 86400000));
   database.writingStreak.moodHistory = database.writingStreak.moodHistory.filter(
     entry => entry.date >= oneYearAgo
   );
@@ -841,7 +888,7 @@ function getMoodHistory() {
 
 function addPomodoroSession(duration, articleId = '', sectionType = '') {
   const database = readDatabase();
-  const today = new Date().toISOString().split('T')[0];
+  const today = localIsoDate();
   
   if (!database.pomodoroSessions) {
     database.pomodoroSessions = [];
@@ -860,7 +907,7 @@ function addPomodoroSession(duration, articleId = '', sectionType = '') {
   database.pomodoroSessions.push(session);
   
   // Keep only last 365 days
-  const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0];
+  const oneYearAgo = localIsoDate(new Date(Date.now() - 365 * 86400000));
   database.pomodoroSessions = database.pomodoroSessions.filter(
     s => s.startTime >= oneYearAgo
   );
@@ -872,7 +919,7 @@ function addPomodoroSession(duration, articleId = '', sectionType = '') {
 function getPomodoroStats() {
   const database = readDatabase();
   const sessions = database.pomodoroSessions || [];
-  const today = new Date().toISOString().split('T')[0];
+  const today = localIsoDate();
   
   const todaySessions = sessions.filter(s => s.startTime.startsWith(today));
   const todayMinutes = todaySessions.reduce((sum, s) => sum + s.duration, 0);
@@ -965,6 +1012,11 @@ function addProvider(input = {}) {
   };
 
   db.llmProviders.push(provider);
+  // If no provider is active yet, the new one becomes active automatically.
+  // Adding a Provider and then having to "活动" it again is unintuitive UX.
+  if (!db.activeLlmProviderId) {
+    db.activeLlmProviderId = provider.id;
+  }
   writeDatabase(db);
   return provider;
 }
@@ -1300,15 +1352,30 @@ function updateArticleMeta(articleId, patch) {
 function updateResearchContext(articleId, researchContext) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
+  const incoming = researchContext || {};
 
-  article.researchContext = {
-    ...article.researchContext,
-    scientificQuestion: normalizeText(researchContext.scientificQuestion),
-    observedPhenomenon: normalizeText(researchContext.observedPhenomenon),
-    hypothesis: normalizeText(researchContext.hypothesis),
-    approach: normalizeText(researchContext.approach),
-    updatedAt: now(),
-  };
+  // 部分字段更新：缺字段保持原值（早期实现把 undefined → 空串覆盖，
+  // 导致 LLM 调一次 update_research_context 就清掉 3 个未传字段）。
+  const validKeys = ['scientificQuestion', 'observedPhenomenon', 'hypothesis', 'approach'];
+  const merged = { ...article.researchContext };
+  let touched = 0;
+  for (const key of validKeys) {
+    if (Object.prototype.hasOwnProperty.call(incoming, key)) {
+      merged[key] = normalizeText(incoming[key]);
+      touched += 1;
+    }
+  }
+  if (touched === 0) {
+    // 没命中任何已知字段：可能调用方用了过时 schema (background/objectives/
+    // keyMethods)，必须报错而非静默 no-op，否则 AI 自以为成功了。
+    const got = Object.keys(incoming).join(', ') || '(空)';
+    throw new Error(
+      `updateResearchContext: 未识别任何字段（收到：${got}）。当前 schema 仅接受 ${validKeys.join(' / ')}。`,
+    );
+  }
+  merged.updatedAt = now();
+
+  article.researchContext = merged;
   touchArticle(article);
 
   writeDatabase(database);
@@ -1341,11 +1408,6 @@ function addTextBlock(articleId, sectionType, content, description = '', modifie
   });
 
   touchArticle(article);
-  database.writingStreak = applyWritingStreak(database.writingStreak, {
-    added: countWords(cleanContent),
-    removed: 0,
-    source: source || 'manual',
-  });
   writeDatabase(database);
 }
 
@@ -1442,11 +1504,6 @@ function updateTextBlock(articleId, blockId, content, description = '', modified
   block.description = normalizeText(description);
   block.updatedAt = now();
   block.updatedBy = modifiedBy;
-
-  if (oldContent !== cleanContent) {
-    block.versions = block.versions ?? [];
-    block.versions.unshift(createTextVersion(cleanContent, modifiedBy, '更新文本块'));
-  }
 
   const diff = diffWords(oldContent, cleanContent);
   database.writingStreak = applyWritingStreak(database.writingStreak, {
@@ -1573,6 +1630,29 @@ function diffWords(oldText, newText) {
   };
 }
 
+const MAX_BLOCK_VERSIONS = 3;
+
+function recordBlockVersion(articleId, blockId, changeDescription = '快照', modifiedBy = 'SciPaper Todo') {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const { block } = findBlock(article, blockId);
+  if (block.type !== 'Text') {
+    throw new Error('Only text blocks can have version snapshots');
+  }
+  block.versions = block.versions ?? [];
+  const latest = block.versions[0];
+  if (latest && latest.content === block.content) {
+    return database;
+  }
+  block.versions.unshift(createTextVersion(block.content, modifiedBy, changeDescription));
+  if (block.versions.length > MAX_BLOCK_VERSIONS) {
+    block.versions = block.versions.slice(0, MAX_BLOCK_VERSIONS);
+  }
+  touchArticle(article);
+  writeDatabase(database);
+  return database;
+}
+
 function updateTextBlockWithStreak(articleId, blockId, content, description = '', modifiedBy = 'SciPaper Todo') {
   return updateTextBlock(articleId, blockId, content, description, modifiedBy, 'manual');
 }
@@ -1635,6 +1715,96 @@ function deleteBlock(articleId, blockId, source = 'manual') {
   throw new Error('Content block not found');
 }
 
+// ---- Block annotations (sprint v2.2) -------------------------------------
+// Annotations live on the block they reference. We persist:
+//   { id, blockId, anchorText, comment, author, status, createdAt, updatedAt }
+// anchorText is the verbatim quote — positions are recomputed in the renderer
+// because text drifts as the user edits.
+
+function findBlockAcrossSections(article, blockId) {
+  for (const section of article.sections) {
+    const block = section.contentBlocks.find((b) => b.id === blockId);
+    if (block) return { section, block };
+  }
+  return { section: null, block: null };
+}
+
+function findBlockByAnnotationId(article, annotationId) {
+  for (const section of article.sections) {
+    for (const block of section.contentBlocks) {
+      if (Array.isArray(block.annotations)) {
+        const idx = block.annotations.findIndex((a) => a.id === annotationId);
+        if (idx >= 0) return { section, block, annotationIndex: idx };
+      }
+    }
+  }
+  return { section: null, block: null, annotationIndex: -1 };
+}
+
+function addAnnotation(articleId, blockId, payload) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const { block } = findBlockAcrossSections(article, blockId);
+
+  if (!block) throw new Error('Content block not found');
+  if (block.type !== 'Text') throw new Error('Annotations are only supported on text blocks');
+
+  const anchorText = String(payload && payload.anchorText ? payload.anchorText : '').trim();
+  const comment = String(payload && payload.comment ? payload.comment : '').trim();
+  if (!anchorText) throw new Error('anchorText is required');
+  if (!comment) throw new Error('comment is required');
+
+  const author = payload && payload.author === 'ai' ? 'ai' : 'user';
+  const timestamp = now();
+  const annotation = {
+    id: createId(),
+    blockId,
+    anchorText,
+    comment,
+    author,
+    status: 'open',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  if (!Array.isArray(block.annotations)) block.annotations = [];
+  block.annotations.push(annotation);
+  block.updatedAt = timestamp;
+  touchArticle(article);
+  writeDatabase(database);
+}
+
+function updateAnnotation(articleId, annotationId, patch) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const { block, annotationIndex } = findBlockByAnnotationId(article, annotationId);
+
+  if (!block || annotationIndex < 0) throw new Error('Annotation not found');
+
+  const annotation = block.annotations[annotationIndex];
+  if (patch && typeof patch.comment === 'string') annotation.comment = patch.comment.trim();
+  if (patch && (patch.status === 'open' || patch.status === 'resolved')) {
+    annotation.status = patch.status;
+  }
+  annotation.updatedAt = now();
+  block.updatedAt = annotation.updatedAt;
+  touchArticle(article);
+  writeDatabase(database);
+}
+
+function deleteAnnotation(articleId, annotationId) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const { block, annotationIndex } = findBlockByAnnotationId(article, annotationId);
+
+  if (!block || annotationIndex < 0) throw new Error('Annotation not found');
+
+  block.annotations.splice(annotationIndex, 1);
+  block.updatedAt = now();
+  touchArticle(article);
+  writeDatabase(database);
+}
+
 function inferPreviewKind(filePath) {
   const extension = path.extname(filePath).toLowerCase();
 
@@ -1694,7 +1864,7 @@ function addProgressEntry(payload, createdBy = 'user') {
   if (!payload.title) throw new Error('title is required');
 
   const article = findArticle(database, payload.articleId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate();
   const entry = normalizeProgressEntry({
     id: createId(),
     date: payload.date || today,
@@ -1841,7 +2011,7 @@ function listFindings(articleId, sectionType) {
 function startDailySession(date, planText = '') {
   const database = readDatabase();
   database.dailySessions = database.dailySessions || [];
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || localIsoDate();
   const existing = database.dailySessions.find((s) => s.date === targetDate);
   if (existing) {
     if (planText) existing.planText = String(planText);
@@ -1862,7 +2032,7 @@ function startDailySession(date, planText = '') {
 function setDailyPlan(date, planText) {
   const database = readDatabase();
   database.dailySessions = database.dailySessions || [];
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || localIsoDate();
   let session = database.dailySessions.find((s) => s.date === targetDate);
   if (!session) {
     session = normalizeDailySession({ date: targetDate, planText, startedAt: now(), progressEntryIds: [] });
@@ -1877,7 +2047,7 @@ function setDailyPlan(date, planText) {
 function endDailySession(date, summaryText = '') {
   const database = readDatabase();
   database.dailySessions = database.dailySessions || [];
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || localIsoDate();
   let session = database.dailySessions.find((s) => s.date === targetDate);
   if (!session) {
     session = normalizeDailySession({
@@ -1895,7 +2065,7 @@ function endDailySession(date, summaryText = '') {
 
 function getDailySession(date) {
   const database = readDatabase();
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || localIsoDate();
   return (database.dailySessions || []).find((s) => s.date === targetDate) || null;
 }
 
@@ -1912,7 +2082,7 @@ function addReviewRound(articleId, payload) {
     id: createId(),
     articleId,
     roundNumber: nextRoundNumber,
-    submittedAt: payload.submittedAt || now().slice(0, 10),
+    submittedAt: payload.submittedAt || localIsoDate(),
     journalName: normalizeText(payload.journalName) || article.targetJournal || '未填写',
     manuscriptNumber: normalizeText(payload.manuscriptNumber),
     reviewReceivedAt: payload.reviewReceivedAt || '',
@@ -1948,7 +2118,7 @@ function addReviewComment(articleId, roundId, payload) {
   });
 
   if (!round.reviewReceivedAt) {
-    round.reviewReceivedAt = now().slice(0, 10);
+    round.reviewReceivedAt = localIsoDate();
   }
 
   article.status = 'UnderReview';
@@ -2069,6 +2239,8 @@ function getPreviewPayload(articleId, blockId) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
   const { block } = findBlock(article, blockId);
+  const assetError = getAssetPathError(block);
+  if (assetError) throw new Error(assetError);
   const resolvedPath = resolveBlockPath(articleId, block);
 
   if (!resolvedPath || !fs.existsSync(resolvedPath)) {
@@ -2324,11 +2496,15 @@ module.exports = {
   updateSectionContent,
   updateTextBlock,
   updateTextBlockWithStreak,
+  recordBlockVersion,
   updateWritingStreak,
   countWords,
   addCitation,
   deleteBlock,
   addAssetBlock,
+  addAnnotation,
+  updateAnnotation,
+  deleteAnnotation,
   addProgressEntry,
   updateProgressEntry,
   deleteProgressEntry,

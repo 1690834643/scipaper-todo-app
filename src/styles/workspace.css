@@ -112,10 +112,17 @@
   gap: var(--sp-4);
   min-height: 0;
   flex: 1;
+  transition: grid-template-columns var(--t-fast), gap var(--t-fast);
+}
+
+.workspace-grid.is-nav-collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: var(--sp-3);
 }
 
 @media (max-width: 1180px) {
-  .workspace-grid {
+  .workspace-grid,
+  .workspace-grid.is-nav-collapsed {
     grid-template-columns: 1fr;
   }
 }

@@ -148,14 +148,16 @@ function readInitialRailCollapse(): Record<RailSectionId, boolean> {
 }
 
 // ---- Previous-version split panel -------------------------------------
-const PREV_VERSION_STORAGE_KEY = 'scipaper.focusShowPrevVersion'
+// Always start closed: user has to opt in each session via the "上版本" toggle.
+// Wipes the legacy localStorage entry once per session (module-level guard) so
+// remounts don't repeat the I/O.
+let __orphanShowPrevCleaned = false
 function readInitialShowPrevVersion(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem(PREV_VERSION_STORAGE_KEY) === '1'
-  } catch {
-    return false
+  if (typeof window !== 'undefined' && !__orphanShowPrevCleaned) {
+    try { window.localStorage.removeItem('scipaper.focusShowPrevVersion') } catch {}
+    __orphanShowPrevCleaned = true
   }
+  return false
 }
 
 // 30-minute auto snapshot interval. Combined with on-enter and on-exit
@@ -318,9 +320,6 @@ export function FocusModeEditor({
   useEffect(() => {
     try { window.localStorage.setItem(RAIL_COLLAPSE_STORAGE_KEY, JSON.stringify(railCollapsed)) } catch {}
   }, [railCollapsed])
-  useEffect(() => {
-    try { window.localStorage.setItem(PREV_VERSION_STORAGE_KEY, showPrevVersion ? '1' : '0') } catch {}
-  }, [showPrevVersion])
   const fontStack = FONT_OPTIONS.find((f) => f.id === fontId)?.stack || ''
   const fontSizePx = FONT_SIZE_OPTIONS.find((f) => f.id === fontSizeId)?.px ?? 16
   function toggleRail(id: RailSectionId) {
@@ -575,6 +574,10 @@ export function FocusModeEditor({
       if (event.isComposing || event.keyCode === 229) return
       if (autocompleteState.active) return
       if (draft && document.activeElement === draftTextareaRef.current) return
+      // If a modal (wizard, approval dialog, etc.) is open, let it own Esc.
+      // Without this guard, opening ArticleWizard while in edit mode and
+      // pressing Esc closes the wizard AND exits the editor in one keystroke.
+      if (typeof document !== 'undefined' && document.querySelector('.modal-overlay')) return
       event.preventDefault()
       closingRef.current = true
       void (async () => {

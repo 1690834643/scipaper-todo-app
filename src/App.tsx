@@ -66,7 +66,7 @@ const ARTICLE_STORAGE_KEY = 'scipaper.selectedArticleId'
 
 function readSavedArticleId(): string | null {
   if (typeof window === 'undefined') return null
-  return window.localStorage.getItem(ARTICLE_STORAGE_KEY)
+  try { return window.localStorage.getItem(ARTICLE_STORAGE_KEY) } catch { return null }
 }
 
 function App() {
@@ -101,6 +101,23 @@ function App() {
     document.documentElement.dataset.fontScale = fontScale
     try { window.localStorage.setItem('scipaper.fontScale', fontScale) } catch {}
   }, [fontScale])
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try { return window.localStorage.getItem('scipaper.sidebarCollapsed') === '1' } catch { return false }
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem('scipaper.sidebarCollapsed', sidebarCollapsed ? '1' : '0') } catch {}
+  }, [sidebarCollapsed])
+
+  const [sectionNavCollapsed, setSectionNavCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try { return window.localStorage.getItem('scipaper.sectionNavCollapsed') === '1' } catch { return false }
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem('scipaper.sectionNavCollapsed', sectionNavCollapsed ? '1' : '0') } catch {}
+  }, [sectionNavCollapsed])
+
   const [route, setRoute] = useState<AppRoute>('home')
   const [writingStats, setWritingStats] = useState<WritingStatsType | null>(null)
   const [metaDraft, setMetaDraft] = useState({
@@ -147,6 +164,24 @@ function App() {
     setFocusViewMode('preview')
   }, [articleTab])
 
+  // Entering edit mode (writing) → reclaim screen for the canvas: collapse
+  // both left columns and pop the AI drawer. User can still manually expand
+  // them back during the session if they want to see the nav.
+  useEffect(() => {
+    if (focusViewMode === 'edit') {
+      setSidebarCollapsed(true)
+      setSectionNavCollapsed(true)
+      setAiOpen(true)
+    }
+  }, [focusViewMode])
+
+  // Leaving the article route while focusViewMode is still 'edit' would carry
+  // immersive collapse semantics into Home/Daily/Settings unexpectedly. Reset
+  // when navigating away.
+  useEffect(() => {
+    if (route !== 'article') setFocusViewMode('preview')
+  }, [route])
+
   // Single-block-per-section policy: focusBlock is derived directly from the
   // active section's first text block (created lazily on first save). No
   // focusBlockId / focusNewSection state needed any more.
@@ -171,13 +206,18 @@ function App() {
     setState(nextState)
     setWritingStats(await window.scipaper.getWritingStats())
 
+    let articleVanished = false
     setSelectedArticleId((currentId) => {
       if (currentId && nextState.articles.some((article) => article.id === currentId)) {
         return currentId
       }
-
+      articleVanished = true
       return nextState.articles[0]?.id ?? null
     })
+    // Article was deleted externally — pivot to fallback or null. Don't drop
+    // the user into immersive edit on a brand-new article they didn't open.
+    // (setFocusViewMode lives outside the updater to keep the setter pure.)
+    if (articleVanished) setFocusViewMode('preview')
   }
 
   useEffect(() => {
@@ -198,11 +238,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (selectedArticleId) {
-      window.localStorage.setItem(ARTICLE_STORAGE_KEY, selectedArticleId)
-    } else {
-      window.localStorage.removeItem(ARTICLE_STORAGE_KEY)
-    }
+    try {
+      if (selectedArticleId) {
+        window.localStorage.setItem(ARTICLE_STORAGE_KEY, selectedArticleId)
+      } else {
+        window.localStorage.removeItem(ARTICLE_STORAGE_KEY)
+      }
+    } catch {}
   }, [selectedArticleId])
 
   useEffect(() => {
@@ -291,6 +333,7 @@ function App() {
       }
 
       if (mod && (event.key === 'k' || event.key === 'K')) {
+        if (isInputFocused()) return
         event.preventDefault()
         setAiOpen(true)
       }
@@ -1020,7 +1063,7 @@ function App() {
         />
       ) : null}
 
-      <div className="app-shell">
+      <div className={`app-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
         <AppSidebar
           route={route}
           onNavigate={(next) => {
@@ -1039,6 +1082,8 @@ function App() {
           dailyGoal={state?.writingStreak.dailyGoal ?? 1000}
           hasOpenArticle={!!selectedArticle}
           openArticleTitle={selectedArticle?.title ?? null}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
         />
 
         <main className="route-main">
@@ -1249,8 +1294,18 @@ function App() {
                 </div>
               </header>
 
-              <div className="workspace-grid">
-                <nav className="section-nav">
+              <div className={`workspace-grid${sectionNavCollapsed ? ' is-nav-collapsed' : ''}`}>
+                <nav className={`section-nav${sectionNavCollapsed ? ' is-collapsed' : ''}`}>
+                  <button
+                    type="button"
+                    className="section-nav-toggle"
+                    onClick={() => setSectionNavCollapsed((v) => !v)}
+                    title={sectionNavCollapsed ? '展开章节导航' : '收起章节导航'}
+                    aria-label={sectionNavCollapsed ? '展开章节导航' : '收起章节导航'}
+                  >
+                    {sectionNavCollapsed ? '»' : '«'}
+                  </button>
+
                   <div className="nav-group">
                     {selectedArticle.sections.map((section) => (
                       <button
@@ -1258,8 +1313,10 @@ function App() {
                         className={`nav-chip ${articleTab === section.type ? 'active' : ''}`}
                         onClick={() => setArticleTab(section.type)}
                         type="button"
+                        title={SECTION_LABELS[section.type]}
                       >
-                        <span>{SECTION_LABELS[section.type]}</span>
+                        <span className="nav-chip-label">{SECTION_LABELS[section.type]}</span>
+                        <span className="nav-chip-glyph" aria-hidden>{SECTION_LABELS[section.type].slice(0, 1)}</span>
                         <em>{section.contentBlocks.length}</em>
                       </button>
                     ))}
@@ -1273,8 +1330,10 @@ function App() {
                       className={`nav-chip utility ${articleTab === tab ? 'active' : ''}`}
                       onClick={() => setArticleTab(tab)}
                       type="button"
+                      title={label}
                     >
-                      {label}
+                      <span className="nav-chip-label">{label}</span>
+                      <span className="nav-chip-glyph" aria-hidden>{label.slice(0, 1)}</span>
                     </button>
                   ))}
                 </nav>

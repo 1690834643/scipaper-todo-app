@@ -26,6 +26,81 @@
   height: 100vh;
   background: var(--c-panel-soft);
   backdrop-filter: var(--backdrop-blur);
+  min-width: 0;
+}
+
+/* Collapsed mode: 64px column → icon-only nav. Keep all interactive items
+ * reachable; rely on title= tooltips for labels. */
+.home-sidebar.is-collapsed {
+  padding: var(--sp-4) var(--sp-2);
+  gap: var(--sp-4);
+  align-items: center;
+}
+/* 64px strip — backdrop-filter is unnecessary GPU work; disable for perf.
+ * Specificity must beat `[data-theme="fresh"] .home-sidebar` (0,2,0) which
+ * lives in home-themes.css and re-applies the filter, so we use the same
+ * (0,2,0) selector and rely on this file loading after home-themes.css —
+ * verified by index.css import order. */
+[data-theme] .home-sidebar.is-collapsed,
+.home-sidebar.is-collapsed {
+  backdrop-filter: none;
+}
+.home-sidebar.is-collapsed .home-nav-item {
+  justify-content: center;
+  padding: 10px 0;
+  width: 40px;
+  gap: 0;
+}
+.home-sidebar.is-collapsed .home-nav-icon {
+  width: auto;
+  font-size: var(--fs-md);
+  opacity: 1;
+}
+.home-sidebar.is-collapsed .home-brand {
+  justify-content: center;
+}
+/* When section labels are removed the two nav lists abut visually; restore
+ * a small gap so users can perceive Workspace vs Tools grouping. */
+.home-sidebar.is-collapsed nav > .home-nav + .home-nav {
+  margin-top: var(--sp-3);
+}
+
+.home-sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.home-sidebar.is-collapsed .home-sidebar-top {
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.home-sidebar-collapse {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--c-ink-muted);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.home-sidebar-collapse:hover {
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
+  border-color: var(--c-accent);
+}
+.home-sidebar-collapse:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+[data-theme="pixel"] .home-sidebar-collapse {
+  border-radius: 0;
+  border-width: 2px;
 }
 
 .home-brand {
@@ -75,6 +150,12 @@
   transition: background var(--t-fast), color var(--t-fast);
 }
 .home-nav-item:hover {
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
+}
+.home-nav-item:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
   background: var(--c-accent-soft);
   color: var(--c-ink);
 }

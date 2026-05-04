@@ -68,9 +68,11 @@ const MAX_WIDTH_RATIO = 0.7
 
 function readSavedWidth(): number {
   if (typeof window === 'undefined') return 420
-  const v = window.localStorage.getItem(WIDTH_KEY)
-  const n = v ? parseInt(v, 10) : NaN
-  if (Number.isFinite(n) && n >= MIN_WIDTH) return n
+  try {
+    const v = window.localStorage.getItem(WIDTH_KEY)
+    const n = v ? parseInt(v, 10) : NaN
+    if (Number.isFinite(n) && n >= MIN_WIDTH) return n
+  } catch {}
   return 420
 }
 
@@ -131,7 +133,7 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    window.localStorage.setItem(WIDTH_KEY, String(width))
+    try { window.localStorage.setItem(WIDTH_KEY, String(width)) } catch {}
   }, [width])
 
   useEffect(() => {
@@ -170,6 +172,12 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       handleSend()
+    }
+    // Don't let Esc bubble to the FocusModeEditor window listener — pressing
+    // Esc while typing in the AI textarea should clear/blur the input, not
+    // exit immersive editing.
+    if (event.key === 'Escape') {
+      event.stopPropagation()
     }
   }
 
