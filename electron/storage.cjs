@@ -122,7 +122,21 @@ function readDatabase() {
     fs.copyFileSync(DATABASE_PATH + '.bak', DATABASE_PATH);
   }
   const raw = fs.readFileSync(DATABASE_PATH, 'utf-8');
-  return normalizeStoredDatabase(JSON.parse(raw));
+  try {
+    return normalizeStoredDatabase(JSON.parse(raw));
+  } catch (error) {
+    if (!fs.existsSync(DATABASE_PATH + '.bak')) {
+      throw error;
+    }
+    try {
+      const backupRaw = fs.readFileSync(DATABASE_PATH + '.bak', 'utf-8');
+      const backup = JSON.parse(backupRaw);
+      fs.copyFileSync(DATABASE_PATH + '.bak', DATABASE_PATH);
+      return normalizeStoredDatabase(backup);
+    } catch {
+      throw error;
+    }
+  }
 }
 
 let lastBackupAt = 0;
@@ -265,8 +279,9 @@ function ensureDefaultProviders(arr) {
   if (arr.length === 0) {
     return PRESETS.map((preset) => {
       const timestamp = new Date().toISOString();
+      const maxTokens = normalizeMaxTokens(preset.maxTokens ?? preset.defaultMaxTokens);
 
-      return {
+      const provider = {
         id: preset.presetId,
         name: preset.name,
         kind: preset.kind,
@@ -279,10 +294,17 @@ function ensureDefaultProviders(arr) {
         updatedAt: timestamp,
         presetId: preset.presetId,
       };
+
+      if (maxTokens !== undefined) provider.maxTokens = maxTokens;
+      return provider;
     });
   }
 
   return arr;
+}
+
+function normalizeMaxTokens(value) {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
 function normalizeLlmProviders(arr) {
@@ -296,7 +318,7 @@ function normalizeLlmProviders(arr) {
         return null;
       }
 
-      return {
+      const normalized = {
         id: provider.id,
         name: provider.name,
         kind: provider.kind,
@@ -309,6 +331,10 @@ function normalizeLlmProviders(arr) {
         updatedAt: provider.updatedAt,
         presetId: provider.presetId,
       };
+
+      const maxTokens = normalizeMaxTokens(provider.maxTokens);
+      if (maxTokens !== undefined) normalized.maxTokens = maxTokens;
+      return normalized;
     })
     .filter(Boolean);
 
@@ -525,6 +551,19 @@ function normalizeDailySession(session = {}) {
   };
 }
 
+function normalizeImportBatch(batch = {}) {
+  return {
+    id: typeof batch.id === 'string' ? batch.id : createId(),
+    articleId: typeof batch.articleId === 'string' ? batch.articleId : '',
+    kind: batch.kind === 'review' ? 'review' : 'manuscript',
+    sourceName: normalizeText(batch.sourceName),
+    createdAt: typeof batch.createdAt === 'string' ? batch.createdAt : now(),
+    blockIds: Array.isArray(batch.blockIds) ? batch.blockIds.filter((id) => typeof id === 'string') : [],
+    commentIds: Array.isArray(batch.commentIds) ? batch.commentIds.filter((id) => typeof id === 'string') : [],
+    roundIds: Array.isArray(batch.roundIds) ? batch.roundIds.filter((id) => typeof id === 'string') : [],
+  };
+}
+
 function normalizeStoredDatabase(data) {
   return {
     version: data.version ?? 1,
@@ -555,6 +594,7 @@ function normalizeStoredDatabase(data) {
     zoteroConfig: normalizeZoteroConfig(data.zoteroConfig),
     progressEntries: Array.isArray(data.progressEntries) ? data.progressEntries.map(normalizeProgressEntry) : [],
     dailySessions: Array.isArray(data.dailySessions) ? data.dailySessions.map(normalizeDailySession) : [],
+    importBatches: Array.isArray(data.importBatches) ? data.importBatches.map(normalizeImportBatch) : [],
     autoApproveTools: typeof data.autoApproveTools === 'boolean' ? data.autoApproveTools : false,
     customVocab: normalizeCustomVocab(data.customVocab),
     vocabPackPrefs: normalizeVocabPackPrefs(data.vocabPackPrefs),
@@ -1201,6 +1241,8 @@ function addProvider(input = {}) {
     createdAt: timestamp,
     updatedAt: timestamp,
   };
+  const maxTokens = normalizeMaxTokens(input.maxTokens);
+  if (maxTokens !== undefined) provider.maxTokens = maxTokens;
 
   db.llmProviders.push(provider);
   // If no provider is active yet, the new one becomes active automatically.
@@ -1242,6 +1284,12 @@ function updateProvider(id, patch = {}) {
 
   if (Object.prototype.hasOwnProperty.call(patch, 'temperature')) {
     provider.temperature = patch.temperature;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'maxTokens')) {
+    const maxTokens = normalizeMaxTokens(patch.maxTokens);
+    if (maxTokens === undefined) delete provider.maxTokens;
+    else provider.maxTokens = maxTokens;
   }
 
   if (Object.prototype.hasOwnProperty.call(patch, 'supportsToolUse')) {
@@ -1925,6 +1973,82 @@ function updateTextBlock(articleId, blockId, content, description = '', modified
   writeDatabase(database);
 }
 
+function importManuscriptSections(articleId, sections = [], mode = 'append') {
+  if (!Array.isArray(sections) || sections.length === 0) {
+    throw new Error('importManuscriptSections: sections cannot be empty');
+  }
+
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const timestamp = now();
+  const batch = {
+    id: createId(),
+    articleId,
+    kind: 'manuscript',
+    sourceName: normalizeText(sections[0]?.sourceName),
+    createdAt: timestamp,
+    blockIds: [],
+    commentIds: [],
+    roundIds: [],
+  };
+
+  for (const item of sections) {
+    const sectionType = item?.sectionType;
+    const cleanContent = normalizeText(item?.content);
+    if (!SECTION_TYPES.includes(sectionType) || !cleanContent) continue;
+
+    const section = findSection(article, sectionType);
+    const blockId = createId();
+    if (mode === 'replace') {
+      const nonTextBlocks = section.contentBlocks.filter((block) => normalizeBlockType(block.type) !== 'Text');
+      section.contentBlocks = [
+        {
+          id: blockId,
+          sectionId: section.id,
+          type: 'Text',
+          content: cleanContent,
+          description: normalizeText(item.description) || 'Imported manuscript draft',
+          orderIndex: 0,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          createdBy: 'Import Assistant',
+          updatedBy: 'Import Assistant',
+          versions: [createTextVersion(cleanContent, 'Import Assistant', '导入手稿正文')],
+        },
+        ...nonTextBlocks,
+      ].map((block, orderIndex) => ({ ...block, orderIndex }));
+    } else {
+      section.contentBlocks.push({
+        id: blockId,
+        sectionId: section.id,
+        type: 'Text',
+        content: cleanContent,
+        description: normalizeText(item.description) || 'Imported manuscript draft',
+        orderIndex: section.contentBlocks.length,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        createdBy: 'Import Assistant',
+        updatedBy: 'Import Assistant',
+        versions: [createTextVersion(cleanContent, 'Import Assistant', '导入手稿正文')],
+      });
+    }
+    batch.blockIds.push(blockId);
+
+    database.writingStreak = applyWritingStreak(database.writingStreak, {
+      added: countWords(cleanContent),
+      removed: 0,
+      source: 'import',
+    });
+  }
+
+  touchArticle(article);
+  if (batch.blockIds.length > 0) {
+    database.importBatches = database.importBatches || [];
+    database.importBatches.unshift(batch);
+  }
+  writeDatabase(database);
+}
+
 const TOKEN_REGEX =
   /([\u4e00-\u9fa5])|([a-zA-Z]+(?:['-][a-zA-Z]+)*)|(\d+(?:\.\d+)?)|(\s+)|([^\s\u4e00-\u9fa5\w])/g;
 
@@ -2270,10 +2394,9 @@ function addAssetBlock(articleId, sectionType, kind, sourcePath, modifiedBy = 'S
 function addProgressEntry(payload, createdBy = 'user') {
   const database = readDatabase();
   if (!payload || typeof payload !== 'object') throw new Error('Payload required');
-  if (!payload.articleId) throw new Error('articleId is required');
   if (!payload.title) throw new Error('title is required');
 
-  const article = findArticle(database, payload.articleId);
+  const article = payload.articleId ? findArticle(database, payload.articleId) : null;
   const today = localIsoDate();
   const entry = normalizeProgressEntry({
     id: createId(),
@@ -2298,7 +2421,7 @@ function addProgressEntry(payload, createdBy = 'user') {
     session.progressEntryIds.unshift(entry.id);
   }
 
-  touchArticle(article);
+  if (article) touchArticle(article);
   writeDatabase(database);
   return entry;
 }
@@ -2532,6 +2655,114 @@ function addReviewComment(articleId, roundId, payload) {
   }
 
   article.status = 'UnderReview';
+  touchArticle(article);
+  writeDatabase(database);
+}
+
+function importReviewComments(articleId, payload = {}) {
+  const groups = Array.isArray(payload.groups) ? payload.groups : [];
+  if (groups.length === 0) {
+    throw new Error('importReviewComments: groups cannot be empty');
+  }
+
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  let round = payload.roundId ? article.reviewRounds.find((item) => item.id === payload.roundId) : null;
+  const batch = {
+    id: createId(),
+    articleId,
+    kind: 'review',
+    sourceName: normalizeText(payload.sourceName),
+    createdAt: now(),
+    blockIds: [],
+    commentIds: [],
+    roundIds: [],
+  };
+
+  if (!round) {
+    const nextRoundNumber =
+      payload.roundNumber ||
+      (article.reviewRounds.length > 0
+        ? Math.max(...article.reviewRounds.map((item) => item.roundNumber)) + 1
+        : 1);
+    round = {
+      id: createId(),
+      articleId,
+      roundNumber: nextRoundNumber,
+      submittedAt: payload.submittedAt || localIsoDate(),
+      journalName: normalizeText(payload.journalName) || article.targetJournal || '未填写',
+      manuscriptNumber: normalizeText(payload.manuscriptNumber),
+      reviewReceivedAt: payload.reviewReceivedAt || localIsoDate(),
+      comments: [],
+    };
+    article.reviewRounds.unshift(round);
+    batch.roundIds.push(round.id);
+  }
+
+  for (const group of groups) {
+    const reviewerId = normalizeText(group?.reviewerId) || `Reviewer ${round.comments.length + 1}`;
+    const comments = Array.isArray(group?.comments) ? group.comments : [];
+    for (const comment of comments) {
+      const originalText = normalizeText(comment?.originalText);
+      if (!originalText) continue;
+      const commentId = createId();
+      round.comments.push({
+        id: commentId,
+        reviewRoundId: round.id,
+        reviewerId,
+        originalText,
+        type: comment?.type === 'Minor' ? 'Minor' : 'Major',
+        suggestedSection: normalizeText(comment?.suggestedSection),
+        status: comment?.status || 'Pending',
+        revisions: [],
+      });
+      batch.commentIds.push(commentId);
+    }
+  }
+
+  if (!round.reviewReceivedAt) {
+    round.reviewReceivedAt = localIsoDate();
+  }
+  article.status = 'UnderReview';
+  touchArticle(article);
+  if (batch.commentIds.length > 0) {
+    database.importBatches = database.importBatches || [];
+    database.importBatches.unshift(batch);
+  }
+  writeDatabase(database);
+}
+
+function undoLastImportBatch(articleId) {
+  const database = readDatabase();
+  database.importBatches = database.importBatches || [];
+  const batchIndex = database.importBatches.findIndex((batch) => !articleId || batch.articleId === articleId);
+  if (batchIndex < 0) {
+    throw new Error('没有可撤销的导入批次');
+  }
+  const batch = database.importBatches[batchIndex];
+  const article = findArticle(database, batch.articleId);
+  const blockIds = new Set(batch.blockIds || []);
+  const commentIds = new Set(batch.commentIds || []);
+  const roundIds = new Set(batch.roundIds || []);
+
+  for (const section of article.sections || []) {
+    const before = section.contentBlocks.length;
+    section.contentBlocks = section.contentBlocks
+      .filter((block) => !blockIds.has(block.id))
+      .map((block, orderIndex) => ({ ...block, orderIndex }));
+    if (section.contentBlocks.length !== before) {
+      section.updatedAt = now();
+    }
+  }
+
+  for (const round of article.reviewRounds || []) {
+    round.comments = (round.comments || []).filter((comment) => !commentIds.has(comment.id));
+  }
+  article.reviewRounds = (article.reviewRounds || []).filter((round) => {
+    return !(roundIds.has(round.id) && (!round.comments || round.comments.length === 0));
+  });
+
+  database.importBatches.splice(batchIndex, 1);
   touchArticle(article);
   writeDatabase(database);
 }
@@ -2904,6 +3135,8 @@ module.exports = {
   updateResearchContext,
   addTextBlock,
   updateSectionContent,
+  importManuscriptSections,
+  undoLastImportBatch,
   updateTextBlock,
   updateTextBlockWithStreak,
   recordBlockVersion,
@@ -2930,6 +3163,7 @@ module.exports = {
   getDailySession,
   addReviewRound,
   addReviewComment,
+  importReviewComments,
   updateReviewCommentStatus,
   addRevision,
   exportMarkdown,
