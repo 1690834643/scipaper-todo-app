@@ -189,7 +189,7 @@ export const AutocompleteExtension = Extension.create<AutocompleteOptions>({
           },
         },
 
-        view(_editorView) {
+        view() {
           let last: AutocompleteState = EMPTY_STATE
           return {
             update(view) {

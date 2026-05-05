@@ -72,7 +72,9 @@ function readSavedWidth(): number {
     const v = window.localStorage.getItem(WIDTH_KEY)
     const n = v ? parseInt(v, 10) : NaN
     if (Number.isFinite(n) && n >= MIN_WIDTH) return n
-  } catch {}
+  } catch {
+    // Ignore saved width read failures.
+  }
   return 420
 }
 
@@ -133,7 +135,9 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    try { window.localStorage.setItem(WIDTH_KEY, String(width)) } catch {}
+    try { window.localStorage.setItem(WIDTH_KEY, String(width)) } catch {
+      // Ignore saved width persistence failures.
+    }
   }, [width])
 
   useEffect(() => {

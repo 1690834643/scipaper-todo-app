@@ -147,6 +147,15 @@ function RevisionComposer({
 }
 
 export function ReviewPanel({ article, onAddRound, onAddComment, onUpdateStatus, onAddRevision }: ReviewPanelProps) {
+  function groupCommentsByReviewer(comments: ReviewComment[]) {
+    const groups = new Map<string, ReviewComment[]>()
+    for (const comment of comments) {
+      const reviewerId = comment.reviewerId || 'Reviewer'
+      groups.set(reviewerId, [...(groups.get(reviewerId) || []), comment])
+    }
+    return Array.from(groups.entries()).map(([reviewerId, items]) => ({ reviewerId, comments: items }))
+  }
+
   return (
     <div className="panel-stack">
       <RoundComposer onSubmit={onAddRound} />
@@ -175,41 +184,55 @@ export function ReviewPanel({ article, onAddRound, onAddComment, onUpdateStatus,
           <CommentComposer round={round} onSubmit={onAddComment} />
 
           <div className="comment-list">
-            {round.comments.map((comment) => (
-              <article key={comment.id} className="comment-card">
-                <div className="comment-head">
-                  <div>
-                    <strong>{comment.reviewerId}</strong>
-                    <p>
-                      {comment.type} · 建议修改 {comment.suggestedSection || '未指定'}
-                    </p>
-                  </div>
-                  <select
-                    value={comment.status}
-                    onChange={(event) => onUpdateStatus(round.id, comment.id, event.target.value as CommentStatus)}
-                  >
-                    <option value="Pending">待处理</option>
-                    <option value="InProgress">修改中</option>
-                    <option value="Completed">已完成</option>
-                    <option value="Disagreed">不同意</option>
-                  </select>
-                </div>
-
-                <p className="comment-body">{comment.originalText}</p>
-
-                <div className="revision-list">
-                  {comment.revisions.map((revision) => (
-                    <div key={revision.id} className="revision-item">
-                      <strong>{revision.description}</strong>
-                      <p>{revision.responseText || '未填写回复文本'}</p>
-                      <span>{new Date(revision.completedAt).toLocaleString('zh-CN')}</span>
+            {groupCommentsByReviewer(round.comments).map((group) => {
+              const pendingCount = group.comments.filter((comment) => comment.status !== 'Completed').length
+              return (
+                <section key={group.reviewerId} className="panel-card">
+                  <div className="section-heading">
+                    <div>
+                      <p className="eyebrow">Reviewer</p>
+                      <h3>{group.reviewerId}</h3>
+                      <p>{group.comments.length} 条意见 · {pendingCount} 条未完成</p>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                  {group.comments.map((comment, index) => (
+                    <article key={comment.id} className="comment-card">
+                      <div className="comment-head">
+                        <div>
+                          <strong>Comment {index + 1}</strong>
+                          <p>
+                            {comment.type} · 建议修改 {comment.suggestedSection || '未指定'}
+                          </p>
+                        </div>
+                        <select
+                          value={comment.status}
+                          onChange={(event) => onUpdateStatus(round.id, comment.id, event.target.value as CommentStatus)}
+                        >
+                          <option value="Pending">待处理</option>
+                          <option value="InProgress">修改中</option>
+                          <option value="Completed">已完成</option>
+                          <option value="Disagreed">不同意</option>
+                        </select>
+                      </div>
 
-                <RevisionComposer roundId={round.id} comment={comment} onSubmit={onAddRevision} />
-              </article>
-            ))}
+                      <p className="comment-body">{comment.originalText}</p>
+
+                      <div className="revision-list">
+                        {comment.revisions.map((revision) => (
+                          <div key={revision.id} className="revision-item">
+                            <strong>{revision.description}</strong>
+                            <p>{revision.responseText || '未填写回复文本'}</p>
+                            <span>{new Date(revision.completedAt).toLocaleString('zh-CN')}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <RevisionComposer roundId={round.id} comment={comment} onSubmit={onAddRevision} />
+                    </article>
+                  ))}
+                </section>
+              )
+            })}
           </div>
         </section>
       ))}

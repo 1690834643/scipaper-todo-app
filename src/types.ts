@@ -144,7 +144,7 @@ export type ProgressEntryKind =
 export interface ProgressEntry {
   id: string
   date: string             // YYYY-MM-DD
-  articleId: string        // 必须挂到一篇文章
+  articleId: string        // 空字符串表示未归属；有值时挂到一篇文章
   kind: ProgressEntryKind
   title: string            // 一句话："读了 Smith 2024，找到 piRNA 通路反例"
   detail?: string

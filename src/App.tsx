@@ -17,6 +17,8 @@ import { AIAssistantPanel, type AssistantMessage } from './components/AIAssistan
 import { ApprovalDialog } from './components/ApprovalDialog'
 import { SplashScreen } from './components/SplashScreen'
 import { ShareCard } from './components/ShareCard'
+import { ImportAssistantModal } from './components/ImportAssistantModal'
+import { ThesisDetailView } from './components/ThesisDetailView'
 import { pickJoke, pickAnalogy } from './utils/jokesAndAnalogies'
 import type { AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig, VocabPack, VocabPackSummary, SciSection, SciPhrase } from './types'
 import { BUILTIN_PACKS, aggregatePackWords, aggregatePackPhrases } from './data/sci-vocab'
@@ -74,6 +76,7 @@ function App() {
   const [state, setState] = useState<AppState | null>(null)
   const [mcpInfo, setMcpInfo] = useState<McpInfo | null>(null)
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
+  const [selectedThesisId, setSelectedThesisId] = useState<string | null>(null)
   const [articleTab, setArticleTab] = useState<ArticleTab>('Introduction')
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
@@ -95,12 +98,16 @@ function App() {
     try {
       const saved = window.localStorage.getItem('scipaper.fontScale')
       if (saved === 'sm' || saved === 'md' || saved === 'lg' || saved === 'xl') return saved
-    } catch {}
+    } catch {
+      // localStorage can be unavailable in restricted browser contexts.
+    }
     return 'md'
   })
   useEffect(() => {
     document.documentElement.dataset.fontScale = fontScale
-    try { window.localStorage.setItem('scipaper.fontScale', fontScale) } catch {}
+    try { window.localStorage.setItem('scipaper.fontScale', fontScale) } catch {
+      // Ignore preference persistence failures.
+    }
   }, [fontScale])
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -108,7 +115,9 @@ function App() {
     try { return window.localStorage.getItem('scipaper.sidebarCollapsed') === '1' } catch { return false }
   })
   useEffect(() => {
-    try { window.localStorage.setItem('scipaper.sidebarCollapsed', sidebarCollapsed ? '1' : '0') } catch {}
+    try { window.localStorage.setItem('scipaper.sidebarCollapsed', sidebarCollapsed ? '1' : '0') } catch {
+      // Ignore preference persistence failures.
+    }
   }, [sidebarCollapsed])
 
   const [sectionNavCollapsed, setSectionNavCollapsed] = useState<boolean>(() => {
@@ -116,7 +125,9 @@ function App() {
     try { return window.localStorage.getItem('scipaper.sectionNavCollapsed') === '1' } catch { return false }
   })
   useEffect(() => {
-    try { window.localStorage.setItem('scipaper.sectionNavCollapsed', sectionNavCollapsed ? '1' : '0') } catch {}
+    try { window.localStorage.setItem('scipaper.sectionNavCollapsed', sectionNavCollapsed ? '1' : '0') } catch {
+      // Ignore preference persistence failures.
+    }
   }, [sectionNavCollapsed])
 
   const [route, setRoute] = useState<AppRoute>('home')
@@ -132,6 +143,7 @@ function App() {
   const [activeProviderId, setActiveProviderId] = useState<string | null>(null)
   const [presets, setPresets] = useState<LlmPreset[]>([])
   const [aiOpen, setAiOpen] = useState(false)
+  const [importAssistantOpen, setImportAssistantOpen] = useState(false)
   const [aiMessages, setAiMessages] = useState<AssistantMessage[]>([])
   const [aiBusy, setAiBusy] = useState(false)
   const [aiToolCallCount, setAiToolCallCount] = useState(0)
@@ -256,7 +268,9 @@ function App() {
       } else {
         window.localStorage.removeItem(ARTICLE_STORAGE_KEY)
       }
-    } catch {}
+    } catch {
+      // Ignore article selection persistence failures.
+    }
   }, [selectedArticleId])
 
   useEffect(() => {
@@ -1025,8 +1039,14 @@ function App() {
 
   function openArticle(id: string) {
     setSelectedArticleId(id)
+    setSelectedThesisId(null)
     setArticleTab('Introduction')
     setRoute('article')
+  }
+
+  function openThesis(id: string) {
+    setSelectedThesisId(id)
+    setRoute('thesis')
   }
 
   async function handleAddProgressEntry(payload: {
@@ -1058,6 +1078,7 @@ function App() {
   }
 
   const today = localIsoDate()
+  const selectedThesis = state?.theses.find((thesis) => thesis.id === selectedThesisId) ?? null
   const todayWords = state?.writingStreak.todayWords ?? 0
   const todayEntries = (state?.progressEntries ?? []).filter((entry) => entry.date === today)
   const kindOrder: ProgressEntryKind[] = ['read', 'experiment', 'writing', 'analysis', 'idea', 'cite', 'focus', 'mood']
@@ -1094,6 +1115,16 @@ function App() {
         })
         .filter((group) => group.count > 0)
     : []
+  const aiContextHint = (() => {
+    if (route === 'article' && selectedArticle) {
+      return `当前文章: ${selectedArticle.title}${isSectionTab(articleTab) ? ' · ' + SECTION_LABELS[articleTab] : ''}`
+    }
+    if (route === 'thesis' && selectedThesis) return `当前学位论文: ${selectedThesis.title}`
+    if (route === 'daily') return '当前页面: Daily Log · 可记录未归属科研进展'
+    if (route === 'library') return '当前页面: Library · 未限定到单篇文章'
+    if (route === 'settings') return '当前页面: Settings · 配置与工具管理'
+    return selectedArticle ? `已选择文章: ${selectedArticle.title}` : undefined
+  })()
 
   return (
     <>
@@ -1121,11 +1152,7 @@ function App() {
         toolCallCount={aiToolCallCount}
         onSend={handleAiSend}
         onCancel={handleAiCancel}
-        contextHint={
-          selectedArticle
-            ? `当前文章: ${selectedArticle.title}${isSectionTab(articleTab) ? ' · ' + articleTab : ''}`
-            : undefined
-        }
+        contextHint={aiContextHint}
         onOpenSettings={() => {
           setAiOpen(false)
           setPendingSettingsFocus('ai')
@@ -1134,6 +1161,21 @@ function App() {
         scenarios={scenarios.filter((s) => s.enabled)}
         currentScenarioId={currentScenarioId}
         onChangeScenario={setCurrentScenarioId}
+      />
+
+      <ImportAssistantModal
+        open={importAssistantOpen}
+        article={selectedArticle ?? null}
+        busy={busy}
+        onClose={() => setImportAssistantOpen(false)}
+        onApplied={async (nextState, message) => {
+          setState(nextState)
+          setWritingStats(await window.scipaper.getWritingStats())
+          if (message.includes('审稿')) setArticleTab('Review')
+          setRoute('article')
+          setNotice(message)
+        }}
+        onError={(message) => setNotice(message)}
       />
 
       <ApprovalDialog
@@ -1214,9 +1256,7 @@ function App() {
               articles={filteredArticles}
               theses={filteredTheses}
               onOpenArticle={openArticle}
-              onOpenThesis={() => {
-                setNotice('学位论文专属编辑视图待补,先看 Library 卡片信息。')
-              }}
+              onOpenThesis={openThesis}
               onNewArticle={() => setWizardOpen(true)}
               onNewThesis={() => setThesisWizardOpen(true)}
               onDeleteArticle={async (id, title) => {
@@ -1229,6 +1269,15 @@ function App() {
                   setNotice(error instanceof Error ? error.message : '删除失败')
                 }
               }}
+            />
+          ) : null}
+
+          {state && route === 'thesis' && selectedThesis ? (
+            <ThesisDetailView
+              thesis={selectedThesis}
+              articles={state.articles}
+              onBack={() => setRoute('library')}
+              onOpenArticle={openArticle}
             />
           ) : null}
 
@@ -1351,6 +1400,18 @@ function App() {
                 </div>
 
                 <div className="header-actions">
+                  {activeSection ? (
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => setFocusViewMode('edit')}
+                    >
+                      继续写 {SECTION_LABELS[activeSection.type]}
+                    </button>
+                  ) : null}
+                  <button className="ghost-button" type="button" onClick={() => setImportAssistantOpen(true)}>
+                    导入正文/审稿
+                  </button>
                   <button className="ghost-button" onClick={() => window.scipaper.exportMarkdown(selectedArticle.id)} type="button">
                     导出 Markdown
                   </button>
@@ -1494,7 +1555,7 @@ function App() {
                         const next = await window.scipaper.deleteAnnotation(selectedArticleId, id)
                         setState(next)
                       }}
-                      onExit={() => setArticleTab('Outline')}
+                      onExit={() => setFocusViewMode('preview')}
                       onRecordVersion={async (changeDescription) => {
                         if (!selectedArticleId || !focusBlock) return
                         const next = await window.scipaper.recordBlockVersion(

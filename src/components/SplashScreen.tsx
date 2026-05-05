@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const HEALING_LINES = [
   '今天，写一段就够了。',
@@ -13,6 +13,8 @@ const HEALING_LINES = [
   '今天的进度，是明天的轻松。',
 ]
 
+const SPLASH_TAGLINE = HEALING_LINES[Math.floor(Math.random() * HEALING_LINES.length)]
+
 interface SplashScreenProps {
   /** Duration in ms before auto-dismiss. Default 4200ms. */
   duration?: number
@@ -22,10 +24,7 @@ interface SplashScreenProps {
 
 export function SplashScreen({ duration = 4200, onDone }: SplashScreenProps) {
   const [phase, setPhase] = useState<'enter' | 'exit'>('enter')
-  const tagline = useMemo(
-    () => HEALING_LINES[Math.floor(Math.random() * HEALING_LINES.length)],
-    [],
-  )
+  const tagline = SPLASH_TAGLINE
   // 持有 mount-time timer handles 以便 skip() 时清掉，避免 onDone 在
   // skip 350ms 后又被 mount timer 在 duration ms 时再触发一次。
   const exitTimerRef = useRef<number | null>(null)
@@ -47,7 +46,6 @@ export function SplashScreen({ duration = 4200, onDone }: SplashScreenProps) {
       if (doneTimerRef.current !== null) window.clearTimeout(doneTimerRef.current)
       if (skipTimerRef.current !== null) window.clearTimeout(skipTimerRef.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration])
 
   function skip() {

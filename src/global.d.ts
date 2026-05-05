@@ -1,5 +1,6 @@
 import type { AnnotationAuthor, AnnotationStatus, AppState, ArticleStatus, BlockPreview, CreateArticlePayload, CreateThesisPayload, LlmProviderKind, LlmProvidersState, LlmStreamEvent, LlmTestResult, McpInfo, MoodType, SectionType, ThemeType, UpdateThesisPayload, WritingStats, WritingStreak, TagColor, WritingScenario, ItalicGuide, ZoteroConfig, ProgressEntry, ProgressEntryKind, Finding, FindingStatus, DailySession } from './types'
 import type { BibTeXEntry } from './utils/bibtexParser'
+import type { ParsedManuscriptSection, ParsedReviewerGroup } from './utils/importParsers'
 
 declare global {
   interface Window {
@@ -59,6 +60,31 @@ declare global {
         sectionType: SectionType,
         kind: 'image' | 'file',
       ) => Promise<AppState>
+      selectImportTextFile: () => Promise<{ filePath: string; fileName: string; text: string } | null>
+      importManuscriptSections: (
+        articleId: string,
+        sections: Array<Pick<ParsedManuscriptSection, 'sectionType' | 'content'> & { description?: string; sourceName?: string }>,
+        mode?: 'append' | 'replace',
+      ) => Promise<AppState>
+      importReviewComments: (
+        articleId: string,
+        payload: {
+          roundId?: string
+          submittedAt?: string
+          journalName?: string
+          manuscriptNumber?: string
+          reviewReceivedAt?: string
+          sourceName?: string
+          groups: ParsedReviewerGroup[]
+        },
+      ) => Promise<AppState>
+      undoLastImport: (articleId: string) => Promise<AppState>
+      reformatImportText: (payload: {
+        text: string
+        mode: 'manuscript' | 'review'
+        articleLanguage?: 'zh' | 'en'
+        providerId?: string
+      }) => Promise<{ text: string }>
       openBlockAsset: (articleId: string, blockId: string) => Promise<boolean>
       getBlockPreview: (articleId: string, blockId: string) => Promise<BlockPreview>
       openArticleFolder: (articleId: string) => Promise<boolean>

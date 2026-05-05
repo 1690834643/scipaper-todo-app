@@ -12,7 +12,7 @@ const SESSION_KEY = 'scipaper.activeWritingSession'
 
 function readSessionStart(): string | null {
   if (typeof window === 'undefined') return null
-  let v: string | null = null
+  let v: string | null
   try { v = window.localStorage.getItem(SESSION_KEY) } catch { return null }
   if (!v) return null
   // sanity: must be ISO string from this same calendar day
@@ -45,13 +45,17 @@ export function WritingStreak({ streak, onUpdateGoal, onShareToday }: WritingStr
 
   function startWriting() {
     const iso = new Date().toISOString()
-    try { window.localStorage.setItem(SESSION_KEY, iso) } catch {}
+    try { window.localStorage.setItem(SESSION_KEY, iso) } catch {
+      // Ignore session persistence failures.
+    }
     setSessionStart(iso)
     setNow(Date.now())
   }
 
   function endWriting() {
-    try { window.localStorage.removeItem(SESSION_KEY) } catch {}
+    try { window.localStorage.removeItem(SESSION_KEY) } catch {
+      // Ignore session persistence failures.
+    }
     setSessionStart(null)
     if (onShareToday) onShareToday()
   }

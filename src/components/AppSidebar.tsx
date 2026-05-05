@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import * as React from 'react'
 
-export type AppRoute = 'home' | 'library' | 'article' | 'settings' | 'daily'
+export type AppRoute = 'home' | 'library' | 'article' | 'thesis' | 'settings' | 'daily'
 
 interface AppSidebarProps {
   route: AppRoute

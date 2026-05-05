@@ -3,17 +3,17 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Attach build artifacts to the matching tag release (requires the tag to exist on GitHub)'
+        description: "Attach build artifacts to the matching tag release"
         required: false
         default: false
         type: boolean
 
 permissions:
-  contents: write   # required so GITHUB_TOKEN can create/update releases
+  contents: write
 
 jobs:
   build:
@@ -32,32 +32,42 @@ jobs:
             artifact: win-dist
             paths: |
               release/*.exe
+              release/*.blockmap
     runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "22"
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (no publish)
+      - name: Test
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build without publishing
         if: ${{ !(startsWith(github.ref, 'refs/tags/v') || inputs.publish == true) }}
         run: npm run ${{ matrix.script }} -- --publish never
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Build & publish to GitHub release
+      - name: Build and publish GitHub Release
         if: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish == true }}
         run: npm run ${{ matrix.script }} -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Upload artifacts (always, as a backup)
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}

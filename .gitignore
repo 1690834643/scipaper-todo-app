@@ -46,6 +46,7 @@ CODE_REVIEW.md
 handover/
 .codex
 .claude/
+.planning/
 docs/superpowers/
 
 # Stray asset artifacts that shouldn't sit at repo root
