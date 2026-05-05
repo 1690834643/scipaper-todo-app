@@ -175,6 +175,30 @@ function releaseWriteLock(lock) {
   try { fs.unlinkSync(lock.path); } catch {}
 }
 
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function renameDatabaseFile(tmpPath, targetPath) {
+  const retryableCodes = new Set(['EPERM', 'EACCES', 'EBUSY']);
+  let lastError;
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      fs.renameSync(tmpPath, targetPath);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!retryableCodes.has(error?.code) || attempt === 5) {
+        throw error;
+      }
+      sleepSync(25 * (attempt + 1));
+    }
+  }
+
+  throw lastError;
+}
+
 function writeDatabase(data) {
   ensureStore();
   const json = JSON.stringify(normalizeStoredDatabase(data), null, 2);
@@ -190,7 +214,7 @@ function writeDatabase(data) {
       } catch {}
     }
     // Atomic on POSIX; Node fs.renameSync replaces target on Windows too
-    fs.renameSync(tmpPath, DATABASE_PATH);
+    renameDatabaseFile(tmpPath, DATABASE_PATH);
   } finally {
     releaseWriteLock(lock);
   }

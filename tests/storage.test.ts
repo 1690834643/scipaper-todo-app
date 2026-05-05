@@ -185,6 +185,32 @@ describe('storage database recovery', () => {
     expect(state.articles[0]?.id).toBe('article-from-backup')
     expect(fs.readFileSync(storage.DATABASE_PATH, 'utf-8')).toBe(JSON.stringify(backup))
   })
+
+  it('retries database rename when Windows temporarily locks the destination', () => {
+    const storage = loadStorage(makeHome())
+    const originalRename = fs.renameSync
+    let attempts = 0
+
+    fs.renameSync = ((from: fs.PathLike, to: fs.PathLike) => {
+      if (String(to).endsWith('database.json') && attempts === 0) {
+        attempts += 1
+        const error = new Error('temporary Windows lock') as NodeJS.ErrnoException
+        error.code = 'EPERM'
+        throw error
+      }
+      attempts += 1
+      return originalRename(from, to)
+    }) as typeof fs.renameSync
+
+    try {
+      const article = createSmokeArticle(storage)
+
+      expect(article.id).toBeTruthy()
+      expect(attempts).toBeGreaterThanOrEqual(2)
+    } finally {
+      fs.renameSync = originalRename
+    }
+  })
 })
 
 describe('storage LLM providers', () => {
