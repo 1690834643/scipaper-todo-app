@@ -6,10 +6,6 @@ const SECTION_TYPE_ENUM = [
   'Results',
   'Discussion',
   'References',
-  'Acknowledgments',
-  'Figures',
-  'Tables',
-  'SupplementaryMaterials',
 ];
 
 const ARTICLE_STATUS_ENUM = [

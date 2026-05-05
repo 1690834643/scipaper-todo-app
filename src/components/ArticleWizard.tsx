@@ -63,6 +63,19 @@ export function ArticleWizard({ open, busy, onClose, onSubmit }: ArticleWizardPr
     await onSubmit(form)
   }
 
+  async function handleQuickCreate() {
+    await onSubmit({
+      ...form,
+      title: form.title.trim() || '未命名研究',
+      researchContext: {
+        scientificQuestion: form.researchContext.scientificQuestion,
+        observedPhenomenon: form.researchContext.observedPhenomenon,
+        hypothesis: form.researchContext.hypothesis,
+        approach: form.researchContext.approach,
+      },
+    })
+  }
+
   return createPortal(
     <div className="modal-overlay" role="presentation">
       <div className="modal-dialog">
@@ -133,7 +146,10 @@ export function ArticleWizard({ open, busy, onClose, onSubmit }: ArticleWizardPr
                 </small>
               </label>
               <div className="form-tip">
-                <p>这里允许先留空。真正必填的是后面的 4 个研究问题。</p>
+                <p>可以继续填写完整研究问题，也可以先快速创建草稿，后面再补。</p>
+                <button className="ghost-button" type="button" disabled={busy} onClick={handleQuickCreate}>
+                  快速创建草稿
+                </button>
               </div>
             </div>
           )}

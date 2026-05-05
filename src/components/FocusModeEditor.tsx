@@ -107,7 +107,9 @@ function readInitialFontId(): string {
   try {
     const saved = window.localStorage.getItem(FONT_STORAGE_KEY)
     if (saved && FONT_OPTIONS.some((f) => f.id === saved)) return saved
-  } catch {}
+  } catch {
+    // Ignore saved font preference read failures.
+  }
   return 'default'
 }
 
@@ -125,7 +127,9 @@ function readInitialFontSizeId(): string {
   try {
     const saved = window.localStorage.getItem(FONT_SIZE_STORAGE_KEY)
     if (saved && FONT_SIZE_OPTIONS.some((f) => f.id === saved)) return saved
-  } catch {}
+  } catch {
+    // Ignore saved font-size preference read failures.
+  }
   return 'md'
 }
 
@@ -160,7 +164,9 @@ function readInitialRailCollapse(): Record<RailSectionId, boolean> {
 let __orphanShowPrevCleaned = false
 function readInitialShowPrevVersion(): boolean {
   if (typeof window !== 'undefined' && !__orphanShowPrevCleaned) {
-    try { window.localStorage.removeItem('scipaper.focusShowPrevVersion') } catch {}
+    try { window.localStorage.removeItem('scipaper.focusShowPrevVersion') } catch {
+      // Ignore legacy preference cleanup failures.
+    }
     __orphanShowPrevCleaned = true
   }
   return false
@@ -320,13 +326,19 @@ export function FocusModeEditor({
   const [showPrevVersion, setShowPrevVersion] = useState<boolean>(readInitialShowPrevVersion)
   const [autocompleteState, setAutocompleteState] = useState<AutocompleteState>(EMPTY_AUTOCOMPLETE)
   useEffect(() => {
-    try { window.localStorage.setItem(FONT_STORAGE_KEY, fontId) } catch {}
+    try { window.localStorage.setItem(FONT_STORAGE_KEY, fontId) } catch {
+      // Ignore preference persistence failures.
+    }
   }, [fontId])
   useEffect(() => {
-    try { window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSizeId) } catch {}
+    try { window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSizeId) } catch {
+      // Ignore preference persistence failures.
+    }
   }, [fontSizeId])
   useEffect(() => {
-    try { window.localStorage.setItem(RAIL_COLLAPSE_STORAGE_KEY, JSON.stringify(railCollapsed)) } catch {}
+    try { window.localStorage.setItem(RAIL_COLLAPSE_STORAGE_KEY, JSON.stringify(railCollapsed)) } catch {
+      // Ignore preference persistence failures.
+    }
   }, [railCollapsed])
   const fontStack = FONT_OPTIONS.find((f) => f.id === fontId)?.stack || ''
   const fontSizePx = FONT_SIZE_OPTIONS.find((f) => f.id === fontSizeId)?.px ?? 16
@@ -360,14 +372,40 @@ export function FocusModeEditor({
   }
   const draftRef = useRef<DraftState | null>(null)
   const draftTextareaRef = useRef<HTMLTextAreaElement>(null)
-  draftRef.current = draft
-
-  const sectionRef = useRef<SciSection>(sectionTypeToSciSection(section.type))
   useEffect(() => {
-    sectionRef.current = sectionTypeToSciSection(section.type)
-  }, [section.type])
+    draftRef.current = draft
+  }, [draft])
+
+  const currentSciSection = sectionTypeToSciSection(section.type)
 
   const initialContent = useMemo(() => plainTextToHtml(block?.content ?? ''), [block?.id])
+
+  function scheduleSave(text: string, desc: string) {
+    if (text === lastSavedTextRef.current && desc === lastSavedDescRef.current) {
+      return
+    }
+    if (!block && !text.trim()) {
+      return
+    }
+    safeSetSaveState('dirty')
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = window.setTimeout(async () => {
+      safeSetSaveState('saving')
+      try {
+        await onSave(text, desc)
+        lastSavedTextRef.current = text
+        lastSavedDescRef.current = desc
+        safeSetSaveState('saved')
+        // Quietly fade back to idle after a short beat — no flashing text.
+        window.setTimeout(
+          () => mountedRef.current && setSaveState((prev) => (prev === 'saved' ? 'idle' : prev)),
+          900,
+        )
+      } catch {
+        safeSetSaveState('dirty')
+      }
+    }, 1000)
+  }
 
   const editor = useEditor({
     extensions: [
@@ -381,7 +419,7 @@ export function FocusModeEditor({
       }),
       AnnotationHighlight.configure({ multicolor: true }),
       AutocompleteExtension.configure({
-        getSection: () => sectionRef.current,
+        getSection: () => currentSciSection,
         onStateChange: setAutocompleteState,
         // App.tsx feeds the per-pack-merged dictionary; SCI_WORDS /
         // SCI_PHRASES are the legacy fallback (union of every built-in
@@ -437,7 +475,6 @@ export function FocusModeEditor({
     lastSavedTextRef.current = incoming
     // Re-apply highlight marks because setContent wipes them.
     applyHighlightsForAnnotations(editor, annotations)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, block?.content])
 
   // Description auto-save debouncer (separate from editor.onUpdate path).
@@ -446,7 +483,6 @@ export function FocusModeEditor({
     if (description === lastSavedDescRef.current) return
     const text = editor.getText({ blockSeparator: '\n\n' })
     scheduleSave(text, description)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [description, editor])
 
   // Single-block-per-section policy: no prev/next/list controls. Force any
@@ -496,33 +532,6 @@ export function FocusModeEditor({
     }
   }
 
-  function scheduleSave(text: string, desc: string) {
-    if (text === lastSavedTextRef.current && desc === lastSavedDescRef.current) {
-      return
-    }
-    if (!block && !text.trim()) {
-      return
-    }
-    safeSetSaveState('dirty')
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = window.setTimeout(async () => {
-      safeSetSaveState('saving')
-      try {
-        await onSave(text, desc)
-        lastSavedTextRef.current = text
-        lastSavedDescRef.current = desc
-        safeSetSaveState('saved')
-        // Quietly fade back to idle after a short beat — no flashing text.
-        window.setTimeout(
-          () => mountedRef.current && setSaveState((prev) => (prev === 'saved' ? 'idle' : prev)),
-          900,
-        )
-      } catch {
-        safeSetSaveState('dirty')
-      }
-    }, 1000)
-  }
-
   // ---- Snapshot on unmount (catches "click another tab" exits) ----------
   // Esc handles the keyboard path; this catches the "user navigated away by
   // clicking" path. Refs ensure we always flush the latest content even after
@@ -554,12 +563,16 @@ export function FocusModeEditor({
     if (!block) return
     const recorder = onRecordVersionRef.current
     if (recorder) {
-      void recorder('进入快照').catch(() => {})
+      void recorder('进入快照').catch(() => {
+        // Snapshot failures should not block editor entry.
+      })
     }
     const handle = window.setInterval(() => {
       void (async () => {
         await flushPendingSaveRef.current()
-        try { await onRecordVersionRef.current?.('30 分钟自动快照') } catch {}
+        try { await onRecordVersionRef.current?.('30 分钟自动快照') } catch {
+          // Snapshot failures are non-fatal.
+        }
       })()
     }, AUTO_SNAPSHOT_INTERVAL_MS)
     return () => {
@@ -567,11 +580,14 @@ export function FocusModeEditor({
       const exitRecorder = onRecordVersionRef.current
       if (!exitRecorder) return
       void (async () => {
-        try { await flushPendingSaveRef.current() } catch {}
-        try { await exitRecorder('退出快照') } catch {}
+        try { await flushPendingSaveRef.current() } catch {
+          // Best-effort save on editor exit.
+        }
+        try { await exitRecorder('退出快照') } catch {
+          // Snapshot failures are non-fatal.
+        }
       })()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block?.id])
 
   // ---- Esc to exit ---------------------------------------------------------
@@ -595,14 +611,15 @@ export function FocusModeEditor({
       void (async () => {
         await flushPendingSave()
         if (onRecordVersion) {
-          try { await onRecordVersion('Esc 快照') } catch {}
+          try { await onRecordVersion('Esc 快照') } catch {
+            // Snapshot failures should not trap Esc exit.
+          }
         }
         onExit()
       })()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onExit, onRecordVersion, autocompleteState.active, draft])
 
   // ---- Auto-open / re-anchor draft on selection ---------------------------
@@ -800,7 +817,9 @@ export function FocusModeEditor({
               type="button"
               onClick={async () => {
                 await flushPendingSave()
-                try { await onRecordVersion('手动快照') } catch {}
+                try { await onRecordVersion('手动快照') } catch {
+                  // Manual snapshot failures should not discard saved text.
+                }
               }}
               title="把当前正文存为版本快照（不影响自动保存）"
             >

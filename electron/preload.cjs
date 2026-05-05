@@ -25,6 +25,13 @@ contextBridge.exposeInMainWorld('scipaper', {
   llmKeyStoreInfo: () => ipcRenderer.invoke('llm:keyStoreInfo'),
   importAssetBlock: (articleId, sectionType, kind) =>
     ipcRenderer.invoke('block:importAsset', { articleId, sectionType, kind }),
+  selectImportTextFile: () => ipcRenderer.invoke('import:selectTextFile'),
+  importManuscriptSections: (articleId, sections, mode) =>
+    ipcRenderer.invoke('import:manuscriptSections', { articleId, sections, mode }),
+  importReviewComments: (articleId, payload) =>
+    ipcRenderer.invoke('import:reviewComments', { articleId, payload }),
+  undoLastImport: (articleId) => ipcRenderer.invoke('import:undoLast', { articleId }),
+  reformatImportText: (payload) => ipcRenderer.invoke('import:reformatText', payload),
   openBlockAsset: (articleId, blockId) => ipcRenderer.invoke('block:openAsset', { articleId, blockId }),
   getBlockPreview: (articleId, blockId) => ipcRenderer.invoke('block:getPreview', { articleId, blockId }),
   openArticleFolder: (articleId) => ipcRenderer.invoke('article:openFolder', { articleId }),

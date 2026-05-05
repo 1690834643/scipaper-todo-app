@@ -242,7 +242,17 @@ async function waitForApproval(state, sessionId, callId, toolName, summary, args
   sendToolEvent(mainWindow, { sessionId, kind: 'askApproval', callId, toolName, summary, argsJson: JSON.stringify(args || {}, null, 2), args });
   return approval;
 }
-async function executeToolCall(state, sessionId, toolCall, mainWindow, abortSignal) {
+
+function shouldAutoApproveToolCall(definition, provider, state, globalAutoApprove) {
+  if (!definition?.isWrite) return false;
+  return Boolean(
+    globalAutoApprove ||
+    provider?.trustForWrite ||
+    state?.alwaysAllow?.has(definition.name),
+  );
+}
+
+async function executeToolCall(state, sessionId, toolCall, mainWindow, abortSignal, provider) {
   const name = toolCall.name;
   const args = toolCall.args || {};
   const callId = toolCall.callId;
@@ -263,7 +273,8 @@ async function executeToolCall(state, sessionId, toolCall, mainWindow, abortSign
   throwIfAborted(abortSignal);
   let autoApproveAll = false;
   try { autoApproveAll = Boolean(getStorage().getAutoApproveTools && getStorage().getAutoApproveTools()); } catch {}
-  if (definition.isWrite && !autoApproveAll && !state.alwaysAllow.has(name)) {
+  const autoApproved = shouldAutoApproveToolCall(definition, provider, state, autoApproveAll);
+  if (definition.isWrite && !autoApproved) {
     const decision = await waitForApproval(state, sessionId, callId, name, summary, args, mainWindow);
     state.approvalPromises.delete(callId);
     throwIfAborted(abortSignal);
@@ -273,7 +284,7 @@ async function executeToolCall(state, sessionId, toolCall, mainWindow, abortSign
       return { callId, ok: false, result };
     }
     if (decision.alwaysAllow) state.alwaysAllow.add(name);
-  } else if (definition.isWrite && autoApproveAll) {
+  } else if (definition.isWrite && autoApproved) {
     sendToolEvent(mainWindow, { sessionId, kind: 'autoApproved', callId, toolName: name, summary, argsJson, args });
   }
   const response = await runTool(name, args);
@@ -328,7 +339,7 @@ async function startChat({ providerId, sessionId, userMessage, history, currentA
       for (const toolCall of streamed.toolCalls) {
         if (state.toolCallTotal >= 50) break;
         state.toolCallTotal += 1;
-        results.push(await executeToolCall(state, sessionId, toolCall, mainWindow, state.abortController.signal));
+        results.push(await executeToolCall(state, sessionId, toolCall, mainWindow, state.abortController.signal, provider));
       }
       if (results.length) appendToolResults(provider.kind, state.messages, results);
       if (state.toolCallTotal >= 50) {
@@ -453,4 +464,12 @@ async function simpleComplete({ providerId, system, userMessage, signal, maxToke
 // Same as simpleComplete but accepts a `history` array so we can keep a
 // running conversation. Tools are NOT exposed — this is the "AI helper that
 // can never edit your document" path used by the focus-mode rail chat.
-module.exports = { startChat, resolveApproval, cancelSession, testProvider, simpleComplete };
+module.exports = {
+  startChat,
+  resolveApproval,
+  cancelSession,
+  testProvider,
+  simpleComplete,
+  shouldAutoApproveToolCall,
+  __test: { executeToolCall },
+};

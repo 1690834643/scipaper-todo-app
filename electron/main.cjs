@@ -7,10 +7,13 @@ const {
   updateAnnotation,
   deleteAnnotation,
   addReviewComment,
+  importReviewComments,
   DATABASE_PATH,
   addReviewRound,
   addRevision,
   addTextBlock,
+  importManuscriptSections,
+  undoLastImportBatch,
   deleteBlock,
   exportMarkdown,
   getArticleDirectory,
@@ -85,6 +88,7 @@ const {
   getDailySession,
 } = require('./storage.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
+const { extractTextFromFile } = require('./importText.cjs');
 const {
   listProviders,
   addProvider: addProviderStorage,
@@ -393,6 +397,90 @@ function registerIpc() {
       }
     }),
   );
+  ipcMain.handle('import:selectTextFile', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const dialogResult = await dialog.showOpenDialog(browserWindow, {
+      title: '选择要导入的文本文件',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Manuscript / Review text', extensions: ['txt', 'md', 'markdown', 'docx', 'pdf'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+
+    if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
+      return null;
+    }
+
+    const filePath = dialogResult.filePaths[0];
+    const stats = fs.statSync(filePath);
+    if (stats.size > 2 * 1024 * 1024) {
+      throw new Error('导入文件超过 2MB，请先复制需要导入的主体文本。');
+    }
+
+    return {
+      filePath,
+      fileName: path.basename(filePath),
+      text: extractTextFromFile(filePath),
+    };
+  });
+  ipcMain.handle(
+    'import:manuscriptSections',
+    wrapStateMutation(async (_event, { articleId, sections, mode }) => {
+      importManuscriptSections(articleId, sections, mode || 'append');
+    }),
+  );
+  ipcMain.handle(
+    'import:reviewComments',
+    wrapStateMutation(async (_event, { articleId, payload }) => {
+      importReviewComments(articleId, payload);
+    }),
+  );
+  ipcMain.handle(
+    'import:undoLast',
+    wrapStateMutation(async (_event, { articleId }) => {
+      undoLastImportBatch(articleId);
+    }),
+  );
+  ipcMain.handle('import:reformatText', async (_event, { text, mode, articleLanguage, providerId }) => {
+    const cleanText = String(text || '').trim();
+    if (!cleanText) throw new Error('没有可整理的文本');
+    const isReview = mode === 'review';
+    const system = isReview
+      ? '你是科研论文返修助手。请只整理用户提供的审稿意见文本，不添加新事实，不删除实质性意见。'
+      : '你是科研论文手稿整理助手。请只整理用户提供的手稿抽取文本，不添加新事实，不改写科学结论。';
+    const userMessage = isReview
+      ? [
+          '请把下面从 Word/PDF 抽取出的审稿意见整理成清晰纯文本，方便后续导入系统。',
+          '要求：',
+          '1. 保留 Reviewer 1 / Reviewer 2 / Editor 分组。',
+          '2. 每个审稿人下把意见整理成 Comment 1、Comment 2 等编号。',
+          '3. 保留 Major/Minor 字样；如果原文没有，不要强行编造。',
+          '4. 删除目录、页码、HYPERLINK、TOC、页眉页脚、重复空行。',
+          '5. 只输出整理后的文本。',
+          '',
+          cleanText.slice(0, 50000),
+        ].join('\n')
+      : [
+          '请把下面从 Word/PDF 抽取出的手稿正文整理成清晰纯文本，方便后续按章节导入。',
+          `论文语言：${articleLanguage === 'zh' ? '中文' : '英文'}`,
+          '要求：',
+          '1. 保留并规范章节标题：Title, Abstract, Introduction, Materials and Methods, Results, Discussion, References。',
+          '2. 中文论文也请在每个章节前加一行对应英文标准标题，后面保留原正文。',
+          '3. 删除目录、页码、HYPERLINK、TOC、页眉页脚、重复空行。',
+          '4. 不新增实验结果，不改写科学含义。',
+          '5. 只输出整理后的正文文本。',
+          '',
+          cleanText.slice(0, 50000),
+        ].join('\n');
+    const output = await llmClient.simpleComplete({
+      providerId: providerId || undefined,
+      system,
+      userMessage,
+      maxTokens: 12000,
+    });
+    return { text: String(output || '').trim() };
+  });
   ipcMain.handle('block:openAsset', async (_event, { articleId, blockId }) => {
     try {
       const resolvedPath = openPathForBlock(articleId, blockId);

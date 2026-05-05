@@ -60,6 +60,7 @@ function todayDate(): string {
 }
 
 function findArticleTitle(articles: Article[], articleId: string): string {
+  if (!articleId) return '未归属'
   return articles.find((a) => a.id === articleId)?.title || '(已删除)'
 }
 
@@ -131,10 +132,7 @@ export function DailyLogView({
   }, [dailyGoal])
 
   useEffect(() => {
-    if (state.articles.length === 0) {
-      if (newArticleId !== '') setNewArticleId('')
-      return
-    }
+    if (!newArticleId) return
     const stillExists = state.articles.some((a) => a.id === newArticleId)
     if (!stillExists) setNewArticleId(state.articles[0].id)
   }, [state.articles, newArticleId])
@@ -163,7 +161,7 @@ export function DailyLogView({
   }
 
   async function handleAddEntry() {
-    if (!newArticleId || !newTitle.trim() || submitting) return
+    if (!newTitle.trim() || submitting) return
     setSubmitting(true)
     try {
       await onAddProgressEntry({
@@ -186,7 +184,6 @@ export function DailyLogView({
   }
 
   async function handleFocusFinished(minutes: number) {
-    if (!newArticleId) return  // 没有文章可挂载，跳过
     await onAddProgressEntry({
       articleId: newArticleId,
       kind: 'focus',
@@ -196,7 +193,6 @@ export function DailyLogView({
   }
 
   async function handleMoodRecorded(_mood: MoodType, label: string, emoji: string, note?: string) {
-    if (!newArticleId) return
     await onAddProgressEntry({
       articleId: newArticleId,
       kind: 'mood',
@@ -341,6 +337,7 @@ export function DailyLogView({
               value={newArticleId}
               onChange={(e) => setNewArticleId(e.target.value)}
             >
+              <option value="">未归属</option>
               {state.articles.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.title}
@@ -375,7 +372,7 @@ export function DailyLogView({
               className='primary-button'
               type='button'
               onClick={() => void handleAddEntry()}
-              disabled={!newArticleId || !newTitle.trim() || submitting}
+              disabled={!newTitle.trim() || submitting}
             >
               记下
             </button>

@@ -74,6 +74,10 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🎨 **新视觉**（1.0.36） | 米色 squircle + 衬线 "Sci" + 暖珊瑚斜体 "Paper"，7 尺寸（16/24/32/48/64/128/256）真正嵌入 .exe — 之前 1.0.13–1.0.35 由于 electron-builder 的 `signAndEditExecutable: false` 配置一直在用 Electron 默认圆形 logo，本版修复 |
 | 🗑️ **稿件彻底删除**（1.0.36） | 稿件库 ✕ 按钮 + 二次确认；同步删除 articles + 解关联 thesis.articleIds + 清空附件目录；MCP `delete_article(articleId)` 暴露给外部 AI 但默认走 approval gate |
 | 👤 **个人显示名**（1.0.36） | Settings 里设个名字，侧边栏 brand 区域 + 主页 / 每日日志的时间问候后都会带上（"下午好, 自动挡赛车手"）；空字符串 = 回到默认 "papertodo"；MCP `get_user_profile` / `set_user_profile` 同步可用 |
+| 📥 **正文 / 审稿导入助手**（1.0.37） | 文章页提供独立的"导入正文/审稿"入口，和章节里的"导入图片/PDF 附件"明确分开。支持粘贴文本与 `.txt` / `.md` / `.docx` / 文本型 `.pdf`；可按章节导入手稿，或按 Reviewer 分组导入多条审稿意见；导入前预览，导入后可撤销最近一次导入 |
+| 🧹 **AI 重排版 / 清理**（1.0.37） | Word/PDF 抽取文本如果带目录、页码、TOC、HYPERLINK、页眉页脚，可在导入助手里点"AI 重排版/清理"。AI 只整理导入框文本，不直接写入；仍需用户看预览后确认 |
+| 🧾 **DOCX/PDF 文本抽取修正**（1.0.37） | DOCX 导入会过滤 Word 目录域代码（`TOC` / `HYPERLINK` / `__RefHeading`），避免目录被当正文。PDF 支持文本型 PDF 的 best-effort 抽取；扫描版 PDF 仍需 OCR |
+| 🧭 **工作流补齐**（1.0.37） | 新建文章可快速创建草稿；学位论文卡片可打开最小详情页；文章页有"继续写当前章节"主按钮；沉浸编辑退出回当前章节预览；Daily Log 支持未归属进展；AI 上下文提示随当前页面变化 |
 
 ### 安装与使用
 
@@ -110,7 +114,15 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 - **AI 协议**：OpenAI-compat 与 Anthropic 双协议流式，支持 thinking mode 的 `reasoning_content` 重放
 - **MCP**：基于 `@modelcontextprotocol/sdk` 的 stdio server（81 工具：33 读 / 48 写，写工具需环境变量开启）
 - **导出**：`docx` v9 纯 JS 包；LaTeX 工程（.tex + references.bib）；HTML / JSON / 分享包
-- **打包**：electron-builder 出 NSIS + Portable + macOS arm64/x64 共 6 产物，CI 矩阵 ~2.5 分钟
+- **导入**：正文 / 审稿导入助手支持 paste、txt、md、docx、文本型 pdf；DOCX 目录域过滤；可选 LLM 清理；写入前预览、写入后可撤销最近批次
+- **打包**：electron-builder 出 NSIS + Portable + macOS arm64/x64 共 6 产物；Windows 发行版通过 GitHub Actions 在 `windows-latest` 上构建，避免 WSL 本地缺少 `wine32` 时卡在 rcedit
+
+### 发行版构建
+
+- **推荐方式**：推送 `v1.0.37` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows 打包，并把 `Setup` / `Portable` / `.blockmap` 上传到 GitHub Release。
+- **手动方式**：在 GitHub 的 **Actions → Build & Release → Run workflow** 里触发，构建产物会作为 workflow artifact 上传；勾选 `publish` 时会发布到对应 tag 的 Release。
+- **本地 Windows**：`npm ci && npm run dist:win`。
+- **WSL/Linux 交叉打 Windows 包**：需要完整 Wine 32-bit 环境；否则会在 electron-builder 的 Windows 资源编辑步骤失败。一般直接用 GitHub Actions。
 
 ### 路径速查
 
@@ -171,6 +183,10 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🎨 **New visual identity** (1.0.36) | Beige squircle + serif "Sci" + warm-coral italic "Paper", with all 7 sizes (16/24/32/48/64/128/256) actually embedded in the .exe. Earlier 1.0.13–1.0.35 builds shipped Electron's default circular logo because `signAndEditExecutable: false` in electron-builder silently disabled rcedit; this release fixes it |
 | 🗑️ **Hard-delete articles** (1.0.36) | ✕ button on the library card with a confirmation dialog; removes the article, unlinks it from any thesis, wipes its attachment directory. The MCP `delete_article(articleId)` exposes the same operation to external AIs but routes through the approval gate |
 | 👤 **Display name** (1.0.36) | Set a name in Settings and it shows in the sidebar brand area plus the time-of-day greetings on Home and Daily Log ("Good afternoon, Wei"). Empty = falls back to "papertodo". MCP `get_user_profile` / `set_user_profile` mirror this for programmatic control |
+| 📥 **Manuscript / review import assistant** (1.0.37) | The Article workspace now has a dedicated "import manuscript/reviews" entry, separate from section attachment import. Supports pasted text and `.txt` / `.md` / `.docx` / text-based `.pdf`; imports manuscript sections or reviewer-grouped comments with preview-before-write and undo-last-import |
+| 🧹 **AI reformat / cleanup** (1.0.37) | If Word/PDF extraction includes TOC, page numbers, HYPERLINK fields, headers, or broken line breaks, click "AI reformat/cleanup" inside the import assistant. It only cleans the import text; writes still require preview confirmation |
+| 🧾 **DOCX/PDF extraction fixes** (1.0.37) | DOCX extraction filters Word TOC field codes (`TOC` / `HYPERLINK` / `__RefHeading`). PDF import has best-effort text extraction for text-based PDFs; scanned PDFs still need OCR |
+| 🧭 **Workflow completion pass** (1.0.37) | Quick draft creation, minimal thesis detail view, clear continue-writing action, editor exit back to current-section preview, unassigned Daily Log entries, and route-aware AI context hints |
 
 ### Install
 
@@ -207,7 +223,15 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 - **AI**: dual-protocol streaming (OpenAI-compat + Anthropic), with `reasoning_content` replay for thinking-mode models
 - **MCP**: stdio server on `@modelcontextprotocol/sdk` (81 tools: 33 read / 48 write, writes gated by env flag)
 - **Export**: `docx` v9 (pure JS); LaTeX project (.tex + references.bib); HTML / JSON / share bundle
-- **Packaging**: electron-builder ships NSIS + Portable + macOS arm64 / x64 — 6 artifacts, CI matrix ~2.5 minutes
+- **Import**: manuscript / review import assistant for paste, txt, md, docx, and text-based pdf; DOCX TOC filtering; optional LLM cleanup; preview-before-write; undo-last-import
+- **Packaging**: electron-builder ships NSIS + Portable + macOS arm64 / x64. Windows releases are built on GitHub Actions `windows-latest`, avoiding local WSL `wine32` / rcedit failures.
+
+### Release Build
+
+- **Recommended**: push a tag such as `v1.0.37`; GitHub Actions runs tests, lint, Windows packaging, then uploads `Setup`, `Portable`, and `.blockmap` files to the GitHub Release.
+- **Manual**: run **Actions → Build & Release → Run workflow** in GitHub; artifacts are uploaded to the workflow run, and checking `publish` attaches them to the matching tag release.
+- **Local Windows**: `npm ci && npm run dist:win`.
+- **WSL/Linux cross-build**: requires a full 32-bit Wine setup for electron-builder's Windows resource editing. Use GitHub Actions unless you specifically need local packaging.
 
 ### Paths
 
