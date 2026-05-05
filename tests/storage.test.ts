@@ -13,6 +13,10 @@ let tempHomes: string[] = []
 
 function loadStorage(home: string): StorageModule {
   process.env.HOME = home
+  process.env.USERPROFILE = home
+  const parsed = path.parse(home)
+  process.env.HOMEDRIVE = parsed.root.replace(/[\\/]+$/, '')
+  process.env.HOMEPATH = home.slice(process.env.HOMEDRIVE.length) || '\\'
   delete require.cache[storagePath]
   return require('../electron/storage.cjs') as StorageModule
 }
@@ -49,6 +53,10 @@ beforeEach(() => {
 
 afterEach(() => {
   delete require.cache[storagePath]
+  delete process.env.HOME
+  delete process.env.USERPROFILE
+  delete process.env.HOMEDRIVE
+  delete process.env.HOMEPATH
   for (const home of tempHomes) {
     fs.rmSync(home, { force: true, recursive: true })
   }
