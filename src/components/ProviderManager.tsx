@@ -93,22 +93,51 @@ export function ProviderManager(props: Props): JSX.Element {
   }
 
   function startEdit(p: LlmProvider) {
-    setEditDraft({ name: p.name, kind: p.kind, baseUrl: p.baseUrl, model: p.model, supportsToolUse: p.supportsToolUse, trustForWrite: p.trustForWrite ?? false, temperature: p.temperature?.toString() ?? '', maxTokens: p.maxTokens?.toString() ?? '', apiKey: '' })
+    setEditDraft({ name: p.name, kind: p.kind, baseUrl: p.baseUrl, model: p.model, supportsToolUse: p.supportsToolUse, trustForWrite: p.trustForWrite ?? false, temperature: p.temperature?.toString() ?? '0', maxTokens: p.maxTokens?.toString() ?? '', apiKey: '' })
     setEditingId(p.id)
+  }
+
+  function isValidDraft(draft: Draft, isAdd: boolean) {
+    if (!draft.name.trim() || !draft.baseUrl.trim() || !draft.model.trim()) return false
+    if (isAdd && !draft.apiKey.trim()) return false
+    const temperature = draft.temperature.trim()
+    if (temperature) {
+      const parsed = Number(temperature)
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 2) return false
+    }
+    const maxTokens = draft.maxTokens.trim()
+    if (maxTokens) {
+      const parsed = Number(maxTokens)
+      if (!Number.isInteger(parsed) || parsed < 1) return false
+    }
+    return true
+  }
+
+  function draftToPayload(draft: Draft) {
+    return {
+      name: draft.name.trim(),
+      kind: draft.kind,
+      baseUrl: draft.baseUrl.trim(),
+      model: draft.model.trim(),
+      supportsToolUse: draft.supportsToolUse,
+      trustForWrite: draft.trustForWrite,
+      temperature: draft.temperature.trim() ? parseFloat(draft.temperature) : 0,
+      maxTokens: draft.maxTokens.trim() ? parseInt(draft.maxTokens, 10) : undefined,
+    }
   }
 
   async function submitAdd(e: React.FormEvent) {
     e.preventDefault()
-    if (!addDraft.name.trim() || !addDraft.apiKey.trim()) return
-    await onAdd({ name: addDraft.name.trim(), kind: addDraft.kind, baseUrl: addDraft.baseUrl.trim(), model: addDraft.model.trim(), supportsToolUse: addDraft.supportsToolUse, trustForWrite: addDraft.trustForWrite, temperature: addDraft.temperature ? parseFloat(addDraft.temperature) : undefined, maxTokens: addDraft.maxTokens ? parseInt(addDraft.maxTokens, 10) : undefined, apiKey: addDraft.apiKey.trim() })
+    if (!isValidDraft(addDraft, true)) return
+    await onAdd({ ...draftToPayload(addDraft), apiKey: addDraft.apiKey.trim() })
     setShowAdd(false)
     setAddDraft({ ...emptyDraft })
   }
 
   async function submitEdit(e: React.FormEvent, id: string) {
     e.preventDefault()
-    if (!editDraft.name.trim()) return
-    const patch: Partial<Omit<LlmProvider, 'id' | 'hasApiKey'>> & { apiKey?: string } = { name: editDraft.name.trim(), kind: editDraft.kind, baseUrl: editDraft.baseUrl.trim(), model: editDraft.model.trim(), supportsToolUse: editDraft.supportsToolUse, trustForWrite: editDraft.trustForWrite, temperature: editDraft.temperature ? parseFloat(editDraft.temperature) : undefined, maxTokens: editDraft.maxTokens ? parseInt(editDraft.maxTokens, 10) : undefined }
+    if (!isValidDraft(editDraft, false)) return
+    const patch: Partial<Omit<LlmProvider, 'id' | 'hasApiKey'>> & { apiKey?: string } = draftToPayload(editDraft)
     if (editDraft.apiKey.trim()) patch.apiKey = editDraft.apiKey.trim()
     await onUpdate(id, patch)
     setEditingId(null)
@@ -127,14 +156,15 @@ export function ProviderManager(props: Props): JSX.Element {
   }
 
   function formUI(draft: Draft, setDraft: React.Dispatch<React.SetStateAction<Draft>>, onSubmit: (e: React.FormEvent) => void, onCancel: () => void, isAdd: boolean, hasKey?: boolean) {
+    const canSubmit = isValidDraft(draft, isAdd)
     return (
       <form onSubmit={onSubmit} className="tag-form">
         <label className="field"><span>Name</span><input value={draft.name} onChange={e => setDraft(prev => ({ ...prev, name: e.target.value }))} placeholder="Provider 名称" required /></label>
         <div className="form-grid">
           <label className="field"><span>Kind</span><select value={draft.kind} onChange={e => setDraft(prev => ({ ...prev, kind: e.target.value as 'openai-compat' | 'anthropic' }))}><option value="openai-compat">openai-compat</option><option value="anthropic">anthropic</option></select></label>
-          <label className="field"><span>Model</span><input value={draft.model} onChange={e => setDraft(prev => ({ ...prev, model: e.target.value }))} placeholder="模型标识" /></label>
+          <label className="field"><span>Model</span><input value={draft.model} onChange={e => setDraft(prev => ({ ...prev, model: e.target.value }))} placeholder="模型标识" required /></label>
         </div>
-        <label className="field"><span>Base URL</span><input value={draft.baseUrl} onChange={e => setDraft(prev => ({ ...prev, baseUrl: e.target.value }))} placeholder="https://api.example.com/v1" /></label>
+        <label className="field"><span>Base URL</span><input value={draft.baseUrl} onChange={e => setDraft(prev => ({ ...prev, baseUrl: e.target.value }))} placeholder="https://api.example.com/v1" required /></label>
         <div className="form-grid">
           <label className="field"><span>Temperature</span><input type="number" step="0.1" min="0" max="2" value={draft.temperature} onChange={e => setDraft(prev => ({ ...prev, temperature: e.target.value }))} placeholder="默认 0, 取值 0-2" /></label>
           <label className="field"><span>Max Output Tokens</span><input type="number" min="1" value={draft.maxTokens} onChange={e => setDraft(prev => ({ ...prev, maxTokens: e.target.value }))} placeholder="DeepSeek V4 上限 384000" /></label>
@@ -142,9 +172,10 @@ export function ProviderManager(props: Props): JSX.Element {
         <label className="field"><span>API Key</span><input type="password" value={draft.apiKey} onChange={e => setDraft(prev => ({ ...prev, apiKey: e.target.value }))} placeholder={isAdd ? '粘贴你的 API Key' : hasKey ? '已保存,留空不修改' : '粘贴你的 API Key'} required={isAdd} /></label>
         <label className="checkbox-row"><input type="checkbox" checked={draft.supportsToolUse} onChange={e => setDraft(prev => ({ ...prev, supportsToolUse: e.target.checked }))} /><span>Supports Tool Use</span></label>
         <label className="checkbox-row"><input type="checkbox" checked={draft.trustForWrite} onChange={e => setDraft(prev => ({ ...prev, trustForWrite: e.target.checked }))} /><span>Trust for Write</span></label>
-        <p className="muted-text" style={{ fontSize: 'var(--fs-xs)', marginLeft: '24px' }}>信任后写操作自动批准,使用前请确认 prompt 安全</p>
+        <p className="muted-text" style={{ fontSize: 'var(--fs-xs)', marginLeft: '24px' }}>新增后会自动设为默认 Provider。信任后写操作自动批准,使用前请确认 prompt 安全</p>
+        {!canSubmit && <p className="muted-text" style={{ fontSize: 'var(--fs-xs)', color: 'var(--c-danger)' }}>请填写名称、Base URL、模型和 API Key；Temperature 需在 0-2 之间。</p>}
         <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-          <button className="primary-button" type="submit">{isAdd ? '添加' : '保存'}</button>
+          <button className="primary-button" type="submit" disabled={!canSubmit}>{isAdd ? '添加' : '保存'}</button>
           <button className="ghost-button" type="button" onClick={onCancel}>取消</button>
         </div>
       </form>

@@ -146,10 +146,19 @@ function buildMcpServerEntry(clientName, options = {}) {
 }
 
 function buildMcpInfo() {
-  const genericEntry = buildMcpServerEntry('Cursor');
-  const genericConfig = {
-    mcpServers: { 'scipaper-todo': genericEntry },
-  };
+  const configForClient = (clientName, options = {}) =>
+    JSON.stringify(
+      {
+        mcpServers: {
+          'scipaper-todo': buildMcpServerEntry(clientName, options),
+        },
+      },
+      null,
+      2,
+    );
+
+  const genericEntry = buildMcpServerEntry('MCP Client');
+  const genericConfig = configForClient('MCP Client');
 
   const config = {
     mcpServers: { 'scipaper-todo': genericEntry },
@@ -161,27 +170,18 @@ function buildMcpInfo() {
     baseDirectory: BASE_DIRECTORY,
     configJson: JSON.stringify(config, null, 2),
     examples: {
-      generic: JSON.stringify(genericConfig, null, 2),
-      cursor: JSON.stringify(genericConfig, null, 2),
-      claudeCode: JSON.stringify(
-        {
-          mcpServers: {
-            'scipaper-todo': buildMcpServerEntry('Claude Code'),
-          },
-        },
-        null,
-        2,
-      ),
+      generic: genericConfig,
+      cursor: configForClient('Cursor'),
+      claudeCode: configForClient('Claude Code'),
+      claudeDesktop: configForClient('Claude Desktop'),
+      vscode: configForClient('VS Code'),
+      cline: configForClient('Cline'),
+      rooCode: configForClient('Roo Code'),
+      kimiCode: configForClient('Kimi Code'),
+      continueDev: configForClient('Continue'),
+      windsurf: configForClient('Windsurf'),
       // 备选：直接调 GUI 二进制（macOS 下不推荐，需手动转义路径）
-      guiBinary: JSON.stringify(
-        {
-          mcpServers: {
-            'scipaper-todo': buildMcpServerEntry('Cursor', { useGuiBinary: true }),
-          },
-        },
-        null,
-        2,
-      ),
+      guiBinary: configForClient('MCP Client', { useGuiBinary: true }),
     },
   };
 }

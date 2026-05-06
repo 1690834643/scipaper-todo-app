@@ -11,7 +11,9 @@ import {
   type DataStatus,
 } from '../utils/articleUtils'
 
-type Filter = 'all' | 'drafts' | 'review' | 'published' | 'theses'
+type Filter = 'all' | 'drafts' | 'review' | 'published'
+type KindFilter = 'all' | 'article' | 'thesis'
+type SortKey = 'updatedDesc' | 'updatedAsc' | 'titleAsc' | 'wordsDesc'
 
 interface LibraryViewProps {
   articles: Article[]
@@ -38,6 +40,9 @@ type LibraryItem = {
 export function LibraryView(props: LibraryViewProps): JSX.Element {
   const { articles, theses, onOpenArticle, onOpenThesis, onNewArticle, onNewThesis, onDeleteArticle, onDeleteThesis } = props
   const [filter, setFilter] = useState<Filter>('all')
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all')
+  const [sortKey, setSortKey] = useState<SortKey>('updatedDesc')
+  const [query, setQuery] = useState('')
 
   const items = useMemo<LibraryItem[]>(() => {
     const result: LibraryItem[] = []
@@ -65,24 +70,36 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
         subtitle: thesis.author,
       })
     }
-    result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     return result
   }, [articles, theses])
 
   const filteredItems = useMemo(() => {
-    switch (filter) {
-      case 'all':
-        return items
-      case 'drafts':
-        return items.filter((i) => i.statusKey === 'draft')
-      case 'review':
-        return items.filter((i) => i.statusKey === 'review')
-      case 'published':
-        return items.filter((i) => i.statusKey === 'published')
-      case 'theses':
-        return items.filter((i) => i.kind === 'thesis')
-    }
-  }, [items, filter])
+    const normalizedQuery = query.trim().toLowerCase()
+    const result = items.filter((item) => {
+      if (kindFilter !== 'all' && item.kind !== kindFilter) return false
+      if (filter === 'drafts' && item.statusKey !== 'draft') return false
+      if (filter === 'review' && item.statusKey !== 'review') return false
+      if (filter === 'published' && item.statusKey !== 'published') return false
+      if (!normalizedQuery) return true
+      return [item.title, item.subtitle, item.statusLabel, item.kind === 'article' ? '小论文' : '大论文']
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedQuery))
+    })
+    result.sort((a, b) => {
+      switch (sortKey) {
+        case 'updatedAsc':
+          return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+        case 'titleAsc':
+          return a.title.localeCompare(b.title, 'zh-Hans')
+        case 'wordsDesc':
+          return b.wordCount - a.wordCount
+        case 'updatedDesc':
+        default:
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      }
+    })
+    return result
+  }, [items, filter, kindFilter, query, sortKey])
 
   const totalCount = articles.length + theses.length
   const isCompletelyEmpty = totalCount === 0
@@ -108,42 +125,40 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
         </div>
       </div>
 
-      <div className="header-actions">
-        <button
-          className={`nav-chip ${filter === 'all' ? 'active' : ''}`}
-          onClick={() => setFilter('all')}
-          type="button"
-        >
-          全部
-        </button>
-        <button
-          className={`nav-chip ${filter === 'drafts' ? 'active' : ''}`}
-          onClick={() => setFilter('drafts')}
-          type="button"
-        >
-          草稿
-        </button>
-        <button
-          className={`nav-chip ${filter === 'review' ? 'active' : ''}`}
-          onClick={() => setFilter('review')}
-          type="button"
-        >
-          审稿中
-        </button>
-        <button
-          className={`nav-chip ${filter === 'published' ? 'active' : ''}`}
-          onClick={() => setFilter('published')}
-          type="button"
-        >
-          已发表
-        </button>
-        <button
-          className={`nav-chip ${filter === 'theses' ? 'active' : ''}`}
-          onClick={() => setFilter('theses')}
-          type="button"
-        >
-          大论文
-        </button>
+      <div className="header-actions" style={{ alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center' }}>
+          <button className={`nav-chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')} type="button">
+            全部状态
+          </button>
+          <button className={`nav-chip ${filter === 'drafts' ? 'active' : ''}`} onClick={() => setFilter('drafts')} type="button">
+            草稿
+          </button>
+          <button className={`nav-chip ${filter === 'review' ? 'active' : ''}`} onClick={() => setFilter('review')} type="button">
+            审稿中
+          </button>
+          <button className={`nav-chip ${filter === 'published' ? 'active' : ''}`} onClick={() => setFilter('published')} type="button">
+            已发表
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索标题、期刊、作者"
+            style={{ minWidth: 220 }}
+          />
+          <select className="ghost-button" value={kindFilter} onChange={(event) => setKindFilter(event.target.value as KindFilter)}>
+            <option value="all">全部类型</option>
+            <option value="article">只看小论文</option>
+            <option value="thesis">只看大论文</option>
+          </select>
+          <select className="ghost-button" value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
+            <option value="updatedDesc">最近更新优先</option>
+            <option value="updatedAsc">最早更新优先</option>
+            <option value="titleAsc">标题 A-Z</option>
+            <option value="wordsDesc">字数最多优先</option>
+          </select>
+        </div>
       </div>
 
       {isCompletelyEmpty && (
@@ -156,7 +171,7 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
       {isFilteredEmpty && (
         <div className="empty-library">
           <h3>没有符合筛选条件的稿件</h3>
-          <p>切换筛选条件,或在右上新建一篇</p>
+          <p>调整关键词、类型或状态筛选，或在右上新建一篇</p>
         </div>
       )}
 

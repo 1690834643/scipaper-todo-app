@@ -52,7 +52,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 - 一篇论文 = 一个仓库，按 IMRaD 结构组织（Title / Abstract / Introduction / Methods / Results / Discussion / References）
 - 数据本地，不上云；附件、版本、修改记录全部留在你机器上
-- 内置 MCP 服务器，让 Cursor / Claude Code / Claude Desktop 直接读写你的论文
+- 内置 MCP 服务器，让 Cursor / Claude Code / Claude Desktop / Kimi Code / Cline / Roo Code / Windsurf / Continue 等客户端直接读写你的论文
 - 可选接入大模型（DeepSeek 等），AI 助手懂当前章节、当前学科、当前审稿轮次
 - 支持 Word 导出，可一键 LLM 自动按学术规范打斜体（`*Chilo suppressalis*` / `*p* < 0.05`）
 - Zotero 直连，文献检索 / 全文 / 批注 都能在 AI 对话里自然调用
@@ -84,6 +84,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🛟 **完整备份/恢复**（1.0.39） | Settings → 本地数据与备份 可直接打开数据目录、导出完整 `.scipaper-backup.json`、从备份恢复；恢复前会保留当前数据目录副本，降低误操作风险 |
 | ✅ **回归清单与冒烟测试**（1.0.39） | 新增 `docs/manual-regression-checklist.md`，覆盖小论文、导入、审稿、大论文、AI Provider、导出和备份；storage 测试新增完整备份恢复与真实工作流 smoke path |
 | 🧑‍⚖️ **返修回复可修正**（1.0.40） | 审稿轮次元信息可修改；每条修回记录/回复文本可修改、删除和标记核验；手动空审稿意见/空修回记录会被拦截。AI/MCP 同步新增 `update_review_round` / `update_revision` / `delete_revision` |
+| 🧩 **MCP / 导入 / 导出体验补齐**（1.0.41） | Settings → MCP 可按 Cursor、Claude Code、Claude Desktop、VS Code、Cline、Roo Code、Kimi Code、Windsurf、Continue 或通用 MCP JSON 选择配置；正文/审稿导入预览可手动修正目标章节、审稿人、意见类型和内容；稿件库新增搜索/类型/排序；Markdown、docx、LaTeX、HTML、JSON、分享包导出后显示并可复制输出路径 |
 
 ### 安装与使用
 
@@ -96,7 +97,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 3. 进 **Settings → AI Provider** 添加你的 LLM（DeepSeek V4 Flash / Pro 已内置预设，粘贴 API Key 即可）
 4. 进 **Settings → Zotero 接入**（可选）启用 Zotero 集成
 5. 进 **Settings → 本地数据与备份** 可打开数据目录、导出完整备份，或从 `.scipaper-backup.json` 恢复
-6. 进 **Settings → MCP 协议** 复制配置粘到 Cursor / Claude Code 即可在外部 AI 里读写论文
+6. 进 **Settings → MCP 协议** 先选择 Cursor / Claude Code / Claude Desktop / VS Code / Cline / Roo Code / Kimi Code / Windsurf / Continue / 通用 MCP JSON，再复制配置到对应客户端，即可在外部 AI 里读写论文
    - ⚠️ **Windows MCP 配置请用 Setup 版的 .exe**。Portable 版每次启动都会解压到 `%LOCALAPPDATA%\Temp\<随机 hash>\` 一个临时目录，关闭后通常被回收；MCP 配置写的临时路径下次启动就失效。要么用 NSIS Setup（路径固定），要么把 Portable .exe 自己拷到 `C:\Tools\SciPaperTodo\` 这种固定文件夹，MCP 配置指向那个稳定路径。
    - 🐧 **WSL / Linux 用户用 Node 直接跑 MCP**：源码里有一个 `electron/mcp-cli.cjs` 是不带 Electron 壳的 stdio MCP 入口，启动 230 ms，92 个工具全部可用。把客户端 (Claude Code in WSL / Cursor in WSL) 的 MCP 配置改成：
      ```json
@@ -115,18 +116,18 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 ### 技术栈
 
 - **桌面壳**：Electron 37（Chromium 130+，原生 Canvas 2D L2 / safeStorage / contextBridge 全用上）
-- **渲染层**：React 19 + TypeScript 6 + Vite 8（121 modules，gzipped JS 267 KB）
+- **渲染层**：React 19 + TypeScript 6 + Vite 8（137 modules，gzipped JS 286 KB）
 - **写作引擎**：TipTap (ProseMirror) + 自动补全（11 个可启停 pack，默认开 6 个 ≈ 1400 词；启用全部 ≈ 2100 词）+ 行内批注 mark
 - **存储**：本地 JSON 数据库 + safeStorage 加密 API Key
 - **AI 协议**：OpenAI-compat 与 Anthropic 双协议流式，支持 thinking mode 的 `reasoning_content` 重放
 - **MCP**：基于 `@modelcontextprotocol/sdk` 的 stdio server（92 工具：33 读 / 59 写，写工具需环境变量开启）
 - **导出**：`docx` v9 纯 JS 包；LaTeX 工程（.tex + references.bib）；HTML / JSON / 分享包
-- **导入**：正文 / 审稿导入助手支持 paste、txt、md、docx、文本型 pdf；DOCX 目录域过滤；可选 LLM 清理；写入前预览、写入后可撤销最近批次
+- **导入**：正文 / 审稿导入助手支持 paste、txt、md、docx、文本型 pdf；DOCX 目录域过滤；可选 LLM 清理；写入前可手动修正解析结果；写入后可撤销最近批次
 - **打包**：electron-builder 出 NSIS + Portable + macOS arm64/x64 共 6 产物；Windows 发行版通过 GitHub Actions 在 `windows-latest` 上构建，避免 WSL 本地缺少 `wine32` 时卡在 rcedit
 
 ### 发行版构建
 
-- **推荐方式**：推送 `v1.0.40` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
+- **推荐方式**：推送 `v1.0.41` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
 - **手动方式**：在 GitHub 的 **Actions → Build & Release → Run workflow** 里触发，构建产物会作为 workflow artifact 上传；勾选 `publish` 时会发布到对应 tag 的 Release。
 - **本地 Windows**：`npm ci && npm run dist:win`。
 - **WSL/Linux 交叉打 Windows 包**：需要完整 Wine 32-bit 环境；否则会在 electron-builder 的 Windows 资源编辑步骤失败。一般直接用 GitHub Actions。
@@ -176,7 +177,7 @@ SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
 
 - One paper = one repository, organised by IMRaD (Title / Abstract / Introduction / Methods / Results / Discussion / References)
 - Local-first. Attachments, versions, edit history all stay on your machine
-- Built-in MCP server lets Cursor / Claude Code / Claude Desktop read and write your manuscripts directly
+- Built-in MCP server lets Cursor / Claude Code / Claude Desktop / Kimi Code / Cline / Roo Code / Windsurf / Continue read and write your manuscripts directly
 - Optional LLM integration (DeepSeek and others). The assistant knows your current section, field, and review round
 - Word export with one-click LLM auto-italicisation per academic conventions (`*Chilo suppressalis*` / `*p* < 0.05`)
 - Direct Zotero integration: search, fulltext, annotations all callable from chat
@@ -208,6 +209,7 @@ SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
 | 🛟 **Full backup / restore** (1.0.39) | Settings → Local Data & Backup can open the data folder, export a complete `.scipaper-backup.json`, and restore from it. Restore keeps the pre-restore data directory as a safety copy |
 | ✅ **Regression checklist and smoke tests** (1.0.39) | Added `docs/manual-regression-checklist.md` plus storage smoke coverage for full backup/restore and a realistic manuscript → review → thesis → export workflow |
 | 🧑‍⚖️ **Correctable revision responses** (1.0.40) | Review round metadata can be edited; each revision response can be edited, deleted, and marked verified. Empty manual review comments / revision records are rejected. AI/MCP adds `update_review_round`, `update_revision`, and `delete_revision` |
+| 🧩 **MCP / import / export UX pass** (1.0.41) | Settings → MCP now offers selectable presets for Cursor, Claude Code, Claude Desktop, VS Code, Cline, Roo Code, Kimi Code, Windsurf, Continue, and generic MCP JSON. Manuscript/review import previews are editable before write. Library search/type/sort controls were added. Markdown, docx, LaTeX, HTML, JSON, and share-package exports show a copyable output path |
 
 ### Install
 
@@ -220,7 +222,7 @@ SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
 3. **Settings → AI Provider**: add your LLM (DeepSeek V4 Flash / Pro presets included, paste your API key)
 4. **Settings → Zotero** (optional): enable Zotero integration
 5. **Settings → Local Data & Backup**: open the data folder, export a full backup, or restore from `.scipaper-backup.json`
-6. **Settings → MCP**: copy the config block into Cursor / Claude Code to give external AIs access
+6. **Settings → MCP**: choose Cursor / Claude Code / Claude Desktop / VS Code / Cline / Roo Code / Kimi Code / Windsurf / Continue / generic MCP JSON, then copy the config block into that client to give external AIs access
    - ⚠️ **On Windows, use the Setup .exe for MCP integration, not Portable.** Portable launches by self-extracting to `%LOCALAPPDATA%\Temp\<random-hash>\` and the hash changes between runs; an MCP config pinned to that temp path breaks the next time you reopen the app. Either install via NSIS Setup (stable install path), or copy the Portable .exe into a fixed folder such as `C:\Tools\SciPaperTodo\` and point your MCP config there.
    - 🐧 **WSL / Linux: skip the .exe bridge and run the MCP server natively via Node.** The repo ships `electron/mcp-cli.cjs`, an Electron-free stdio MCP entry. ~230 ms cold start, all 92 tools live. Point your WSL-side client at:
      ```json
@@ -239,18 +241,18 @@ SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
 ### Stack
 
 - **Shell**: Electron 37 (Chromium 130+, uses Canvas 2D Level 2, safeStorage, contextBridge)
-- **Renderer**: React 19 + TypeScript 6 + Vite 8 (121 modules, ~267 KB gzipped JS)
+- **Renderer**: React 19 + TypeScript 6 + Vite 8 (137 modules, ~286 KB gzipped JS)
 - **Editor**: TipTap (ProseMirror) with pluggable autocomplete (11 toggleable packs; ~1400 words active by default, ~2100 words across the full registry) and inline annotation marks
 - **Storage**: local JSON database + complete backup/restore + encrypted API key store
 - **AI**: dual-protocol streaming (OpenAI-compat + Anthropic), with `reasoning_content` replay for thinking-mode models
 - **MCP**: stdio server on `@modelcontextprotocol/sdk` (92 tools: 33 read / 59 write, writes gated by env flag)
 - **Export**: `docx` v9 (pure JS); LaTeX project (.tex + references.bib); HTML / JSON / share bundle
-- **Import**: manuscript / review import assistant for paste, txt, md, docx, and text-based pdf; DOCX TOC filtering; optional LLM cleanup; preview-before-write; undo-last-import
+- **Import**: manuscript / review import assistant for paste, txt, md, docx, and text-based pdf; DOCX TOC filtering; optional LLM cleanup; editable preview-before-write; undo-last-import
 - **Packaging**: electron-builder ships NSIS + Portable + macOS arm64 / x64. Windows releases are built on GitHub Actions `windows-latest`, avoiding local WSL `wine32` / rcedit failures.
 
 ### Release Build
 
-- **Recommended**: push a tag such as `v1.0.40`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
+- **Recommended**: push a tag such as `v1.0.41`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
 - **Manual**: run **Actions → Build & Release → Run workflow** in GitHub; artifacts are uploaded to the workflow run, and checking `publish` attaches them to the matching tag release.
 - **Local Windows**: `npm ci && npm run dist:win`.
 - **WSL/Linux cross-build**: requires a full 32-bit Wine setup for electron-builder's Windows resource editing. Use GitHub Actions unless you specifically need local packaging.
