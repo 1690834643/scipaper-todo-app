@@ -58,6 +58,8 @@ const {
   exportToHTML,
   exportToJSON,
   createSharePackage,
+  exportFullBackup,
+  restoreFullBackup,
   listWritingScenarios,
   addWritingScenario,
   updateWritingScenario,
@@ -296,6 +298,36 @@ function startDatabaseWatch() {
 function registerIpc() {
   ipcMain.handle('app:bootstrap', async () => loadState());
   ipcMain.handle('app:getMcpInfo', async () => buildMcpInfo());
+  ipcMain.handle('data:openFolder', async () => {
+    fs.mkdirSync(BASE_DIRECTORY, { recursive: true });
+    await shell.openPath(BASE_DIRECTORY);
+    return true;
+  });
+  ipcMain.handle('data:exportBackup', async () => {
+    const browserWindow = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+    const dialogResult = await dialog.showOpenDialog(browserWindow, {
+      title: '选择备份保存位置',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (dialogResult.canceled || dialogResult.filePaths.length === 0) return null;
+    const backupPath = exportFullBackup(dialogResult.filePaths[0]);
+    await shell.showItemInFolder(backupPath);
+    return { backupPath };
+  });
+  ipcMain.handle('data:restoreBackup', wrapMutation(async () => {
+    const browserWindow = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+    const dialogResult = await dialog.showOpenDialog(browserWindow, {
+      title: '选择 SciPaper Todo 备份文件',
+      properties: ['openFile'],
+      filters: [
+        { name: 'SciPaper Todo Backup', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (dialogResult.canceled || dialogResult.filePaths.length === 0) return null;
+    const result = restoreFullBackup(dialogResult.filePaths[0]);
+    return { ...result, state: loadState() };
+  }));
 
   ipcMain.handle(
     'article:create',

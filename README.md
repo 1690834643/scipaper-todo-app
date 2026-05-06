@@ -68,7 +68,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 📖 **Zotero 集成** | 通过 zotero-mcp-plugin 直连本地 Zotero（不限版本，6 / 7 / 8 都支持），library 检索 / collection 浏览 / item 详情 / 全文 / 批注 五种查询能力 |
 | 🔍 **审稿工作流** | 多轮 ReviewRound + Major/Minor 意见分类 + Revision 关联到具体 ContentBlock + 一键生成回复信草稿 |
 | 🎨 **多主题 + 海报分享** | claude / pixel / fresh 三主题 token 化切换；1080×1440 写作打卡海报（含 Latin 引文、印章、波浪线、渐变进度条） |
-| 💾 **本地数据安全** | JSON 数据库 + 原子写入（.tmp + rename）+ 5 分钟周期 .bak 备份 + safeStorage 加密的 API Key |
+| 💾 **本地数据安全** | JSON 数据库 + 原子写入（.tmp + rename）+ 5 分钟周期 .bak 备份 + Settings 一键完整备份/恢复 + safeStorage 加密的 API Key |
 | 🔥 **写作激励** | streak 连续打卡 / 番茄钟会话计数 / 打字字数 / 心情记录 / 每日字数目标 |
 | 🅰️ **补全词库分领域可选**（1.0.35） | 11 个内置 pack：核心学术 / 通用分子生物 / IMRaD 四段为默认开；生信工具 / 统计方法 / 鳞翅目昆虫 / 性别决定 / 表观与 RNA 默认关。Settings 里勾选启停，或上传 .txt（一行一词）/ .json 创建自己的 pack；MCP 端 `list_vocab_packs` / `set_vocab_pack_enabled` / `import_vocab_pack` 程序化操作。默认装包不再弹出 doublesex / DSX 这类高度专业的词，泛用性优先 |
 | 🎨 **新视觉**（1.0.36） | 米色 squircle + 衬线 "Sci" + 暖珊瑚斜体 "Paper"，7 尺寸（16/24/32/48/64/128/256）真正嵌入 .exe — 之前 1.0.13–1.0.35 由于 electron-builder 的 `signAndEditExecutable: false` 配置一直在用 Electron 默认圆形 logo，本版修复 |
@@ -81,6 +81,8 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🎓 **大论文闭环**（1.0.38） | 大论文详情页支持修改/删除、关联/取消关联小论文、按章节写入/修改/删除正文块，并可导出 Markdown；AI 工具也能读取大论文、写入/更新/删除大论文章节文本和导出大论文 |
 | 🧑‍⚖️ **审稿与引用可修正**（1.0.38） | 审稿意见导入后可编辑/删除，空轮次或误导入轮次可删除；参考文献导入后可编辑题名/作者/年份/期刊/DOI/URL，也可删除；Daily Log 进展条目支持编辑，避免记录写错只能删掉重来 |
 | ⚙️ **AI Provider 体验修正**（1.0.38） | 新增或更新 API Key 后自动设为当前活动 Provider；temperature 默认值固定为 `0`，不会回落到 `0.3` |
+| 🛟 **完整备份/恢复**（1.0.39） | Settings → 本地数据与备份 可直接打开数据目录、导出完整 `.scipaper-backup.json`、从备份恢复；恢复前会保留当前数据目录副本，降低误操作风险 |
+| ✅ **回归清单与冒烟测试**（1.0.39） | 新增 `docs/manual-regression-checklist.md`，覆盖小论文、导入、审稿、大论文、AI Provider、导出和备份；storage 测试新增完整备份恢复与真实工作流 smoke path |
 
 ### 安装与使用
 
@@ -92,7 +94,8 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 2. 首次启动会在 `%USERPROFILE%\Documents\SciPaperTodo\` 创建数据目录
 3. 进 **Settings → AI Provider** 添加你的 LLM（DeepSeek V4 Flash / Pro 已内置预设，粘贴 API Key 即可）
 4. 进 **Settings → Zotero 接入**（可选）启用 Zotero 集成
-5. 进 **Settings → MCP 协议** 复制配置粘到 Cursor / Claude Code 即可在外部 AI 里读写论文
+5. 进 **Settings → 本地数据与备份** 可打开数据目录、导出完整备份，或从 `.scipaper-backup.json` 恢复
+6. 进 **Settings → MCP 协议** 复制配置粘到 Cursor / Claude Code 即可在外部 AI 里读写论文
    - ⚠️ **Windows MCP 配置请用 Setup 版的 .exe**。Portable 版每次启动都会解压到 `%LOCALAPPDATA%\Temp\<随机 hash>\` 一个临时目录，关闭后通常被回收；MCP 配置写的临时路径下次启动就失效。要么用 NSIS Setup（路径固定），要么把 Portable .exe 自己拷到 `C:\Tools\SciPaperTodo\` 这种固定文件夹，MCP 配置指向那个稳定路径。
    - 🐧 **WSL / Linux 用户用 Node 直接跑 MCP**：源码里有一个 `electron/mcp-cli.cjs` 是不带 Electron 壳的 stdio MCP 入口，启动 230 ms，89 个工具全部可用。把客户端 (Claude Code in WSL / Cursor in WSL) 的 MCP 配置改成：
      ```json
@@ -122,7 +125,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 ### 发行版构建
 
-- **推荐方式**：推送 `v1.0.38` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
+- **推荐方式**：推送 `v1.0.39` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
 - **手动方式**：在 GitHub 的 **Actions → Build & Release → Run workflow** 里触发，构建产物会作为 workflow artifact 上传；勾选 `publish` 时会发布到对应 tag 的 Release。
 - **本地 Windows**：`npm ci && npm run dist:win`。
 - **WSL/Linux 交叉打 Windows 包**：需要完整 Wine 32-bit 环境；否则会在 electron-builder 的 Windows 资源编辑步骤失败。一般直接用 GitHub Actions。
@@ -139,6 +142,14 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 │       └── Exports\        # 导出的 docx / md
 └── Theses\                 # 学位论文（聚合多篇 article）
 ```
+
+完整备份文件默认由 Settings 导出到你选择的目录，文件名形如：
+
+```
+SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
+```
+
+它包含数据库和数据目录内的附件/导出文件。恢复时当前 `SciPaperTodo` 目录会先改名为 `.before-restore-*` 副本，再写入备份内容。
 
 ### 谁适合用
 
@@ -193,6 +204,8 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🎓 **Thesis workflow closure** (1.0.38) | Thesis detail pages now support edit/delete, linking/unlinking papers, writing/updating/deleting section text blocks, and Markdown export. AI tools can also read theses, write/update/delete thesis section text, and export a thesis |
 | 🧑‍⚖️ **Correctable reviews and citations** (1.0.38) | Imported reviewer comments can be edited/deleted; mistaken review rounds can be removed. Imported citations can be edited or deleted. Daily Log entries can be edited instead of deleted and re-entered |
 | ⚙️ **AI Provider UX fixes** (1.0.38) | Adding or updating an API key automatically activates that provider. The temperature default is now `0`, with no fallback to `0.3` |
+| 🛟 **Full backup / restore** (1.0.39) | Settings → Local Data & Backup can open the data folder, export a complete `.scipaper-backup.json`, and restore from it. Restore keeps the pre-restore data directory as a safety copy |
+| ✅ **Regression checklist and smoke tests** (1.0.39) | Added `docs/manual-regression-checklist.md` plus storage smoke coverage for full backup/restore and a realistic manuscript → review → thesis → export workflow |
 
 ### Install
 
@@ -225,7 +238,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 - **Shell**: Electron 37 (Chromium 130+, uses Canvas 2D Level 2, safeStorage, contextBridge)
 - **Renderer**: React 19 + TypeScript 6 + Vite 8 (121 modules, ~267 KB gzipped JS)
 - **Editor**: TipTap (ProseMirror) with pluggable autocomplete (11 toggleable packs; ~1400 words active by default, ~2100 words across the full registry) and inline annotation marks
-- **Storage**: local JSON database + encrypted API key store
+- **Storage**: local JSON database + complete backup/restore + encrypted API key store
 - **AI**: dual-protocol streaming (OpenAI-compat + Anthropic), with `reasoning_content` replay for thinking-mode models
 - **MCP**: stdio server on `@modelcontextprotocol/sdk` (89 tools: 33 read / 56 write, writes gated by env flag)
 - **Export**: `docx` v9 (pure JS); LaTeX project (.tex + references.bib); HTML / JSON / share bundle
@@ -234,7 +247,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 ### Release Build
 
-- **Recommended**: push a tag such as `v1.0.38`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
+- **Recommended**: push a tag such as `v1.0.39`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
 - **Manual**: run **Actions → Build & Release → Run workflow** in GitHub; artifacts are uploaded to the workflow run, and checking `publish` attaches them to the matching tag release.
 - **Local Windows**: `npm ci && npm run dist:win`.
 - **WSL/Linux cross-build**: requires a full 32-bit Wine setup for electron-builder's Windows resource editing. Use GitHub Actions unless you specifically need local packaging.
