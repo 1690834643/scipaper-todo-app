@@ -61,7 +61,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 | 特色 | 说明 |
 |---|---|
-| 🧠 **MCP 双向协议** | 内置 stdio MCP server 暴露 81 个工具（76 本地 + 5 Zotero），任何兼容 MCP 的 AI 客户端都能查/写你的论文，包括按学科启停补全词库、导入自定义词库、设置用户名、彻底删稿件 |
+| 🧠 **MCP 双向协议** | 内置 stdio MCP server 暴露 89 个工具（84 本地 + 5 Zotero），任何兼容 MCP 的 AI 客户端都能查/写你的论文，包括按学科启停补全词库、导入自定义词库、设置用户名、彻底删稿件 |
 | 📚 **IMRaD 一等公民** | 创建论文先回答 4 个研究问题（科学问题 / 现象 / 假设 / 方案），自动生成七章节骨架；ContentBlock 支持文本 / 图片 / 文件链接，每次修改自动版本快照 |
 | 🤖 **内置 AI 助手 + 8 场景** | 右侧 Cmd+K Drawer，预置 Abstract / Introduction / Methods / Results / Discussion / Conclusion / Reply Reviewer / Distill 八个场景 prompt，可自定义；支持 OpenAI 与 Anthropic 双协议、思考模式（reasoning_content）流式渲染、工具调用 + 二次确认 |
 | 📝 **docx 三模板 + 拉丁斜体规范** | Times New Roman 通用学术 / 宋体 1.5 行距中文学位 / Arial 紧凑 Nature 风格三套模板；勾选"套斜体规范"即可让 LLM 在导出前按学术英语惯例自动给学名 / 拉丁短语 / 统计变量打斜体 |
@@ -78,6 +78,9 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🧹 **AI 重排版 / 清理**（1.0.37） | Word/PDF 抽取文本如果带目录、页码、TOC、HYPERLINK、页眉页脚，可在导入助手里点"AI 重排版/清理"。AI 只整理导入框文本，不直接写入；仍需用户看预览后确认 |
 | 🧾 **DOCX/PDF 文本抽取修正**（1.0.37） | DOCX 导入会过滤 Word 目录域代码（`TOC` / `HYPERLINK` / `__RefHeading`），避免目录被当正文。PDF 支持文本型 PDF 的 best-effort 抽取；扫描版 PDF 仍需 OCR |
 | 🧭 **工作流补齐**（1.0.37） | 新建文章可快速创建草稿；学位论文卡片可打开最小详情页；文章页有"继续写当前章节"主按钮；沉浸编辑退出回当前章节预览；Daily Log 支持未归属进展；AI 上下文提示随当前页面变化 |
+| 🎓 **大论文闭环**（1.0.38） | 大论文详情页支持修改/删除、关联/取消关联小论文、按章节写入/修改/删除正文块，并可导出 Markdown；AI 工具也能读取大论文、写入/更新/删除大论文章节文本和导出大论文 |
+| 🧑‍⚖️ **审稿与引用可修正**（1.0.38） | 审稿意见导入后可编辑/删除，空轮次或误导入轮次可删除；参考文献导入后可编辑题名/作者/年份/期刊/DOI/URL，也可删除；Daily Log 进展条目支持编辑，避免记录写错只能删掉重来 |
+| ⚙️ **AI Provider 体验修正**（1.0.38） | 新增或更新 API Key 后自动设为当前活动 Provider；temperature 默认值固定为 `0`，不会回落到 `0.3` |
 
 ### 安装与使用
 
@@ -91,7 +94,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 4. 进 **Settings → Zotero 接入**（可选）启用 Zotero 集成
 5. 进 **Settings → MCP 协议** 复制配置粘到 Cursor / Claude Code 即可在外部 AI 里读写论文
    - ⚠️ **Windows MCP 配置请用 Setup 版的 .exe**。Portable 版每次启动都会解压到 `%LOCALAPPDATA%\Temp\<随机 hash>\` 一个临时目录，关闭后通常被回收；MCP 配置写的临时路径下次启动就失效。要么用 NSIS Setup（路径固定），要么把 Portable .exe 自己拷到 `C:\Tools\SciPaperTodo\` 这种固定文件夹，MCP 配置指向那个稳定路径。
-   - 🐧 **WSL / Linux 用户用 Node 直接跑 MCP**：源码里有一个 `electron/mcp-cli.cjs` 是不带 Electron 壳的 stdio MCP 入口，启动 230 ms，81 个工具全部可用。把客户端 (Claude Code in WSL / Cursor in WSL) 的 MCP 配置改成：
+   - 🐧 **WSL / Linux 用户用 Node 直接跑 MCP**：源码里有一个 `electron/mcp-cli.cjs` 是不带 Electron 壳的 stdio MCP 入口，启动 230 ms，89 个工具全部可用。把客户端 (Claude Code in WSL / Cursor in WSL) 的 MCP 配置改成：
      ```json
      {
        "mcpServers": {
@@ -112,14 +115,14 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 - **写作引擎**：TipTap (ProseMirror) + 自动补全（11 个可启停 pack，默认开 6 个 ≈ 1400 词；启用全部 ≈ 2100 词）+ 行内批注 mark
 - **存储**：本地 JSON 数据库 + safeStorage 加密 API Key
 - **AI 协议**：OpenAI-compat 与 Anthropic 双协议流式，支持 thinking mode 的 `reasoning_content` 重放
-- **MCP**：基于 `@modelcontextprotocol/sdk` 的 stdio server（81 工具：33 读 / 48 写，写工具需环境变量开启）
+- **MCP**：基于 `@modelcontextprotocol/sdk` 的 stdio server（89 工具：33 读 / 56 写，写工具需环境变量开启）
 - **导出**：`docx` v9 纯 JS 包；LaTeX 工程（.tex + references.bib）；HTML / JSON / 分享包
 - **导入**：正文 / 审稿导入助手支持 paste、txt、md、docx、文本型 pdf；DOCX 目录域过滤；可选 LLM 清理；写入前预览、写入后可撤销最近批次
 - **打包**：electron-builder 出 NSIS + Portable + macOS arm64/x64 共 6 产物；Windows 发行版通过 GitHub Actions 在 `windows-latest` 上构建，避免 WSL 本地缺少 `wine32` 时卡在 rcedit
 
 ### 发行版构建
 
-- **推荐方式**：推送 `v1.0.37` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows 打包，并把 `Setup` / `Portable` / `.blockmap` 上传到 GitHub Release。
+- **推荐方式**：推送 `v1.0.38` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
 - **手动方式**：在 GitHub 的 **Actions → Build & Release → Run workflow** 里触发，构建产物会作为 workflow artifact 上传；勾选 `publish` 时会发布到对应 tag 的 Release。
 - **本地 Windows**：`npm ci && npm run dist:win`。
 - **WSL/Linux 交叉打 Windows 包**：需要完整 Wine 32-bit 环境；否则会在 electron-builder 的 Windows 资源编辑步骤失败。一般直接用 GitHub Actions。
@@ -170,7 +173,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 | Feature | What it does |
 |---|---|
-| 🧠 **Bidirectional MCP** | Built-in stdio MCP server exposes 81 tools (76 local + 5 Zotero). Any MCP-compatible AI client can query and write to your manuscripts, including toggling per-discipline autocomplete packs, importing custom vocabulary, setting your display name, and hard-deleting articles |
+| 🧠 **Bidirectional MCP** | Built-in stdio MCP server exposes 89 tools (84 local + 5 Zotero). Any MCP-compatible AI client can query and write to your manuscripts, including toggling per-discipline autocomplete packs, importing custom vocabulary, setting your display name, and hard-deleting articles |
 | 📚 **IMRaD as a first-class citizen** | Creating a paper starts with 4 research questions (problem / phenomenon / hypothesis / approach) that auto-generate the 7-section skeleton. Content blocks support text / image / file link, with automatic version snapshots on every edit |
 | 🤖 **Built-in AI drawer + 8 scenarios** | Right-side Cmd+K drawer with preset prompts for Abstract / Introduction / Methods / Results / Discussion / Conclusion / Reply Reviewer / Distill, all customisable. OpenAI and Anthropic protocols, streaming `reasoning_content` for thinking-mode models, tool-calling with confirm-before-write |
 | 📝 **3 docx templates + Latin italic guide** | Times New Roman academic / SimSun 1.5-spacing thesis / Arial Nature-style. Tick "apply italic guide" and the exporter calls the LLM to mark italics on species names, Latin phrases, and statistical variables before writing the docx |
@@ -187,6 +190,9 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🧹 **AI reformat / cleanup** (1.0.37) | If Word/PDF extraction includes TOC, page numbers, HYPERLINK fields, headers, or broken line breaks, click "AI reformat/cleanup" inside the import assistant. It only cleans the import text; writes still require preview confirmation |
 | 🧾 **DOCX/PDF extraction fixes** (1.0.37) | DOCX extraction filters Word TOC field codes (`TOC` / `HYPERLINK` / `__RefHeading`). PDF import has best-effort text extraction for text-based PDFs; scanned PDFs still need OCR |
 | 🧭 **Workflow completion pass** (1.0.37) | Quick draft creation, minimal thesis detail view, clear continue-writing action, editor exit back to current-section preview, unassigned Daily Log entries, and route-aware AI context hints |
+| 🎓 **Thesis workflow closure** (1.0.38) | Thesis detail pages now support edit/delete, linking/unlinking papers, writing/updating/deleting section text blocks, and Markdown export. AI tools can also read theses, write/update/delete thesis section text, and export a thesis |
+| 🧑‍⚖️ **Correctable reviews and citations** (1.0.38) | Imported reviewer comments can be edited/deleted; mistaken review rounds can be removed. Imported citations can be edited or deleted. Daily Log entries can be edited instead of deleted and re-entered |
+| ⚙️ **AI Provider UX fixes** (1.0.38) | Adding or updating an API key automatically activates that provider. The temperature default is now `0`, with no fallback to `0.3` |
 
 ### Install
 
@@ -200,7 +206,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 4. **Settings → Zotero** (optional): enable Zotero integration
 5. **Settings → MCP**: copy the config block into Cursor / Claude Code to give external AIs access
    - ⚠️ **On Windows, use the Setup .exe for MCP integration, not Portable.** Portable launches by self-extracting to `%LOCALAPPDATA%\Temp\<random-hash>\` and the hash changes between runs; an MCP config pinned to that temp path breaks the next time you reopen the app. Either install via NSIS Setup (stable install path), or copy the Portable .exe into a fixed folder such as `C:\Tools\SciPaperTodo\` and point your MCP config there.
-   - 🐧 **WSL / Linux: skip the .exe bridge and run the MCP server natively via Node.** The repo ships `electron/mcp-cli.cjs`, an Electron-free stdio MCP entry. ~230 ms cold start, all 81 tools live. Point your WSL-side client at:
+   - 🐧 **WSL / Linux: skip the .exe bridge and run the MCP server natively via Node.** The repo ships `electron/mcp-cli.cjs`, an Electron-free stdio MCP entry. ~230 ms cold start, all 89 tools live. Point your WSL-side client at:
      ```json
      {
        "mcpServers": {
@@ -221,14 +227,14 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 - **Editor**: TipTap (ProseMirror) with pluggable autocomplete (11 toggleable packs; ~1400 words active by default, ~2100 words across the full registry) and inline annotation marks
 - **Storage**: local JSON database + encrypted API key store
 - **AI**: dual-protocol streaming (OpenAI-compat + Anthropic), with `reasoning_content` replay for thinking-mode models
-- **MCP**: stdio server on `@modelcontextprotocol/sdk` (81 tools: 33 read / 48 write, writes gated by env flag)
+- **MCP**: stdio server on `@modelcontextprotocol/sdk` (89 tools: 33 read / 56 write, writes gated by env flag)
 - **Export**: `docx` v9 (pure JS); LaTeX project (.tex + references.bib); HTML / JSON / share bundle
 - **Import**: manuscript / review import assistant for paste, txt, md, docx, and text-based pdf; DOCX TOC filtering; optional LLM cleanup; preview-before-write; undo-last-import
 - **Packaging**: electron-builder ships NSIS + Portable + macOS arm64 / x64. Windows releases are built on GitHub Actions `windows-latest`, avoiding local WSL `wine32` / rcedit failures.
 
 ### Release Build
 
-- **Recommended**: push a tag such as `v1.0.37`; GitHub Actions runs tests, lint, Windows packaging, then uploads `Setup`, `Portable`, and `.blockmap` files to the GitHub Release.
+- **Recommended**: push a tag such as `v1.0.38`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
 - **Manual**: run **Actions → Build & Release → Run workflow** in GitHub; artifacts are uploaded to the workflow run, and checking `publish` attaches them to the matching tag release.
 - **Local Windows**: `npm ci && npm run dist:win`.
 - **WSL/Linux cross-build**: requires a full 32-bit Wine setup for electron-builder's Windows resource editing. Use GitHub Actions unless you specifically need local packaging.

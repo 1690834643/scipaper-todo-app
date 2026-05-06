@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useState, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type { AppState, Article } from '../types'
 import { parseManuscriptDraft, parseReviewLetter } from '../utils/importParsers'
@@ -13,6 +13,7 @@ interface ImportAssistantModalProps {
   onClose: () => void
   onApplied: (nextState: AppState, message: string) => void | Promise<void>
   onError: (message: string) => void
+  defaultMode?: ImportMode
 }
 
 const MODE_LABELS: Record<ImportMode, string> = {
@@ -21,7 +22,7 @@ const MODE_LABELS: Record<ImportMode, string> = {
 }
 
 export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Element | null {
-  const { open, article, busy, onClose, onApplied, onError } = props
+  const { open, article, busy, onClose, onApplied, onError, defaultMode = 'manuscript' } = props
   const [mode, setMode] = useState<ImportMode>('manuscript')
   const [writeMode, setWriteMode] = useState<WriteMode>('append')
   const [targetRoundId, setTargetRoundId] = useState('__new__')
@@ -32,6 +33,10 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
 
   const manuscriptSections = useMemo(() => parseManuscriptDraft(text), [text])
   const reviewGroups = useMemo(() => parseReviewLetter(text), [text])
+
+  useEffect(() => {
+    if (open) setMode(defaultMode)
+  }, [open, defaultMode])
 
   if (!open) return null
 

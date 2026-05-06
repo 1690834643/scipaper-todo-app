@@ -10,7 +10,15 @@ interface ReviewPanelProps {
     payload: { reviewerId: string; originalText: string; type: ReviewCommentType; suggestedSection: string },
   ) => Promise<void>
   onUpdateStatus: (roundId: string, commentId: string, status: CommentStatus) => Promise<void>
+  onUpdateComment: (
+    roundId: string,
+    commentId: string,
+    patch: { reviewerId?: string; originalText?: string; type?: ReviewCommentType; suggestedSection?: string; status?: CommentStatus },
+  ) => Promise<void>
+  onDeleteComment: (roundId: string, commentId: string) => Promise<void>
+  onDeleteRound: (roundId: string) => Promise<void>
   onAddRevision: (roundId: string, commentId: string, payload: { description: string; responseText: string; markCompleted?: boolean }) => Promise<void>
+  onOpenImport: () => void
 }
 
 function RoundComposer({
@@ -146,7 +154,37 @@ function RevisionComposer({
   )
 }
 
-export function ReviewPanel({ article, onAddRound, onAddComment, onUpdateStatus, onAddRevision }: ReviewPanelProps) {
+export function ReviewPanel({
+  article,
+  onAddRound,
+  onAddComment,
+  onUpdateStatus,
+  onUpdateComment,
+  onDeleteComment,
+  onDeleteRound,
+  onAddRevision,
+  onOpenImport,
+}: ReviewPanelProps) {
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState({
+    reviewerId: '',
+    originalText: '',
+    type: 'Major' as ReviewCommentType,
+    suggestedSection: '',
+    status: 'Pending' as CommentStatus,
+  })
+
+  function startEdit(comment: ReviewComment) {
+    setEditingCommentId(comment.id)
+    setEditDraft({
+      reviewerId: comment.reviewerId,
+      originalText: comment.originalText,
+      type: comment.type,
+      suggestedSection: comment.suggestedSection,
+      status: comment.status,
+    })
+  }
+
   function groupCommentsByReviewer(comments: ReviewComment[]) {
     const groups = new Map<string, ReviewComment[]>()
     for (const comment of comments) {
@@ -158,6 +196,19 @@ export function ReviewPanel({ article, onAddRound, onAddComment, onUpdateStatus,
 
   return (
     <div className="panel-stack">
+      <section className="panel-card">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Review Import</p>
+            <h3>审稿意见入口</h3>
+          </div>
+          <button className="primary-button" type="button" onClick={onOpenImport}>
+            导入审稿意见
+          </button>
+        </div>
+        <p className="muted-text">支持粘贴或选择 .txt/.md/.docx/.pdf 文本型文件，也可以先用 AI 重排版/清理后再确认写入。</p>
+      </section>
+
       <RoundComposer onSubmit={onAddRound} />
 
       {article.reviewRounds.length === 0 ? (
@@ -178,6 +229,15 @@ export function ReviewPanel({ article, onAddRound, onAddComment, onUpdateStatus,
               <span>投稿: {round.submittedAt}</span>
               <span>稿件号: {round.manuscriptNumber || '未填写'}</span>
               <span>收到意见: {round.reviewReceivedAt || '未收到'}</span>
+              <button
+                className="ghost-button danger"
+                type="button"
+                onClick={() => {
+                  if (confirm(`确定删除 Round ${round.roundNumber} 及其全部审稿意见？`)) onDeleteRound(round.id)
+                }}
+              >
+                删除轮次
+              </button>
             </div>
           </div>
 
@@ -216,6 +276,71 @@ export function ReviewPanel({ article, onAddRound, onAddComment, onUpdateStatus,
                       </div>
 
                       <p className="comment-body">{comment.originalText}</p>
+
+                      {editingCommentId === comment.id ? (
+                        <div className="revision-composer">
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>审稿人</span>
+                              <input value={editDraft.reviewerId} onChange={(event) => setEditDraft({ ...editDraft, reviewerId: event.target.value })} />
+                            </label>
+                            <label className="field">
+                              <span>建议章节</span>
+                              <input value={editDraft.suggestedSection} onChange={(event) => setEditDraft({ ...editDraft, suggestedSection: event.target.value })} />
+                            </label>
+                            <label className="field">
+                              <span>等级</span>
+                              <select value={editDraft.type} onChange={(event) => setEditDraft({ ...editDraft, type: event.target.value as ReviewCommentType })}>
+                                <option value="Major">Major</option>
+                                <option value="Minor">Minor</option>
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>状态</span>
+                              <select value={editDraft.status} onChange={(event) => setEditDraft({ ...editDraft, status: event.target.value as CommentStatus })}>
+                                <option value="Pending">待处理</option>
+                                <option value="InProgress">修改中</option>
+                                <option value="Completed">已完成</option>
+                                <option value="Disagreed">不同意</option>
+                              </select>
+                            </label>
+                          </div>
+                          <label className="field">
+                            <span>原始审稿意见</span>
+                            <textarea rows={4} value={editDraft.originalText} onChange={(event) => setEditDraft({ ...editDraft, originalText: event.target.value })} />
+                          </label>
+                          <div className="header-actions">
+                            <button
+                              className="primary-button"
+                              type="button"
+                              onClick={async () => {
+                                await onUpdateComment(round.id, comment.id, editDraft)
+                                setEditingCommentId(null)
+                              }}
+                            >
+                              保存意见
+                            </button>
+                            <button className="ghost-button" type="button" onClick={() => setEditingCommentId(null)}>
+                              取消
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="header-actions">
+                          <button className="ghost-button" type="button" onClick={() => startEdit(comment)}>
+                            修改意见
+                          </button>
+                          <button
+                            className="ghost-button danger"
+                            type="button"
+                            onClick={() => {
+                              if (confirm('确定删除这条审稿意见？相关修改记录也会一起删除。')) onDeleteComment(round.id, comment.id)
+                            }}
+                          >
+                            删除意见
+                          </button>
+                        </div>
+                      )}
 
                       <div className="revision-list">
                         {comment.revisions.map((revision) => (

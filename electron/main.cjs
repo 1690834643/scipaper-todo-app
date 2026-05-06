@@ -7,6 +7,9 @@ const {
   updateAnnotation,
   deleteAnnotation,
   addReviewComment,
+  updateReviewComment,
+  deleteReviewComment,
+  deleteReviewRound,
   importReviewComments,
   DATABASE_PATH,
   addReviewRound,
@@ -33,6 +36,11 @@ const {
   addThesisSection,
   linkArticleToThesis,
   unlinkArticleFromThesis,
+  deleteThesis,
+  addThesisTextBlock,
+  updateThesisTextBlock,
+  deleteThesisBlock,
+  exportThesisMarkdown,
   updateDailyGoal,
   addMoodEntry,
   getMoodHistory,
@@ -43,6 +51,8 @@ const {
   setTheme,
   getWritingStats,
   addCitation,
+  updateCitation,
+  deleteCitation,
   addTag,
   removeTag,
   exportToHTML,
@@ -243,11 +253,24 @@ function createWindow() {
   window.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 
+let stateMutationQueue = Promise.resolve();
+
+function enqueueStateMutation(job) {
+  const next = stateMutationQueue.then(job, job);
+  stateMutationQueue = next.catch(() => {});
+  return next;
+}
+
+function wrapMutation(handler) {
+  return (...args) => enqueueStateMutation(() => handler(...args));
+}
+
 function wrapStateMutation(handler) {
-  return async (...args) => {
-    await handler(...args);
-    return loadState();
-  };
+  return (...args) =>
+    enqueueStateMutation(async () => {
+      await handler(...args);
+      return loadState();
+    });
 }
 
 function broadcastStateChanged() {
@@ -537,6 +560,24 @@ function registerIpc() {
     }),
   );
   ipcMain.handle(
+    'review:updateComment',
+    wrapStateMutation(async (_event, { articleId, roundId, commentId, patch }) => {
+      updateReviewComment(articleId, roundId, commentId, patch);
+    }),
+  );
+  ipcMain.handle(
+    'review:deleteComment',
+    wrapStateMutation(async (_event, { articleId, roundId, commentId }) => {
+      deleteReviewComment(articleId, roundId, commentId);
+    }),
+  );
+  ipcMain.handle(
+    'review:deleteRound',
+    wrapStateMutation(async (_event, { articleId, roundId }) => {
+      deleteReviewRound(articleId, roundId);
+    }),
+  );
+  ipcMain.handle(
     'review:addRevision',
     wrapStateMutation(async (_event, { articleId, roundId, commentId, payload }) => {
       addRevision(articleId, roundId, commentId, payload);
@@ -597,6 +638,36 @@ function registerIpc() {
     }),
   );
 
+  ipcMain.handle(
+    'thesis:delete',
+    wrapStateMutation(async (_event, { thesisId }) => {
+      deleteThesis(thesisId);
+    }),
+  );
+  ipcMain.handle(
+    'thesis:addTextBlock',
+    wrapStateMutation(async (_event, { thesisId, sectionId, content, description }) => {
+      addThesisTextBlock(thesisId, sectionId, content, description);
+    }),
+  );
+  ipcMain.handle(
+    'thesis:updateTextBlock',
+    wrapStateMutation(async (_event, { thesisId, blockId, content, description }) => {
+      updateThesisTextBlock(thesisId, blockId, content, description);
+    }),
+  );
+  ipcMain.handle(
+    'thesis:deleteBlock',
+    wrapStateMutation(async (_event, { thesisId, blockId }) => {
+      deleteThesisBlock(thesisId, blockId);
+    }),
+  );
+  ipcMain.handle('thesis:exportMarkdown', async (_event, { thesisId }) => {
+    const exportPath = exportThesisMarkdown(thesisId);
+    await shell.showItemInFolder(exportPath);
+    return exportPath;
+  });
+
   // Writing streak operations
   ipcMain.handle('streak:get', async () => {
     const state = loadState();
@@ -656,6 +727,18 @@ function registerIpc() {
     'citation:add',
     wrapStateMutation(async (_event, { articleId, citation }) => {
       addCitation(articleId, citation);
+    }),
+  );
+  ipcMain.handle(
+    'citation:update',
+    wrapStateMutation(async (_event, { articleId, citationId, patch }) => {
+      updateCitation(articleId, citationId, patch);
+    }),
+  );
+  ipcMain.handle(
+    'citation:delete',
+    wrapStateMutation(async (_event, { articleId, citationId }) => {
+      deleteCitation(articleId, citationId);
     }),
   );
 
@@ -722,7 +805,7 @@ function registerIpc() {
 
   ipcMain.handle('llm:listProviders', async () => enrichProviders());
 
-  ipcMain.handle('llm:addProvider', async (_event, { draft }) => {
+  ipcMain.handle('llm:addProvider', wrapMutation(async (_event, { draft }) => {
     const { apiKey, ...meta } = draft || {};
     const provider = addProviderStorage(meta);
     if (apiKey && typeof apiKey === 'string' && apiKey.trim()) {
@@ -733,33 +816,36 @@ function registerIpc() {
       }
     }
     return enrichProviders();
-  });
+  }));
 
-  ipcMain.handle('llm:updateProvider', async (_event, { id, patch }) => {
+  ipcMain.handle('llm:updateProvider', wrapMutation(async (_event, { id, patch }) => {
     const { apiKey, ...meta } = patch || {};
-    if (Object.keys(meta).length > 0) {
-      updateProviderStorage(id, meta);
-    }
+    let savedApiKey = false;
     if (typeof apiKey === 'string' && apiKey.trim()) {
       try {
         llmKeyStore.setKey(id, apiKey.trim());
+        savedApiKey = true;
       } catch (error) {
         console.warn('Failed to save API key:', error.message);
       }
     }
+    const storagePatch = savedApiKey ? { ...meta, activate: true } : meta;
+    if (Object.keys(storagePatch).length > 0) {
+      updateProviderStorage(id, storagePatch);
+    }
     return enrichProviders();
-  });
+  }));
 
-  ipcMain.handle('llm:deleteProvider', async (_event, { id }) => {
+  ipcMain.handle('llm:deleteProvider', wrapMutation(async (_event, { id }) => {
     deleteProviderStorage(id);
     try { llmKeyStore.deleteKey(id); } catch {}
     return enrichProviders();
-  });
+  }));
 
-  ipcMain.handle('llm:setActiveProvider', async (_event, { id }) => {
+  ipcMain.handle('llm:setActiveProvider', wrapMutation(async (_event, { id }) => {
     setActiveProviderStorage(id);
     return enrichProviders();
-  });
+  }));
 
   ipcMain.handle('llm:testProvider', async (_event, { id }) => {
     return llmClient.testProvider(id);
@@ -784,31 +870,31 @@ function registerIpc() {
   });
 
   ipcMain.handle('scenario:list', () => listWritingScenarios());
-  ipcMain.handle('scenario:add', (_, { draft }) => addWritingScenario(draft));
-  ipcMain.handle('scenario:update', (_, { id, patch }) => updateWritingScenario(id, patch));
-  ipcMain.handle('scenario:delete', (_, { id }) => deleteWritingScenario(id));
-  ipcMain.handle('scenario:reset', (_, { id }) => resetWritingScenarioToDefault(id));
+  ipcMain.handle('scenario:add', wrapMutation((_event, { draft }) => addWritingScenario(draft)));
+  ipcMain.handle('scenario:update', wrapMutation((_event, { id, patch }) => updateWritingScenario(id, patch)));
+  ipcMain.handle('scenario:delete', wrapMutation((_event, { id }) => deleteWritingScenario(id)));
+  ipcMain.handle('scenario:reset', wrapMutation((_event, { id }) => resetWritingScenarioToDefault(id)));
   ipcMain.handle('italic:get', () => getItalicGuide());
-  ipcMain.handle('italic:set', (_, { config }) => setItalicGuide(config));
+  ipcMain.handle('italic:set', wrapMutation((_event, { config }) => setItalicGuide(config)));
   ipcMain.handle('zotero:getConfig', () => getZoteroConfig());
-  ipcMain.handle('zotero:setConfig', (_, { config }) => setZoteroConfig(config));
+  ipcMain.handle('zotero:setConfig', wrapMutation((_event, { config }) => setZoteroConfig(config)));
 
   // Custom autocomplete vocabulary — user-defined words & phrases that merge
   // into the immersive editor's autocomplete suggestions on the `general`
   // bucket. Also exposed via MCP write tools (toolRouter).
   ipcMain.handle('vocab:get', () => getCustomVocab());
-  ipcMain.handle('vocab:addWord', (_, { word }) => addCustomVocabWord(word));
-  ipcMain.handle('vocab:removeWord', (_, { word }) => removeCustomVocabWord(word));
-  ipcMain.handle('vocab:addPhrase', (_, { entry }) => addCustomVocabPhrase(entry));
-  ipcMain.handle('vocab:removePhrase', (_, { trigger, text }) => removeCustomVocabPhrase(trigger, text));
-  ipcMain.handle('vocab:clear', () => clearCustomVocab());
+  ipcMain.handle('vocab:addWord', wrapMutation((_event, { word }) => addCustomVocabWord(word)));
+  ipcMain.handle('vocab:removeWord', wrapMutation((_event, { word }) => removeCustomVocabWord(word)));
+  ipcMain.handle('vocab:addPhrase', wrapMutation((_event, { entry }) => addCustomVocabPhrase(entry)));
+  ipcMain.handle('vocab:removePhrase', wrapMutation((_event, { trigger, text }) => removeCustomVocabPhrase(trigger, text)));
+  ipcMain.handle('vocab:clear', wrapMutation(() => clearCustomVocab()));
 
   // Vocab pack registry — list + enable/disable + import/delete/rename
   ipcMain.handle('vocabPacks:list', () => listVocabPacks());
-  ipcMain.handle('vocabPacks:setEnabled', (_, { id, enabled }) => setVocabPackEnabled(id, enabled));
-  ipcMain.handle('vocabPacks:import', (_, { pack }) => importVocabPack(pack));
-  ipcMain.handle('vocabPacks:delete', (_, { id }) => deleteCustomVocabPack(id));
-  ipcMain.handle('vocabPacks:rename', (_, { id, name }) => renameCustomVocabPack(id, name));
+  ipcMain.handle('vocabPacks:setEnabled', wrapMutation((_event, { id, enabled }) => setVocabPackEnabled(id, enabled)));
+  ipcMain.handle('vocabPacks:import', wrapMutation((_event, { pack }) => importVocabPack(pack)));
+  ipcMain.handle('vocabPacks:delete', wrapMutation((_event, { id }) => deleteCustomVocabPack(id)));
+  ipcMain.handle('vocabPacks:rename', wrapMutation((_event, { id, name }) => renameCustomVocabPack(id, name)));
   ipcMain.handle('vocabPacks:getCustom', () => getCustomVocabPacks());
 
   // User profile (display name shown in sidebar + greetings)
@@ -817,7 +903,7 @@ function registerIpc() {
     setUserProfile(patch);
   }));
   ipcMain.handle('autoApprove:get', () => getAutoApproveTools());
-  ipcMain.handle('autoApprove:set', (_, { value }) => setAutoApproveTools(value));
+  ipcMain.handle('autoApprove:set', wrapMutation((_event, { value }) => setAutoApproveTools(value)));
 
   // Progress entries / Findings / Daily session
   ipcMain.handle(

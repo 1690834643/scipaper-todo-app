@@ -57,6 +57,16 @@
   border-color: var(--c-ink-muted);
 }
 
+.ghost-button.danger {
+  color: var(--c-danger);
+  border-color: color-mix(in srgb, var(--c-danger) 45%, var(--c-line));
+}
+
+.ghost-button.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
+  border-color: var(--c-danger);
+}
+
 /* Pixel theme: hard offset shadow + uppercase */
 [data-theme="pixel"] .primary-button,
 [data-theme="pixel"] .ghost-button {

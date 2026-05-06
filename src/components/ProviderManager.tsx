@@ -54,7 +54,7 @@ const emptyDraft: Draft = {
   model: '',
   supportsToolUse: false,
   trustForWrite: false,
-  temperature: '',
+  temperature: '0',
   maxTokens: '',
   apiKey: '',
 }
@@ -88,7 +88,7 @@ export function ProviderManager(props: Props): JSX.Element {
 
   function startAddFromPreset(p: LlmPreset) {
     const dft = (p as { defaultMaxTokens?: number }).defaultMaxTokens
-    setAddDraft({ name: p.name, kind: p.kind, baseUrl: p.baseUrl, model: p.defaultModel, supportsToolUse: p.supportsToolUse, trustForWrite: false, temperature: '', maxTokens: dft ? String(dft) : '', apiKey: '' })
+    setAddDraft({ name: p.name, kind: p.kind, baseUrl: p.baseUrl, model: p.defaultModel, supportsToolUse: p.supportsToolUse, trustForWrite: false, temperature: '0', maxTokens: dft ? String(dft) : '', apiKey: '' })
     setShowAdd(true)
   }
 
@@ -136,7 +136,7 @@ export function ProviderManager(props: Props): JSX.Element {
         </div>
         <label className="field"><span>Base URL</span><input value={draft.baseUrl} onChange={e => setDraft(prev => ({ ...prev, baseUrl: e.target.value }))} placeholder="https://api.example.com/v1" /></label>
         <div className="form-grid">
-          <label className="field"><span>Temperature</span><input type="number" step="0.1" min="0" max="2" value={draft.temperature} onChange={e => setDraft(prev => ({ ...prev, temperature: e.target.value }))} placeholder="可选, 0-2" /></label>
+          <label className="field"><span>Temperature</span><input type="number" step="0.1" min="0" max="2" value={draft.temperature} onChange={e => setDraft(prev => ({ ...prev, temperature: e.target.value }))} placeholder="默认 0, 取值 0-2" /></label>
           <label className="field"><span>Max Output Tokens</span><input type="number" min="1" value={draft.maxTokens} onChange={e => setDraft(prev => ({ ...prev, maxTokens: e.target.value }))} placeholder="DeepSeek V4 上限 384000" /></label>
         </div>
         <label className="field"><span>API Key</span><input type="password" value={draft.apiKey} onChange={e => setDraft(prev => ({ ...prev, apiKey: e.target.value }))} placeholder={isAdd ? '粘贴你的 API Key' : hasKey ? '已保存,留空不修改' : '粘贴你的 API Key'} required={isAdd} /></label>

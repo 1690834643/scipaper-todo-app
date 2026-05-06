@@ -21,6 +21,7 @@ interface LibraryViewProps {
   onNewArticle: () => void
   onNewThesis: () => void
   onDeleteArticle: (id: string, title: string) => void | Promise<void>
+  onDeleteThesis: (id: string, title: string) => void | Promise<void>
 }
 
 type LibraryItem = {
@@ -35,7 +36,7 @@ type LibraryItem = {
 }
 
 export function LibraryView(props: LibraryViewProps): JSX.Element {
-  const { articles, theses, onOpenArticle, onOpenThesis, onNewArticle, onNewThesis, onDeleteArticle } = props
+  const { articles, theses, onOpenArticle, onOpenThesis, onNewArticle, onNewThesis, onDeleteArticle, onDeleteThesis } = props
   const [filter, setFilter] = useState<Filter>('all')
 
   const items = useMemo<LibraryItem[]>(() => {
@@ -94,15 +95,15 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
           <p className="eyebrow">Library</p>
           <h1>稿件库</h1>
           <p>
-            {articles.length} 篇文章 · {theses.length} 篇学位论文
+            {articles.length} 篇小论文 · {theses.length} 篇大论文
           </p>
         </div>
         <div>
           <button className="primary-button" onClick={onNewArticle} type="button">
-            + 新建文章
+            + 新建小论文
           </button>
           <button className="ghost-button" onClick={onNewThesis} type="button">
-            + 新建学位论文
+            + 新建大论文
           </button>
         </div>
       </div>
@@ -141,14 +142,14 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
           onClick={() => setFilter('theses')}
           type="button"
         >
-          学位论文
+          大论文
         </button>
       </div>
 
       {isCompletelyEmpty && (
         <div className="empty-library">
           <h3>还没有任何稿件</h3>
-          <p>用右上的按钮新建一篇</p>
+          <p>用右上的按钮新建小论文或大论文</p>
         </div>
       )}
 
@@ -179,48 +180,52 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
                 }}
                 style={{ position: 'relative' }}
               >
-                {item.kind === 'article' && (
-                  <button
-                    type="button"
-                    className="library-card-delete"
-                    aria-label={`删除 ${item.title}`}
-                    title="删除（不可撤销）"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (confirm(`确定删除「${item.title}」？\n\n这会一并删除该论文的全部章节、附件、版本历史，且不可撤销。`)) {
+                <button
+                  type="button"
+                  className="library-card-delete"
+                  aria-label={`删除 ${item.title}`}
+                  title="删除（不可撤销）"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (item.kind === 'article') {
+                      if (confirm(`确定删除小论文「${item.title}」？\n\n这会一并删除该小论文的全部章节、附件、版本历史，且不可撤销。`)) {
                         onDeleteArticle(item.id, item.title)
                       }
-                    }}
-                    onKeyDown={(e) => {
-                      // Don't let Enter/Space bubble to the parent (would open the card)
-                      if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
-                    }}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      right: 0,
-                      width: 44,
-                      height: 44,
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '50%',
-                      border: '1px solid var(--c-line)',
-                      background: 'var(--c-panel)',
-                      color: 'var(--c-ink-muted)',
-                      cursor: 'pointer',
-                      fontSize: 16,
-                      lineHeight: 1,
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
+                      return
+                    }
+                    if (confirm(`确定删除大论文「${item.title}」？\n\n这会删除该大论文框架、章节结构和关联信息，但不会删除已关联的小论文。不可撤销。`)) {
+                      onDeleteThesis(item.id, item.title)
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    // Don't let Enter/Space bubble to the parent (would open the card)
+                    if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    width: 44,
+                    height: 44,
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '50%',
+                    border: '1px solid var(--c-line)',
+                    background: 'var(--c-panel)',
+                    color: 'var(--c-ink-muted)',
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    lineHeight: 1,
+                  }}
+                >
+                  ✕
+                </button>
                 <div className="library-card-cover">{Array.from(item.title)[0]?.toUpperCase() ?? ''}</div>
                 <div className="library-card-body">
                   <p className="library-item-meta-row">
-                    <span>{item.kind === 'article' ? 'Article' : 'Thesis'}</span>
+                    <span>{item.kind === 'article' ? '小论文' : '大论文'}</span>
                     <span data-status={item.statusKey} className="library-item-status">
                       {item.statusLabel}
                     </span>

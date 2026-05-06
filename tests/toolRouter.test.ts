@@ -25,4 +25,41 @@ describe('toolRouter section validation', () => {
 
     expect(result).toEqual({ valid: true, errors: [] })
   })
+
+  it('accepts AI thesis section writing tool arguments', () => {
+    const result = validateArgs('add_thesis_text_block', {
+      thesisId: 'thesis-1',
+      sectionId: 'section-1',
+      content: 'Thesis chapter text',
+      description: 'draft chapter',
+    })
+
+    expect(result).toEqual({ valid: true, errors: [] })
+  })
+
+  it('accepts AI thesis export tool arguments', () => {
+    const result = validateArgs('export_thesis', {
+      thesisId: 'thesis-1',
+      format: 'markdown',
+    })
+
+    expect(result).toEqual({ valid: true, errors: [] })
+  })
+
+  it('accepts AI citation update and delete tool arguments', () => {
+    expect(
+      validateArgs('update_citation', {
+        articleId: 'article-1',
+        citationId: 'citation-1',
+        patch: { title: 'Corrected citation' },
+      }),
+    ).toEqual({ valid: true, errors: [] })
+
+    expect(
+      validateArgs('delete_citation', {
+        articleId: 'article-1',
+        citationId: 'citation-1',
+      }),
+    ).toEqual({ valid: true, errors: [] })
+  })
 })

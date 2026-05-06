@@ -143,6 +143,196 @@ describe('storage derived data', () => {
     expect(thesis.sections.every((section) => section.thesisId === thesis.id)).toBe(true)
     expect(thesis.sections.every((section) => section.title.length > 0)).toBe(true)
   })
+
+  it('deletes thesis records without deleting linked articles', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+    const thesis = storage.createThesis({
+      title: 'Thesis to delete',
+      titleEn: '',
+      author: 'Author',
+      supervisor: '',
+      institution: '',
+      department: '',
+      degree: 'Master',
+      abstractZh: '',
+      abstractEn: '',
+      keywords: [],
+    })
+
+    storage.linkArticleToThesis(thesis.id, article.id)
+    storage.deleteThesis(thesis.id)
+
+    const state = storage.loadState()
+    expect(state.theses.find((item) => item.id === thesis.id)).toBeUndefined()
+    expect(state.articles.find((item) => item.id === article.id)?.title).toBe('Smoke article')
+  })
+
+  it('updates thesis metadata and allows optional fields to be cleared', () => {
+    const storage = loadStorage(makeHome())
+    const thesis = storage.createThesis({
+      title: 'Original thesis',
+      titleEn: 'Original',
+      author: 'Author',
+      supervisor: 'Supervisor',
+      institution: 'Institution',
+      department: 'Department',
+      degree: 'Master',
+      abstractZh: '摘要',
+      abstractEn: 'Abstract',
+      keywords: ['old'],
+    })
+
+    storage.updateThesisMeta(thesis.id, {
+      title: 'Updated thesis',
+      author: '',
+      supervisor: '',
+      institution: '',
+      department: '',
+      abstractZh: '',
+      abstractEn: '',
+      keywords: [],
+    })
+
+    const updated = storage.loadState().theses.find((item) => item.id === thesis.id)
+    expect(updated?.title).toBe('Updated thesis')
+    expect(updated?.author).toBe('')
+    expect(updated?.supervisor).toBe('')
+    expect(updated?.institution).toBe('')
+    expect(updated?.department).toBe('')
+    expect(updated?.abstractZh).toBe('')
+    expect(updated?.abstractEn).toBe('')
+    expect(updated?.keywords).toEqual([])
+  })
+
+  it('writes, edits, deletes, and exports thesis section text blocks', () => {
+    const storage = loadStorage(makeHome())
+    const thesis = storage.createThesis({
+      title: 'Exportable thesis',
+      titleEn: 'Exportable thesis',
+      author: 'Author',
+      supervisor: '',
+      institution: '',
+      department: '',
+      degree: 'Master',
+      abstractZh: '',
+      abstractEn: '',
+      keywords: [],
+    })
+    const chapter = thesis.sections.find((section) => section.type === 'Chapter') ?? thesis.sections[0]
+
+    const block = storage.addThesisTextBlock(thesis.id, chapter.id, '第一版大论文章节正文', 'manual thesis draft')
+    storage.updateThesisTextBlock(thesis.id, block.id, '第二版大论文章节正文', 'edited thesis draft')
+    const exportPath = storage.exportThesisMarkdown(thesis.id)
+
+    expect(fs.readFileSync(exportPath, 'utf-8')).toContain('第二版大论文章节正文')
+
+    storage.deleteThesisBlock(thesis.id, block.id)
+    const updated = storage.loadState().theses.find((item) => item.id === thesis.id)
+    const updatedChapter = updated?.sections.find((section) => section.id === chapter.id)
+    expect(updatedChapter?.contentBlocks).toHaveLength(0)
+  })
+
+  it('updates and deletes review comments and review rounds', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    storage.addReviewRound(article.id, {
+      submittedAt: '2026-05-06',
+      journalName: 'Journal',
+      manuscriptNumber: 'MS-1',
+    })
+    let state = storage.loadState()
+    const round = state.articles.find((item) => item.id === article.id)!.reviewRounds[0]
+    storage.addReviewComment(article.id, round.id, {
+      reviewerId: 'Reviewer 1',
+      originalText: 'Clarify the method.',
+      type: 'Major',
+      suggestedSection: 'MaterialsAndMethods',
+    })
+    state = storage.loadState()
+    const comment = state.articles.find((item) => item.id === article.id)!.reviewRounds[0].comments[0]
+
+    storage.updateReviewComment(article.id, round.id, comment.id, {
+      reviewerId: 'Reviewer 2',
+      originalText: 'Clarify the statistical method.',
+      type: 'Minor',
+      suggestedSection: 'Results',
+      status: 'InProgress',
+    })
+    state = storage.loadState()
+    const updatedComment = state.articles.find((item) => item.id === article.id)!.reviewRounds[0].comments[0]
+    expect(updatedComment.reviewerId).toBe('Reviewer 2')
+    expect(updatedComment.originalText).toBe('Clarify the statistical method.')
+    expect(updatedComment.type).toBe('Minor')
+    expect(updatedComment.status).toBe('InProgress')
+
+    storage.deleteReviewComment(article.id, round.id, comment.id)
+    state = storage.loadState()
+    expect(state.articles.find((item) => item.id === article.id)!.reviewRounds[0].comments).toHaveLength(0)
+
+    storage.deleteReviewRound(article.id, round.id)
+    state = storage.loadState()
+    expect(state.articles.find((item) => item.id === article.id)!.reviewRounds).toHaveLength(0)
+  })
+
+  it('updates and deletes citations after import mistakes', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    storage.addCitation(article.id, {
+      title: 'Original title',
+      authors: 'A. Author',
+      year: '2024',
+      journal: 'Original journal',
+      doi: '10.1000/original',
+    })
+    let state = storage.loadState()
+    const citation = state.articles.find((item) => item.id === article.id)!.citations[0]
+
+    storage.updateCitation(article.id, citation.id, {
+      title: 'Corrected title',
+      authors: 'B. Author',
+      year: '2026',
+      journal: 'Corrected journal',
+      doi: '10.1000/corrected',
+    })
+    state = storage.loadState()
+    const updated = state.articles.find((item) => item.id === article.id)!.citations[0]
+    expect(updated.title).toBe('Corrected title')
+    expect(updated.authors).toBe('B. Author')
+    expect(updated.year).toBe('2026')
+    expect(updated.journal).toBe('Corrected journal')
+    expect(updated.doi).toBe('10.1000/corrected')
+
+    storage.deleteCitation(article.id, citation.id)
+    state = storage.loadState()
+    expect(state.articles.find((item) => item.id === article.id)!.citations).toHaveLength(0)
+  })
+
+  it('updates daily progress entries after mistaken logging', () => {
+    const storage = loadStorage(makeHome())
+    storage.addProgressEntry({
+      articleId: '',
+      kind: 'read',
+      title: 'Read old paper',
+      detail: 'Old detail',
+    })
+    const entry = storage.loadState().progressEntries[0]
+
+    storage.updateProgressEntry(entry.id, {
+      kind: 'analysis',
+      title: 'Ran analysis',
+      detail: 'Updated detail',
+      minutesSpent: 45,
+    })
+
+    const updated = storage.loadState().progressEntries[0]
+    expect(updated.kind).toBe('analysis')
+    expect(updated.title).toBe('Ran analysis')
+    expect(updated.detail).toBe('Updated detail')
+    expect(updated.minutesSpent).toBe(45)
+  })
 })
 
 describe('storage database recovery', () => {
@@ -222,6 +412,57 @@ describe('storage database recovery', () => {
 })
 
 describe('storage LLM providers', () => {
+  it('defaults provider temperature to zero and activates newly added providers', () => {
+    const storage = loadStorage(makeHome())
+
+    const initial = storage.listProviders()
+    const defaultProvider = initial.providers.find((provider) => provider.id === 'deepseek-v4-flash')
+    expect(defaultProvider?.temperature).toBe(0)
+
+    const first = storage.addProvider({
+      name: 'First provider',
+      kind: 'openai-compat',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      model: 'first-model',
+      supportsToolUse: true,
+    })
+    storage.setActiveProvider(first.id)
+
+    const second = storage.addProvider({
+      name: 'Second provider',
+      kind: 'openai-compat',
+      baseUrl: 'http://127.0.0.1:11435/v1',
+      model: 'second-model',
+      supportsToolUse: true,
+    })
+
+    expect(second.temperature).toBe(0)
+    expect(storage.listProviders().activeId).toBe(second.id)
+  })
+
+  it('can activate a provider as part of provider updates', () => {
+    const storage = loadStorage(makeHome())
+    const first = storage.addProvider({
+      name: 'First provider',
+      kind: 'openai-compat',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      model: 'first-model',
+      supportsToolUse: true,
+    })
+    const second = storage.addProvider({
+      name: 'Second provider',
+      kind: 'openai-compat',
+      baseUrl: 'http://127.0.0.1:11435/v1',
+      model: 'second-model',
+      supportsToolUse: true,
+    })
+    storage.setActiveProvider(first.id)
+
+    storage.updateProvider(second.id, { activate: true })
+
+    expect(storage.listProviders().activeId).toBe(second.id)
+  })
+
   it('persists maxTokens for default, added, and updated providers', () => {
     const storage = loadStorage(makeHome())
 

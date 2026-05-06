@@ -1,6 +1,9 @@
 const { clipboard, contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('scipaper', {
+/** @typedef {import('./preload-api').SciPaperPreloadApi} SciPaperPreloadApi */
+
+/** @type {SciPaperPreloadApi} */
+const scipaperApi = {
   bootstrap: () => ipcRenderer.invoke('app:bootstrap'),
   getMcpInfo: () => ipcRenderer.invoke('app:getMcpInfo'),
   createArticle: (payload) => ipcRenderer.invoke('article:create', payload),
@@ -40,6 +43,11 @@ contextBridge.exposeInMainWorld('scipaper', {
     ipcRenderer.invoke('review:addComment', { articleId, roundId, payload }),
   updateReviewCommentStatus: (articleId, roundId, commentId, status) =>
     ipcRenderer.invoke('review:updateCommentStatus', { articleId, roundId, commentId, status }),
+  updateReviewComment: (articleId, roundId, commentId, patch) =>
+    ipcRenderer.invoke('review:updateComment', { articleId, roundId, commentId, patch }),
+  deleteReviewComment: (articleId, roundId, commentId) =>
+    ipcRenderer.invoke('review:deleteComment', { articleId, roundId, commentId }),
+  deleteReviewRound: (articleId, roundId) => ipcRenderer.invoke('review:deleteRound', { articleId, roundId }),
   addRevision: (articleId, roundId, commentId, payload) =>
     ipcRenderer.invoke('review:addRevision', { articleId, roundId, commentId, payload }),
   exportMarkdown: (articleId) => ipcRenderer.invoke('article:exportMarkdown', { articleId }),
@@ -60,6 +68,13 @@ contextBridge.exposeInMainWorld('scipaper', {
   addThesisSection: (thesisId, sectionType, title) => ipcRenderer.invoke('thesis:addSection', { thesisId, sectionType, title }),
   linkArticleToThesis: (thesisId, articleId) => ipcRenderer.invoke('thesis:linkArticle', { thesisId, articleId }),
   unlinkArticleFromThesis: (thesisId, articleId) => ipcRenderer.invoke('thesis:unlinkArticle', { thesisId, articleId }),
+  deleteThesis: (thesisId) => ipcRenderer.invoke('thesis:delete', { thesisId }),
+  addThesisTextBlock: (thesisId, sectionId, content, description) =>
+    ipcRenderer.invoke('thesis:addTextBlock', { thesisId, sectionId, content, description }),
+  updateThesisTextBlock: (thesisId, blockId, content, description) =>
+    ipcRenderer.invoke('thesis:updateTextBlock', { thesisId, blockId, content, description }),
+  deleteThesisBlock: (thesisId, blockId) => ipcRenderer.invoke('thesis:deleteBlock', { thesisId, blockId }),
+  exportThesisMarkdown: (thesisId) => ipcRenderer.invoke('thesis:exportMarkdown', { thesisId }),
   // Writing streak operations
   getWritingStreak: () => ipcRenderer.invoke('streak:get'),
   updateDailyGoal: (goal) => ipcRenderer.invoke('streak:updateGoal', { goal }),
@@ -79,6 +94,8 @@ contextBridge.exposeInMainWorld('scipaper', {
   removeTag: (articleId, tagId) => ipcRenderer.invoke('tag:remove', { articleId, tagId }),
   // Citation operations
   addCitation: (articleId, citation) => ipcRenderer.invoke('citation:add', { articleId, citation }),
+  updateCitation: (articleId, citationId, patch) => ipcRenderer.invoke('citation:update', { articleId, citationId, patch }),
+  deleteCitation: (articleId, citationId) => ipcRenderer.invoke('citation:delete', { articleId, citationId }),
   // Export operations
   exportToHTML: (articleId) => ipcRenderer.invoke('export:html', { articleId }),
   exportToJSON: (articleId) => ipcRenderer.invoke('export:json', { articleId }),
@@ -161,4 +178,6 @@ contextBridge.exposeInMainWorld('scipaper', {
   setDailyPlan: (date, planText) => ipcRenderer.invoke('daily:setPlan', { date, planText }),
   endDailySession: (date, summaryText) => ipcRenderer.invoke('daily:end', { date, summaryText }),
   getDailySession: (date) => ipcRenderer.invoke('daily:get', { date }),
-});
+};
+
+contextBridge.exposeInMainWorld('scipaper', scipaperApi);
