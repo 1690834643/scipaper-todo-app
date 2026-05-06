@@ -7,6 +7,7 @@ const {
   updateAnnotation,
   deleteAnnotation,
   addReviewComment,
+  updateReviewRound,
   updateReviewComment,
   deleteReviewComment,
   deleteReviewRound,
@@ -14,6 +15,8 @@ const {
   DATABASE_PATH,
   addReviewRound,
   addRevision,
+  updateRevision,
+  deleteRevision,
   addTextBlock,
   importManuscriptSections,
   undoLastImportBatch,
@@ -586,6 +589,12 @@ function registerIpc() {
     }),
   );
   ipcMain.handle(
+    'review:updateRound',
+    wrapStateMutation(async (_event, { articleId, roundId, patch }) => {
+      updateReviewRound(articleId, roundId, patch);
+    }),
+  );
+  ipcMain.handle(
     'review:updateCommentStatus',
     wrapStateMutation(async (_event, { articleId, roundId, commentId, status }) => {
       updateReviewCommentStatus(articleId, roundId, commentId, status);
@@ -613,6 +622,18 @@ function registerIpc() {
     'review:addRevision',
     wrapStateMutation(async (_event, { articleId, roundId, commentId, payload }) => {
       addRevision(articleId, roundId, commentId, payload);
+    }),
+  );
+  ipcMain.handle(
+    'review:updateRevision',
+    wrapStateMutation(async (_event, { articleId, roundId, commentId, revisionId, patch }) => {
+      updateRevision(articleId, roundId, commentId, revisionId, patch);
+    }),
+  );
+  ipcMain.handle(
+    'review:deleteRevision',
+    wrapStateMutation(async (_event, { articleId, roundId, commentId, revisionId }) => {
+      deleteRevision(articleId, roundId, commentId, revisionId);
     }),
   );
   ipcMain.handle('article:exportMarkdown', async (_event, { articleId }) => {

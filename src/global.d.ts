@@ -105,6 +105,16 @@ declare global {
           reviewReceivedAt?: string
         },
       ) => Promise<AppState>
+      updateReviewRound: (
+        articleId: string,
+        roundId: string,
+        patch: {
+          submittedAt?: string
+          journalName?: string
+          manuscriptNumber?: string
+          reviewReceivedAt?: string
+        },
+      ) => Promise<AppState>
       addReviewComment: (
         articleId: string,
         roundId: string,
@@ -145,6 +155,19 @@ declare global {
           markCompleted?: boolean
         },
       ) => Promise<AppState>
+      updateRevision: (
+        articleId: string,
+        roundId: string,
+        commentId: string,
+        revisionId: string,
+        patch: {
+          description?: string
+          responseText?: string
+          modifiedBlockIds?: string[]
+          isVerified?: boolean
+        },
+      ) => Promise<AppState>
+      deleteRevision: (articleId: string, roundId: string, commentId: string, revisionId: string) => Promise<AppState>
       exportMarkdown: (articleId: string) => Promise<string>
       exportArticleDocx: (
         articleId: string,

@@ -229,9 +229,12 @@ const WRITE_DISPATCH = {
   update_citation: (fn, args) => fn(args.articleId, args.citationId, args.patch),
   delete_citation: (fn, args) => fn(args.articleId, args.citationId),
   add_review_round: (fn, args) => fn(args.articleId, args.payload),
+  update_review_round: (fn, args) => fn(args.articleId, args.roundId, args.patch),
   add_review_comment: (fn, args) => fn(args.articleId, args.roundId, args.payload),
   update_review_comment_status: (fn, args) => fn(args.articleId, args.roundId, args.commentId, args.status),
   add_revision: (fn, args) => fn(args.articleId, args.roundId, args.commentId, args.payload),
+  update_revision: (fn, args) => fn(args.articleId, args.roundId, args.commentId, args.revisionId, args.patch),
+  delete_revision: (fn, args) => fn(args.articleId, args.roundId, args.commentId, args.revisionId),
   add_tag: (fn, args) => fn(args.articleId, args.tagName, args.tagColor),
   remove_tag: (fn, args) => fn(args.articleId, args.tagId),
   create_thesis: (fn, args) => fn(args),
@@ -451,9 +454,12 @@ function summarizeForApproval(name, args) {
     case 'update_citation': return '更新论文 ' + input.articleId + ' 的参考文献 ' + input.citationId;
     case 'delete_citation': return '删除论文 ' + input.articleId + ' 的参考文献 ' + input.citationId;
     case 'add_review_round': return '向论文 ' + input.articleId + ' 添加审稿轮次';
+    case 'update_review_round': return '更新审稿轮次 ' + input.roundId;
     case 'add_review_comment': return '向审稿轮次 ' + input.roundId + ' 添加审稿意见';
     case 'update_review_comment_status': return '将审稿意见 ' + input.commentId + ' 状态更新为 ' + input.status;
     case 'add_revision': return '为审稿意见 ' + input.commentId + ' 添加修回记录';
+    case 'update_revision': return '更新修回记录 ' + input.revisionId;
+    case 'delete_revision': return '删除修回记录 ' + input.revisionId;
     case 'add_tag': return '给论文 ' + input.articleId + ' 添加标签：' + input.tagName;
     case 'remove_tag': return '从论文 ' + input.articleId + ' 移除标签：' + input.tagId;
     case 'create_thesis': return '创建学位论文项目：' + (input.title || '未命名论文');

@@ -42,6 +42,8 @@ const scipaperApi = {
   getBlockPreview: (articleId, blockId) => ipcRenderer.invoke('block:getPreview', { articleId, blockId }),
   openArticleFolder: (articleId) => ipcRenderer.invoke('article:openFolder', { articleId }),
   addReviewRound: (articleId, payload) => ipcRenderer.invoke('review:addRound', { articleId, payload }),
+  updateReviewRound: (articleId, roundId, patch) =>
+    ipcRenderer.invoke('review:updateRound', { articleId, roundId, patch }),
   addReviewComment: (articleId, roundId, payload) =>
     ipcRenderer.invoke('review:addComment', { articleId, roundId, payload }),
   updateReviewCommentStatus: (articleId, roundId, commentId, status) =>
@@ -53,6 +55,10 @@ const scipaperApi = {
   deleteReviewRound: (articleId, roundId) => ipcRenderer.invoke('review:deleteRound', { articleId, roundId }),
   addRevision: (articleId, roundId, commentId, payload) =>
     ipcRenderer.invoke('review:addRevision', { articleId, roundId, commentId, payload }),
+  updateRevision: (articleId, roundId, commentId, revisionId, patch) =>
+    ipcRenderer.invoke('review:updateRevision', { articleId, roundId, commentId, revisionId, patch }),
+  deleteRevision: (articleId, roundId, commentId, revisionId) =>
+    ipcRenderer.invoke('review:deleteRevision', { articleId, roundId, commentId, revisionId }),
   exportMarkdown: (articleId) => ipcRenderer.invoke('article:exportMarkdown', { articleId }),
   exportArticleDocx: (articleId, templateId, applyItalicGuide) =>
     ipcRenderer.invoke('article:exportDocx', { articleId, templateId, applyItalicGuide }),

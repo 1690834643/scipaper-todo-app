@@ -62,4 +62,41 @@ describe('toolRouter section validation', () => {
       }),
     ).toEqual({ valid: true, errors: [] })
   })
+
+  it('accepts AI review round and revision correction tool arguments', () => {
+    expect(
+      validateArgs('update_review_round', {
+        articleId: 'article-1',
+        roundId: 'round-1',
+        patch: {
+          journalName: 'Corrected Journal',
+          manuscriptNumber: 'MS-2',
+          reviewReceivedAt: '2026-05-06',
+        },
+      }),
+    ).toEqual({ valid: true, errors: [] })
+
+    expect(
+      validateArgs('update_revision', {
+        articleId: 'article-1',
+        roundId: 'round-1',
+        commentId: 'comment-1',
+        revisionId: 'revision-1',
+        patch: {
+          description: 'Corrected response',
+          responseText: 'We clarified the introduction.',
+          isVerified: true,
+        },
+      }),
+    ).toEqual({ valid: true, errors: [] })
+
+    expect(
+      validateArgs('delete_revision', {
+        articleId: 'article-1',
+        roundId: 'round-1',
+        commentId: 'comment-1',
+        revisionId: 'revision-1',
+      }),
+    ).toEqual({ valid: true, errors: [] })
+  })
 })
