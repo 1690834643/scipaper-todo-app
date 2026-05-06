@@ -35,6 +35,17 @@
 - 已移除固定生成的“Suggested Next Steps / 自动任务草案”等冗余内容，避免产生无意义占位信息
 - 已清理部分多余按钮，保留论文整理、上下文维护、章节写作、附件管理、审稿追踪和 MCP 配置这些核心能力
 
+## 当前补齐记录（2026-05-06 / v1.0.41）
+
+本仓库当前已从早期 Windows 规划演进为 Windows + macOS 的 Electron 桌面应用。与旧规划不一致时，以 `README.md` 和当前代码为准。本轮补齐了以下高影响使用逻辑：
+
+- Settings → MCP 协议已改为可选客户端配置，覆盖 Cursor、Claude Code、Claude Desktop、VS Code、Cline、Roo Code、Kimi Code、Windsurf、Continue 和通用 MCP JSON。
+- 正文 / 审稿导入助手的解析预览可手动修正：正文可改目标章节和内容；审稿意见可改审稿人、Major/Minor、建议章节和意见文本。
+- 审稿意见导入时，写入位置明确区分“新建审稿轮次”和“追加到已有 Round”。
+- 稿件库补充关键词搜索、只看小论文/大论文、按更新时间/标题/字数排序。
+- Markdown、docx、LaTeX、HTML、JSON 和分享包导出后会显示实际输出路径，并保留最近导出路径复制按钮。
+- AI Provider 设置要求名称、Base URL、模型和 API Key；temperature 默认按 `0` 保存，新增 Provider 后立即作为当前活动 Provider 反映到前端状态。
+
 ## 1. 项目概述
 
 **目标**: 开发面向生命科学领域科研人员的Windows桌面应用，以"论文"为单元管理研究进度，深度集成MCP协议支持AI辅助写作。

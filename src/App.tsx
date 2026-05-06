@@ -218,6 +218,7 @@ function App() {
   const [docxTemplate, setDocxTemplate] = useState<string>('academic-en')
   const [docxApplyItalic, setDocxApplyItalic] = useState(false)
   const [docxBusy, setDocxBusy] = useState(false)
+  const [lastExportPath, setLastExportPath] = useState('')
 
   // Share card
   const [shareOpen, setShareOpen] = useState(false)
@@ -596,8 +597,10 @@ function App() {
   }
 
   async function handleAddProvider(draft: Omit<LlmProvider, 'id' | 'hasApiKey'> & { apiKey: string }) {
-    await window.scipaper.llmAddProvider(draft)
-    await refreshProviders()
+    const data = await window.scipaper.llmAddProvider(draft)
+    setProviders(data.providers)
+    setActiveProviderId(data.activeId)
+    setPresets(data.presets)
   }
   async function handleUpdateProvider(
     id: string,
@@ -1055,19 +1058,52 @@ function App() {
   async function handleExportLatex() {
     if (!selectedArticle) return
     try {
-      await window.scipaper.exportArticleLatex(selectedArticle.id)
-      setNotice('LaTeX 导出成功')
+      const exportPath = await window.scipaper.exportArticleLatex(selectedArticle.id)
+      setLastExportPath(exportPath)
+      setNotice(`LaTeX 导出成功：${exportPath}`)
     } catch (error) {
       console.error(error)
       setNotice(error instanceof Error ? error.message : 'LaTeX 导出失败')
     }
   }
 
+  async function handleExportMarkdown() {
+    if (!selectedArticle) return
+    try {
+      const exportPath = await window.scipaper.exportMarkdown(selectedArticle.id)
+      setLastExportPath(exportPath)
+      setNotice(`Markdown 导出成功：${exportPath}`)
+    } catch (error) {
+      console.error(error)
+      setNotice(error instanceof Error ? error.message : 'Markdown 导出失败')
+    }
+  }
+
+  async function handleExportDocx() {
+    if (!selectedArticle || docxBusy) return
+    try {
+      setDocxBusy(true)
+      const exportPath = await window.scipaper.exportArticleDocx(
+        selectedArticle.id,
+        docxTemplate,
+        docxApplyItalic,
+      )
+      setLastExportPath(exportPath)
+      setNotice(`docx 导出成功：${exportPath}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setNotice(`docx 导出失败：${message}`)
+    } finally {
+      setDocxBusy(false)
+    }
+  }
+
   async function handleExportHTML() {
     if (!selectedArticle) return
     try {
-      await window.scipaper.exportToHTML(selectedArticle.id)
-      setNotice('HTML 导出成功')
+      const exportPath = await window.scipaper.exportToHTML(selectedArticle.id)
+      setLastExportPath(exportPath)
+      setNotice(`HTML 导出成功：${exportPath}`)
     } catch (error) {
       console.error(error)
       setNotice(error instanceof Error ? error.message : 'HTML 导出失败')
@@ -1077,8 +1113,9 @@ function App() {
   async function handleExportJSON() {
     if (!selectedArticle) return
     try {
-      await window.scipaper.exportToJSON(selectedArticle.id)
-      setNotice('JSON 导出成功')
+      const exportPath = await window.scipaper.exportToJSON(selectedArticle.id)
+      setLastExportPath(exportPath)
+      setNotice(`JSON 导出成功：${exportPath}`)
     } catch (error) {
       console.error(error)
       setNotice(error instanceof Error ? error.message : 'JSON 导出失败')
@@ -1088,8 +1125,9 @@ function App() {
   async function handleCreateSharePackage() {
     if (!selectedArticle) return
     try {
-      await window.scipaper.createSharePackage(selectedArticle.id)
-      setNotice('分享包创建成功')
+      const exportPath = await window.scipaper.createSharePackage(selectedArticle.id)
+      setLastExportPath(exportPath)
+      setNotice(`分享包创建成功：${exportPath}`)
     } catch (error) {
       console.error(error)
       setNotice(error instanceof Error ? error.message : '分享包创建失败')
@@ -1540,7 +1578,7 @@ function App() {
                   >
                     导入正文/审稿
                   </button>
-                  <button className="ghost-button" onClick={() => window.scipaper.exportMarkdown(selectedArticle.id)} type="button">
+                  <button className="ghost-button" onClick={handleExportMarkdown} type="button">
                     导出 Markdown
                   </button>
                   <select
@@ -1572,20 +1610,7 @@ function App() {
                   <button
                     className="ghost-button"
                     disabled={docxBusy}
-                    onClick={async () => {
-                      try {
-                        setDocxBusy(true)
-                        await window.scipaper.exportArticleDocx(
-                          selectedArticle.id,
-                          docxTemplate,
-                          docxApplyItalic,
-                        )
-                      } catch (err) {
-                        alert('导出失败: ' + (err instanceof Error ? err.message : String(err)))
-                      } finally {
-                        setDocxBusy(false)
-                      }
-                    }}
+                    onClick={handleExportDocx}
                     type="button"
                   >
                     {docxBusy ? '导出中…' : '导出 docx'}
@@ -1606,6 +1631,16 @@ function App() {
                     保存信息
                   </button>
                 </div>
+                {lastExportPath ? (
+                  <div className="notice-banner" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', justifyContent: 'space-between', marginTop: 'var(--sp-3)' }}>
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      最近导出：{lastExportPath}
+                    </span>
+                    <button className="ghost-button" type="button" onClick={() => window.scipaper.copyText(lastExportPath)}>
+                      复制路径
+                    </button>
+                  </div>
+                ) : null}
               </header>
 
               <div className={`workspace-grid${sectionNavCollapsed ? ' is-nav-collapsed' : ''}`}>

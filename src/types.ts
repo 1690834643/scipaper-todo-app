@@ -431,8 +431,17 @@ export interface McpInfo {
   baseDirectory: string
   configJson: string
   examples?: {
+    generic?: string
     cursor: string
     claudeCode: string
+    claudeDesktop?: string
+    vscode?: string
+    cline?: string
+    rooCode?: string
+    kimiCode?: string
+    continueDev?: string
+    windsurf?: string
+    guiBinary?: string
   }
 }
 
