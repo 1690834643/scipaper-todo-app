@@ -2890,16 +2890,20 @@ function addReviewComment(articleId, roundId, payload) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
   const round = article.reviewRounds.find((item) => item.id === roundId);
+  const originalText = normalizeText(payload.originalText);
 
   if (!round) {
     throw new Error('Review round not found');
+  }
+  if (!originalText) {
+    throw new Error('Review comment cannot be empty');
   }
 
   round.comments.unshift({
     id: createId(),
     reviewRoundId: roundId,
     reviewerId: normalizeText(payload.reviewerId) || `Reviewer ${round.comments.length + 1}`,
-    originalText: normalizeText(payload.originalText),
+    originalText,
     type: payload.type === 'Minor' ? 'Minor' : 'Major',
     suggestedSection: normalizeText(payload.suggestedSection),
     status: payload.status || 'Pending',
@@ -2913,6 +2917,33 @@ function addReviewComment(articleId, roundId, payload) {
   article.status = 'UnderReview';
   touchArticle(article);
   writeDatabase(database);
+}
+
+function updateReviewRound(articleId, roundId, patch = {}) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const round = article.reviewRounds.find((item) => item.id === roundId);
+
+  if (!round) {
+    throw new Error('Review round not found');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'submittedAt')) {
+    round.submittedAt = normalizeText(patch.submittedAt) || round.submittedAt;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'journalName')) {
+    round.journalName = normalizeText(patch.journalName) || round.journalName;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'manuscriptNumber')) {
+    round.manuscriptNumber = normalizeText(patch.manuscriptNumber);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'reviewReceivedAt')) {
+    round.reviewReceivedAt = normalizeText(patch.reviewReceivedAt);
+  }
+
+  touchArticle(article);
+  writeDatabase(database);
+  return round;
 }
 
 function importReviewComments(articleId, payload = {}) {
@@ -3107,16 +3138,21 @@ function addRevision(articleId, roundId, commentId, payload) {
   const article = findArticle(database, articleId);
   const round = article.reviewRounds.find((item) => item.id === roundId);
   const comment = round?.comments.find((item) => item.id === commentId);
+  const description = normalizeText(payload.description);
+  const responseText = normalizeText(payload.responseText);
 
   if (!comment) {
     throw new Error('Review comment not found');
+  }
+  if (!description && !responseText) {
+    throw new Error('Revision response cannot be empty');
   }
 
   comment.revisions.unshift({
     id: createId(),
     reviewCommentId: commentId,
-    description: normalizeText(payload.description),
-    responseText: normalizeText(payload.responseText),
+    description,
+    responseText,
     modifiedBlockIds: payload.modifiedBlockIds ?? [],
     completedAt: now(),
     isVerified: Boolean(payload.isVerified),
@@ -3125,6 +3161,55 @@ function addRevision(articleId, roundId, commentId, payload) {
   article.status = payload.markCompleted ? 'Revision' : article.status;
   touchArticle(article);
 
+  writeDatabase(database);
+}
+
+function updateRevision(articleId, roundId, commentId, revisionId, patch = {}) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const round = article.reviewRounds.find((item) => item.id === roundId);
+  const comment = round?.comments.find((item) => item.id === commentId);
+  const revision = comment?.revisions.find((item) => item.id === revisionId);
+
+  if (!revision) {
+    throw new Error('Revision not found');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'description')) {
+    revision.description = normalizeText(patch.description);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'responseText')) {
+    revision.responseText = normalizeText(patch.responseText);
+  }
+  if (Array.isArray(patch.modifiedBlockIds)) {
+    revision.modifiedBlockIds = patch.modifiedBlockIds;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'isVerified')) {
+    revision.isVerified = Boolean(patch.isVerified);
+  }
+
+  touchArticle(article);
+  writeDatabase(database);
+  return revision;
+}
+
+function deleteRevision(articleId, roundId, commentId, revisionId) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const round = article.reviewRounds.find((item) => item.id === roundId);
+  const comment = round?.comments.find((item) => item.id === commentId);
+
+  if (!comment) {
+    throw new Error('Review comment not found');
+  }
+
+  const before = comment.revisions.length;
+  comment.revisions = comment.revisions.filter((revision) => revision.id !== revisionId);
+  if (comment.revisions.length === before) {
+    throw new Error('Revision not found');
+  }
+
+  touchArticle(article);
   writeDatabase(database);
 }
 
@@ -3596,6 +3681,7 @@ module.exports = {
   endDailySession,
   getDailySession,
   addReviewRound,
+  updateReviewRound,
   addReviewComment,
   importReviewComments,
   updateReviewCommentStatus,
@@ -3603,6 +3689,8 @@ module.exports = {
   deleteReviewComment,
   deleteReviewRound,
   addRevision,
+  updateRevision,
+  deleteRevision,
   exportMarkdown,
   openPathForBlock,
   getPreviewPayload,

@@ -20,6 +20,8 @@ Run this checklist before publishing a user-facing release.
 - Import a review letter and confirm reviewer groups/comments are split sensibly.
 - Edit reviewer, comment text, type, suggested section, and status.
 - Add a revision response and mark a comment completed.
+- Edit and delete that revision response, then add a corrected one.
+- Edit the review round journal/manuscript/date metadata.
 - Delete a single comment, then delete a whole review round.
 
 ## 3. Big Thesis Workflow

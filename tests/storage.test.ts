@@ -276,6 +276,93 @@ describe('storage derived data', () => {
     expect(state.articles.find((item) => item.id === article.id)!.reviewRounds).toHaveLength(0)
   })
 
+  it('updates review round metadata and edits or deletes revision responses', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    storage.addReviewRound(article.id, {
+      submittedAt: '2026-05-01',
+      journalName: 'Old Journal',
+      manuscriptNumber: 'OLD-1',
+    })
+    let state = storage.loadState()
+    const round = state.articles.find((item) => item.id === article.id)!.reviewRounds[0]
+    storage.updateReviewRound(article.id, round.id, {
+      submittedAt: '2026-05-02',
+      journalName: 'New Journal',
+      manuscriptNumber: 'NEW-2',
+      reviewReceivedAt: '2026-05-06',
+    })
+    storage.addReviewComment(article.id, round.id, {
+      reviewerId: 'Reviewer 1',
+      originalText: 'Please clarify the introduction.',
+      type: 'Major',
+      suggestedSection: 'Introduction',
+    })
+    state = storage.loadState()
+    const comment = state.articles.find((item) => item.id === article.id)!.reviewRounds[0].comments[0]
+    storage.addRevision(article.id, round.id, comment.id, {
+      description: 'Old response',
+      responseText: 'We changed the wrong section.',
+      markCompleted: true,
+    })
+    state = storage.loadState()
+    const revision = state.articles.find((item) => item.id === article.id)!.reviewRounds[0].comments[0].revisions[0]
+
+    storage.updateRevision(article.id, round.id, comment.id, revision.id, {
+      description: 'Updated response',
+      responseText: 'We clarified the introduction.',
+      isVerified: true,
+    })
+
+    let updatedArticle = storage.loadState().articles.find((item) => item.id === article.id)!
+    let updatedRound = updatedArticle.reviewRounds[0]
+    let updatedRevision = updatedRound.comments[0].revisions[0]
+    expect(updatedRound.journalName).toBe('New Journal')
+    expect(updatedRound.manuscriptNumber).toBe('NEW-2')
+    expect(updatedRound.reviewReceivedAt).toBe('2026-05-06')
+    expect(updatedRevision.description).toBe('Updated response')
+    expect(updatedRevision.responseText).toBe('We clarified the introduction.')
+    expect(updatedRevision.isVerified).toBe(true)
+
+    storage.deleteRevision(article.id, round.id, comment.id, revision.id)
+
+    updatedArticle = storage.loadState().articles.find((item) => item.id === article.id)!
+    expect(updatedArticle.reviewRounds[0].comments[0].revisions).toHaveLength(0)
+  })
+
+  it('rejects empty manual review comments and empty revision records', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    storage.addReviewRound(article.id, {
+      submittedAt: '2026-05-06',
+      journalName: 'Journal',
+      manuscriptNumber: 'MS-1',
+    })
+    const round = storage.loadState().articles.find((item) => item.id === article.id)!.reviewRounds[0]
+
+    expect(() => storage.addReviewComment(article.id, round.id, {
+      reviewerId: 'Reviewer 1',
+      originalText: '   ',
+      type: 'Major',
+      suggestedSection: 'Results',
+    })).toThrow('Review comment cannot be empty')
+
+    storage.addReviewComment(article.id, round.id, {
+      reviewerId: 'Reviewer 1',
+      originalText: 'Please clarify the result.',
+      type: 'Major',
+      suggestedSection: 'Results',
+    })
+    const comment = storage.loadState().articles.find((item) => item.id === article.id)!.reviewRounds[0].comments[0]
+
+    expect(() => storage.addRevision(article.id, round.id, comment.id, {
+      description: '',
+      responseText: '   ',
+    })).toThrow('Revision response cannot be empty')
+  })
+
   it('updates and deletes citations after import mistakes', () => {
     const storage = loadStorage(makeHome())
     const article = createSmokeArticle(storage)

@@ -617,6 +617,52 @@ const TOOLS = [
     storageCall: 'addReviewComment',
   },
   {
+    name: 'update_review_round',
+    description:
+      '更新审稿轮次的元信息，例如期刊名、稿件号、投稿日期或收到意见日期。用于导入或手动录入后发现轮次信息写错时纠正。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        articleId: {
+          type: 'string',
+          description: '论文项目 ID。',
+        },
+        roundId: {
+          type: 'string',
+          description: '审稿轮次 ID。',
+        },
+        patch: {
+          type: 'object',
+          properties: {
+            submittedAt: {
+              type: 'string',
+              description: '投稿日期，建议 YYYY-MM-DD。',
+            },
+            journalName: {
+              type: 'string',
+              description: '期刊名。',
+            },
+            manuscriptNumber: {
+              type: 'string',
+              description: '稿件号。',
+            },
+            reviewReceivedAt: {
+              type: 'string',
+              description: '收到审稿意见日期，建议 YYYY-MM-DD；可传空字符串清空。',
+            },
+          },
+          required: [],
+          additionalProperties: false,
+          description: '需要更新的审稿轮次字段。',
+        },
+      },
+      required: ['articleId', 'roundId', 'patch'],
+      additionalProperties: false,
+    },
+    storageCall: 'updateReviewRound',
+  },
+  {
     name: 'update_review_comment_status',
     description:
       '更新单条审稿意见的处理状态，用于标记待处理、处理中或已完成。该工具只改变评论状态，不会自动新增修改记录或回复文本。',
@@ -703,6 +749,91 @@ const TOOLS = [
       additionalProperties: false,
     },
     storageCall: 'addRevision',
+  },
+  {
+    name: 'update_revision',
+    description:
+      '更新已有修回记录/回复文本。用于修回说明、给审稿人的 response 或人工核验状态写错时纠正，不会新增一条重复 revision。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        articleId: {
+          type: 'string',
+          description: '论文项目 ID。',
+        },
+        roundId: {
+          type: 'string',
+          description: '审稿轮次 ID。',
+        },
+        commentId: {
+          type: 'string',
+          description: '审稿意见 ID。',
+        },
+        revisionId: {
+          type: 'string',
+          description: '修回记录 ID。',
+        },
+        patch: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+              description: '修回说明。',
+            },
+            responseText: {
+              type: 'string',
+              description: '给审稿人的回复文本。',
+            },
+            modifiedBlockIds: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '关联修改过的文本块 ID 列表。',
+            },
+            isVerified: {
+              type: 'boolean',
+              description: '是否已经人工核验。',
+            },
+          },
+          required: [],
+          additionalProperties: false,
+          description: '需要更新的修回记录字段。',
+        },
+      },
+      required: ['articleId', 'roundId', 'commentId', 'revisionId', 'patch'],
+      additionalProperties: false,
+    },
+    storageCall: 'updateRevision',
+  },
+  {
+    name: 'delete_revision',
+    description:
+      '删除已有修回记录/回复文本。用于误录入或重复生成的 revision。不可撤销，调用前应确认 revisionId。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        articleId: {
+          type: 'string',
+          description: '论文项目 ID。',
+        },
+        roundId: {
+          type: 'string',
+          description: '审稿轮次 ID。',
+        },
+        commentId: {
+          type: 'string',
+          description: '审稿意见 ID。',
+        },
+        revisionId: {
+          type: 'string',
+          description: '要删除的修回记录 ID。',
+        },
+      },
+      required: ['articleId', 'roundId', 'commentId', 'revisionId'],
+      additionalProperties: false,
+    },
+    storageCall: 'deleteRevision',
   },
   {
     name: 'add_tag',

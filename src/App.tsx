@@ -1761,6 +1761,12 @@ function App() {
                   {articleTab === 'Review' ? (
                     <ReviewPanel
                       article={selectedArticle}
+                      onUpdateRound={(roundId, patch) =>
+                        mutate(
+                          () => window.scipaper.updateReviewRound(selectedArticle.id, roundId, patch),
+                          '审稿轮次已更新',
+                        )
+                      }
                       onAddComment={(roundId, payload) =>
                         mutate(() => window.scipaper.addReviewComment(selectedArticle.id, roundId, payload), '审稿意见已保存')
                       }
@@ -1768,6 +1774,18 @@ function App() {
                         mutate(
                           () => window.scipaper.addRevision(selectedArticle.id, roundId, commentId, payload),
                           '修改记录已保存',
+                        )
+                      }
+                      onUpdateRevision={(roundId, commentId, revisionId, patch) =>
+                        mutate(
+                          () => window.scipaper.updateRevision(selectedArticle.id, roundId, commentId, revisionId, patch),
+                          '修回记录已更新',
+                        )
+                      }
+                      onDeleteRevision={(roundId, commentId, revisionId) =>
+                        mutate(
+                          () => window.scipaper.deleteRevision(selectedArticle.id, roundId, commentId, revisionId),
+                          '修回记录已删除',
                         )
                       }
                       onAddRound={(payload) =>
