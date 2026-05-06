@@ -47,6 +47,10 @@ interface DailyLogViewProps {
     minutesSpent?: number
   }) => Promise<void>
   onDeleteProgressEntry: (entryId: string) => Promise<void>
+  onUpdateProgressEntry: (
+    entryId: string,
+    patch: { articleId?: string; kind?: ProgressEntryKind; title?: string; detail?: string; minutesSpent?: number },
+  ) => Promise<void>
   onSetDailyPlan: (planText: string) => Promise<void>
   onEndDailySession: (summaryText: string) => Promise<void>
   onAddPomodoro: (duration: number) => Promise<void>
@@ -87,6 +91,7 @@ export function DailyLogView({
   state,
   onAddProgressEntry,
   onDeleteProgressEntry,
+  onUpdateProgressEntry,
   onSetDailyPlan,
   onEndDailySession,
   onAddPomodoro,
@@ -121,6 +126,14 @@ export function DailyLogView({
   const [newKind, setNewKind] = useState<ProgressEntryKind>('read')
   const [newTitle, setNewTitle] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
+  const [entryDraft, setEntryDraft] = useState({
+    articleId: '',
+    kind: 'read' as ProgressEntryKind,
+    title: '',
+    detail: '',
+    minutesSpent: '',
+  })
 
   useEffect(() => {
     setPlanDraft(session?.planText || '')
@@ -181,6 +194,30 @@ export function DailyLogView({
       await onUpdateGoal(next)
     }
     setGoalEditing(false)
+  }
+
+  function startEditEntry(entry: ProgressEntry) {
+    setEditingEntryId(entry.id)
+    setEntryDraft({
+      articleId: entry.articleId,
+      kind: entry.kind,
+      title: entry.title,
+      detail: entry.detail || '',
+      minutesSpent: entry.minutesSpent ? String(entry.minutesSpent) : '',
+    })
+  }
+
+  async function saveEntryEdit(entryId: string) {
+    if (!entryDraft.title.trim()) return
+    const minutesSpent = entryDraft.minutesSpent.trim() ? parseInt(entryDraft.minutesSpent, 10) : undefined
+    await onUpdateProgressEntry(entryId, {
+      articleId: entryDraft.articleId,
+      kind: entryDraft.kind,
+      title: entryDraft.title.trim(),
+      detail: entryDraft.detail.trim(),
+      minutesSpent: Number.isFinite(minutesSpent) ? minutesSpent : undefined,
+    })
+    setEditingEntryId(null)
   }
 
   async function handleFocusFinished(minutes: number) {
@@ -390,27 +427,96 @@ export function DailyLogView({
                   >
                     {KIND_LABELS[entry.kind]}
                   </span>
-                  <div className='daily-log-entry-body'>
-                    <p className='daily-log-entry-title'>{entry.title}</p>
-                    {entry.detail ? (
-                      <p className='daily-log-entry-detail'>{entry.detail}</p>
-                    ) : null}
-                    <p className='daily-log-entry-meta'>
-                      {formatHHMM(entry.createdAt)}
-                      {' · '}
-                      {findArticleTitle(state.articles, entry.articleId)}
-                      {entry.minutesSpent ? ` · ${entry.minutesSpent} 分钟` : ''}
-                      {entry.createdBy === 'ai' ? ' · AI 协作' : ''}
-                    </p>
-                  </div>
-                  <button
-                    className='daily-log-delete'
-                    type='button'
-                    onClick={() => void onDeleteProgressEntry(entry.id)}
-                    aria-label='删除条目'
-                  >
-                    ×
-                  </button>
+                  {editingEntryId === entry.id ? (
+                    <div className='daily-log-entry-body'>
+                      <div className='daily-log-timeline-input'>
+                        <select
+                          className='daily-log-select'
+                          value={entryDraft.articleId}
+                          onChange={(e) => setEntryDraft({ ...entryDraft, articleId: e.target.value })}
+                        >
+                          <option value="">未归属</option>
+                          {state.articles.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.title}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className='daily-log-select'
+                          value={entryDraft.kind}
+                          onChange={(e) => setEntryDraft({ ...entryDraft, kind: e.target.value as ProgressEntryKind })}
+                        >
+                          {(Object.keys(KIND_LABELS) as ProgressEntryKind[]).map((k) => (
+                            <option key={k} value={k}>
+                              {KIND_LABELS[k]}（{k}）
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className='daily-log-input'
+                          value={entryDraft.title}
+                          onChange={(e) => setEntryDraft({ ...entryDraft, title: e.target.value })}
+                        />
+                        <input
+                          className='daily-log-select'
+                          type='number'
+                          min='0'
+                          value={entryDraft.minutesSpent}
+                          onChange={(e) => setEntryDraft({ ...entryDraft, minutesSpent: e.target.value })}
+                          placeholder='分钟'
+                        />
+                      </div>
+                      <textarea
+                        className='daily-log-plan'
+                        rows={2}
+                        value={entryDraft.detail}
+                        onChange={(e) => setEntryDraft({ ...entryDraft, detail: e.target.value })}
+                        placeholder='补充说明，可空'
+                      />
+                      <div className='header-actions'>
+                        <button className='primary-button' type='button' onClick={() => void saveEntryEdit(entry.id)}>
+                          保存
+                        </button>
+                        <button className='ghost-button' type='button' onClick={() => setEditingEntryId(null)}>
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className='daily-log-entry-body'>
+                        <p className='daily-log-entry-title'>{entry.title}</p>
+                        {entry.detail ? (
+                          <p className='daily-log-entry-detail'>{entry.detail}</p>
+                        ) : null}
+                        <p className='daily-log-entry-meta'>
+                          {formatHHMM(entry.createdAt)}
+                          {' · '}
+                          {findArticleTitle(state.articles, entry.articleId)}
+                          {entry.minutesSpent ? ` · ${entry.minutesSpent} 分钟` : ''}
+                          {entry.createdBy === 'ai' ? ' · AI 协作' : ''}
+                        </p>
+                      </div>
+                      <button
+                        className='ghost-button'
+                        type='button'
+                        onClick={() => startEditEntry(entry)}
+                      >
+                        编辑
+                      </button>
+                      <button
+                        className='daily-log-delete'
+                        type='button'
+                        onClick={() => {
+                          if (confirm('确定删除这条进展记录？')) void onDeleteProgressEntry(entry.id)
+                        }}
+                        aria-label='删除条目'
+                      >
+                        ×
+                      </button>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

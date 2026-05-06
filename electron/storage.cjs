@@ -311,7 +311,7 @@ function ensureDefaultProviders(arr) {
         kind: preset.kind,
         baseUrl: preset.baseUrl,
         model: preset.model ?? preset.defaultModel,
-        temperature: preset.temperature ?? 0.3,
+        temperature: preset.temperature ?? 0,
         supportsToolUse: preset.supportsToolUse ?? false,
         trustForWrite: preset.trustForWrite ?? false,
         createdAt: timestamp,
@@ -796,17 +796,39 @@ function updateThesisMeta(thesisId, patch) {
   const database = readDatabase();
   const thesis = findThesis(database, thesisId);
 
-  thesis.title = normalizeText(patch.title) || thesis.title;
-  thesis.titleEn = normalizeText(patch.titleEn) ?? thesis.titleEn;
-  thesis.author = normalizeText(patch.author) || thesis.author;
-  thesis.supervisor = normalizeText(patch.supervisor) || thesis.supervisor;
-  thesis.institution = normalizeText(patch.institution) || thesis.institution;
-  thesis.department = normalizeText(patch.department) || thesis.department;
-  thesis.degree = DEGREE_TYPES.includes(patch.degree) ? patch.degree : thesis.degree;
-  thesis.status = THESIS_STATUSES.includes(patch.status) ? patch.status : thesis.status;
-  thesis.abstractZh = normalizeText(patch.abstractZh) ?? thesis.abstractZh;
-  thesis.abstractEn = normalizeText(patch.abstractEn) ?? thesis.abstractEn;
-  thesis.keywords = patch.keywords ?? thesis.keywords;
+  if (Object.prototype.hasOwnProperty.call(patch, 'title')) {
+    thesis.title = normalizeText(patch.title) || thesis.title;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'titleEn')) {
+    thesis.titleEn = normalizeText(patch.titleEn);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'author')) {
+    thesis.author = normalizeText(patch.author);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'supervisor')) {
+    thesis.supervisor = normalizeText(patch.supervisor);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'institution')) {
+    thesis.institution = normalizeText(patch.institution);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'department')) {
+    thesis.department = normalizeText(patch.department);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'degree')) {
+    thesis.degree = DEGREE_TYPES.includes(patch.degree) ? patch.degree : thesis.degree;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
+    thesis.status = THESIS_STATUSES.includes(patch.status) ? patch.status : thesis.status;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'abstractZh')) {
+    thesis.abstractZh = normalizeText(patch.abstractZh);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'abstractEn')) {
+    thesis.abstractEn = normalizeText(patch.abstractEn);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'keywords')) {
+    thesis.keywords = Array.isArray(patch.keywords) ? patch.keywords.map(normalizeText).filter(Boolean) : thesis.keywords;
+  }
   touchThesis(thesis);
 
   writeDatabase(database);
@@ -848,6 +870,163 @@ function unlinkArticleFromThesis(thesisId, articleId) {
   touchThesis(thesis);
 
   writeDatabase(database);
+}
+
+function deleteThesis(thesisId) {
+  if (typeof thesisId !== 'string' || !thesisId.trim()) {
+    throw new Error('deleteThesis: thesisId is required');
+  }
+
+  const database = readDatabase();
+  const before = database.theses.length;
+  database.theses = database.theses.filter((thesis) => thesis.id !== thesisId);
+  if (database.theses.length === before) {
+    throw new Error('deleteThesis: thesis not found');
+  }
+
+  writeDatabase(database);
+
+  const thesisDir = path.join(THESES_DIRECTORY, thesisId);
+  try {
+    if (fs.existsSync(thesisDir)) {
+      fs.rmSync(thesisDir, { recursive: true, force: true });
+    }
+  } catch (error) {
+    console.error('deleteThesis: failed to remove thesis dir', thesisDir, error);
+  }
+}
+
+function findThesisSection(thesis, sectionId) {
+  const section = thesis.sections.find((item) => item.id === sectionId || item.type === sectionId);
+
+  if (!section) {
+    throw new Error('Thesis section not found');
+  }
+
+  return section;
+}
+
+function findThesisBlock(thesis, blockId) {
+  for (const section of thesis.sections) {
+    const block = section.contentBlocks.find((item) => item.id === blockId);
+    if (block) return { section, block };
+  }
+
+  throw new Error('Thesis content block not found');
+}
+
+function addThesisTextBlock(thesisId, sectionId, content, description = '', modifiedBy = 'SciPaper Todo') {
+  const cleanContent = normalizeText(content);
+  if (!cleanContent) {
+    throw new Error('Text content cannot be empty');
+  }
+
+  const database = readDatabase();
+  const thesis = findThesis(database, thesisId);
+  const section = findThesisSection(thesis, sectionId);
+  const timestamp = now();
+  const block = {
+    id: createId(),
+    sectionId: section.id,
+    type: 'Text',
+    content: cleanContent,
+    description: normalizeText(description),
+    orderIndex: section.contentBlocks.length,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    createdBy: modifiedBy,
+    updatedBy: modifiedBy,
+    versions: [createTextVersion(cleanContent, modifiedBy, '创建大论文章节文本')],
+  };
+
+  section.contentBlocks.push(block);
+  touchThesis(thesis);
+  writeDatabase(database);
+  return block;
+}
+
+function updateThesisTextBlock(thesisId, blockId, content, description = '', modifiedBy = 'SciPaper Todo') {
+  const cleanContent = normalizeText(content);
+  if (!cleanContent) {
+    throw new Error('Text content cannot be empty');
+  }
+
+  const database = readDatabase();
+  const thesis = findThesis(database, thesisId);
+  const { block } = findThesisBlock(thesis, blockId);
+
+  block.content = cleanContent;
+  block.description = normalizeText(description);
+  block.updatedAt = now();
+  block.updatedBy = modifiedBy;
+  block.versions = block.versions || [];
+  block.versions.unshift(createTextVersion(cleanContent, modifiedBy, '修改大论文章节文本'));
+  touchThesis(thesis);
+  writeDatabase(database);
+  return block;
+}
+
+function deleteThesisBlock(thesisId, blockId) {
+  const database = readDatabase();
+  const thesis = findThesis(database, thesisId);
+
+  for (const section of thesis.sections) {
+    const index = section.contentBlocks.findIndex((item) => item.id === blockId);
+    if (index >= 0) {
+      section.contentBlocks.splice(index, 1);
+      section.contentBlocks = section.contentBlocks.map((block, orderIndex) => ({ ...block, orderIndex }));
+      touchThesis(thesis);
+      writeDatabase(database);
+      return;
+    }
+  }
+
+  throw new Error('Thesis content block not found');
+}
+
+function exportThesisMarkdown(thesisId) {
+  const database = readDatabase();
+  const thesis = findThesis(database, thesisId);
+  const thesisRoot = createThesisFolder(thesisId);
+  const exportDir = path.join(thesisRoot, 'Exports');
+  fs.mkdirSync(exportDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const lines = [
+    `# ${thesis.title}`,
+    '',
+    thesis.titleEn ? `_${thesis.titleEn}_` : '',
+    '',
+    `- 作者: ${thesis.author || '未填写'}`,
+    `- 导师: ${thesis.supervisor || '未填写'}`,
+    `- 学位: ${thesis.degree === 'PhD' ? '博士' : '硕士'}`,
+    `- 状态: ${thesis.status}`,
+    '',
+  ];
+
+  if (thesis.abstractZh) lines.push('## 中文摘要', '', thesis.abstractZh, '');
+  if (thesis.abstractEn) lines.push('## Abstract', '', thesis.abstractEn, '');
+  if (Array.isArray(thesis.keywords) && thesis.keywords.length) {
+    lines.push('## 关键词', '', thesis.keywords.join(', '), '');
+  }
+
+  for (const section of [...thesis.sections].sort((left, right) => left.orderIndex - right.orderIndex)) {
+    lines.push(`## ${section.title}`, '');
+    const blocks = [...(section.contentBlocks || [])].sort((left, right) => left.orderIndex - right.orderIndex);
+    if (blocks.length === 0) {
+      lines.push('_暂无内容_', '');
+      continue;
+    }
+    for (const block of blocks) {
+      if (normalizeBlockType(block.type) === 'Text') {
+        lines.push(block.content, '');
+      }
+    }
+  }
+
+  const fileName = `${thesis.title.replace(/[^\w\u4e00-\u9fa5-]+/g, '-') || 'thesis'}-${stamp}.md`;
+  const exportPath = path.join(exportDir, fileName);
+  fs.writeFileSync(exportPath, lines.filter((line, index, arr) => line || arr[index - 1] !== '').join('\n'), 'utf-8');
+  return exportPath;
 }
 
 // Delete an article entirely: drops it from the articles array, removes its
@@ -1259,7 +1438,7 @@ function addProvider(input = {}) {
     kind,
     baseUrl,
     model,
-    temperature: Number.isFinite(input.temperature) ? input.temperature : 0.3,
+    temperature: Number.isFinite(input.temperature) ? input.temperature : 0,
     supportsToolUse: input.supportsToolUse,
     trustForWrite: typeof input.trustForWrite === 'boolean' ? input.trustForWrite : false,
     createdAt: timestamp,
@@ -1269,11 +1448,7 @@ function addProvider(input = {}) {
   if (maxTokens !== undefined) provider.maxTokens = maxTokens;
 
   db.llmProviders.push(provider);
-  // If no provider is active yet, the new one becomes active automatically.
-  // Adding a Provider and then having to "活动" it again is unintuitive UX.
-  if (!db.activeLlmProviderId) {
-    db.activeLlmProviderId = provider.id;
-  }
+  db.activeLlmProviderId = provider.id;
   writeDatabase(db);
   return provider;
 }
@@ -1322,6 +1497,10 @@ function updateProvider(id, patch = {}) {
 
   if (Object.prototype.hasOwnProperty.call(patch, 'trustForWrite')) {
     provider.trustForWrite = patch.trustForWrite;
+  }
+
+  if (patch.activate === true) {
+    db.activeLlmProviderId = provider.id;
   }
 
   provider.updatedAt = new Date().toISOString();
@@ -2226,6 +2405,13 @@ function addCitation(articleId, payload) {
     title: normalizeText(payload.title),
     authors: normalizeText(payload.authors),
     year: normalizeText(payload.year),
+    journal: normalizeText(payload.journal),
+    volume: normalizeText(payload.volume),
+    number: normalizeText(payload.number),
+    pages: normalizeText(payload.pages),
+    publisher: normalizeText(payload.publisher),
+    doi: normalizeText(payload.doi),
+    url: normalizeText(payload.url),
     localPdfPath: normalizeText(payload.localPdfPath),
     sectionLinks: (payload.relevantSections ?? []).map((sectionType) => {
       const section = article.sections.find((item) => item.type === sectionType);
@@ -2237,6 +2423,52 @@ function addCitation(articleId, payload) {
       };
     }),
   });
+
+  touchArticle(article);
+  writeDatabase(database);
+}
+
+function updateCitation(articleId, citationId, patch = {}) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const citation = article.citations.find((item) => item.id === citationId);
+
+  if (!citation) {
+    throw new Error('Citation not found');
+  }
+
+  const textFields = ['bibtex', 'title', 'authors', 'year', 'journal', 'volume', 'number', 'pages', 'publisher', 'doi', 'url', 'localPdfPath'];
+  for (const field of textFields) {
+    if (Object.prototype.hasOwnProperty.call(patch, field)) {
+      citation[field] = normalizeText(patch[field]);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'relevantSections')) {
+    citation.sectionLinks = (Array.isArray(patch.relevantSections) ? patch.relevantSections : []).map((sectionType) => {
+      const section = article.sections.find((item) => item.type === sectionType);
+      return {
+        citationId: citation.id,
+        sectionId: section?.id || '',
+        context: '',
+      };
+    });
+  }
+
+  touchArticle(article);
+  writeDatabase(database);
+  return citation;
+}
+
+function deleteCitation(articleId, citationId) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const before = article.citations.length;
+  article.citations = article.citations.filter((item) => item.id !== citationId);
+
+  if (article.citations.length === before) {
+    throw new Error('Citation not found');
+  }
 
   touchArticle(article);
   writeDatabase(database);
@@ -2806,6 +3038,70 @@ function updateReviewCommentStatus(articleId, roundId, commentId, status) {
   writeDatabase(database);
 }
 
+function updateReviewComment(articleId, roundId, commentId, patch = {}) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const round = article.reviewRounds.find((item) => item.id === roundId);
+  const comment = round?.comments.find((item) => item.id === commentId);
+
+  if (!comment) {
+    throw new Error('Review comment not found');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'reviewerId')) {
+    comment.reviewerId = normalizeText(patch.reviewerId) || comment.reviewerId;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'originalText')) {
+    comment.originalText = normalizeText(patch.originalText) || comment.originalText;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'type')) {
+    comment.type = patch.type === 'Minor' ? 'Minor' : 'Major';
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'suggestedSection')) {
+    comment.suggestedSection = normalizeText(patch.suggestedSection);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
+    comment.status = patch.status;
+  }
+
+  touchArticle(article);
+  writeDatabase(database);
+  return comment;
+}
+
+function deleteReviewComment(articleId, roundId, commentId) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const round = article.reviewRounds.find((item) => item.id === roundId);
+
+  if (!round) {
+    throw new Error('Review round not found');
+  }
+
+  const before = round.comments.length;
+  round.comments = round.comments.filter((comment) => comment.id !== commentId);
+  if (round.comments.length === before) {
+    throw new Error('Review comment not found');
+  }
+
+  touchArticle(article);
+  writeDatabase(database);
+}
+
+function deleteReviewRound(articleId, roundId) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const before = article.reviewRounds.length;
+  article.reviewRounds = article.reviewRounds.filter((round) => round.id !== roundId);
+  if (article.reviewRounds.length === before) {
+    throw new Error('Review round not found');
+  }
+
+  database.importBatches = (database.importBatches || []).filter((batch) => !(batch.roundIds || []).includes(roundId));
+  touchArticle(article);
+  writeDatabase(database);
+}
+
 function addRevision(articleId, roundId, commentId, payload) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
@@ -3167,6 +3463,8 @@ module.exports = {
   updateWritingStreak,
   countWords,
   addCitation,
+  updateCitation,
+  deleteCitation,
   deleteBlock,
   addAssetBlock,
   addAnnotation,
@@ -3189,6 +3487,9 @@ module.exports = {
   addReviewComment,
   importReviewComments,
   updateReviewCommentStatus,
+  updateReviewComment,
+  deleteReviewComment,
+  deleteReviewRound,
   addRevision,
   exportMarkdown,
   openPathForBlock,
@@ -3203,6 +3504,11 @@ module.exports = {
   addThesisSection,
   linkArticleToThesis,
   unlinkArticleFromThesis,
+  deleteThesis,
+  addThesisTextBlock,
+  updateThesisTextBlock,
+  deleteThesisBlock,
+  exportThesisMarkdown,
   deleteArticle,
   updateDailyGoal,
   addMoodEntry,

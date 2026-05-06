@@ -129,11 +129,11 @@ export function AppSidebar({
             role='button'
             tabIndex={hasOpenArticle ? 0 : -1}
             aria-disabled={!hasOpenArticle}
-            title={hasOpenArticle && openArticleTitle ? `Article — ${openArticleTitle}` : 'Article'}
-            aria-label={hasOpenArticle && openArticleTitle ? `Article — ${openArticleTitle}` : 'Article'}
+            title={hasOpenArticle && openArticleTitle ? `小论文 - ${openArticleTitle}` : '小论文'}
+            aria-label={hasOpenArticle && openArticleTitle ? `小论文 - ${openArticleTitle}` : '小论文'}
           >
             <span className='home-nav-icon'>✎</span>
-            {!collapsed && <span className='home-nav-label'>Article</span>}
+            {!collapsed && <span className='home-nav-label'>小论文</span>}
             {!collapsed && hasOpenArticle && openArticleTitle ? (
               <span className='home-nav-aside'>{openArticleTitle.slice(0, 14)}</span>
             ) : null}
@@ -186,10 +186,10 @@ export function AppSidebar({
             <p className='home-section-label' style={{ marginTop: 'var(--sp-5)' }}>Create</p>
             <div className='sidebar-create'>
               <button className='ghost-button full-width' onClick={onNewArticle} type='button'>
-                + 新建文章
+                + 新建小论文
               </button>
               <button className='ghost-button full-width' onClick={onNewThesis} type='button'>
-                + 新建学位论文
+                + 新建大论文
               </button>
             </div>
           </>

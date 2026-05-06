@@ -1,4 +1,4 @@
-import type { AnnotationAuthor, AnnotationStatus, AppState, ArticleStatus, BlockPreview, CreateArticlePayload, CreateThesisPayload, LlmProviderKind, LlmProvidersState, LlmStreamEvent, LlmTestResult, McpInfo, MoodType, SectionType, ThemeType, UpdateThesisPayload, WritingStats, WritingStreak, TagColor, WritingScenario, ItalicGuide, ZoteroConfig, ProgressEntry, ProgressEntryKind, Finding, FindingStatus, DailySession } from './types'
+import type { AnnotationAuthor, AnnotationStatus, AppState, ArticleStatus, BlockPreview, Citation, CreateArticlePayload, CreateThesisPayload, LlmProviderKind, LlmProvidersState, LlmStreamEvent, LlmTestResult, McpInfo, MoodType, SectionType, ThemeType, UpdateThesisPayload, WritingStats, WritingStreak, TagColor, WritingScenario, ItalicGuide, ZoteroConfig, ProgressEntry, ProgressEntryKind, Finding, FindingStatus, DailySession } from './types'
 import type { BibTeXEntry } from './utils/bibtexParser'
 import type { ParsedManuscriptSection, ParsedReviewerGroup } from './utils/importParsers'
 
@@ -113,6 +113,20 @@ declare global {
         commentId: string,
         status: 'Pending' | 'InProgress' | 'Completed' | 'Disagreed',
       ) => Promise<AppState>
+      updateReviewComment: (
+        articleId: string,
+        roundId: string,
+        commentId: string,
+        patch: {
+          reviewerId?: string
+          originalText?: string
+          type?: 'Major' | 'Minor'
+          suggestedSection?: string
+          status?: 'Pending' | 'InProgress' | 'Completed' | 'Disagreed'
+        },
+      ) => Promise<AppState>
+      deleteReviewComment: (articleId: string, roundId: string, commentId: string) => Promise<AppState>
+      deleteReviewRound: (articleId: string, roundId: string) => Promise<AppState>
       addRevision: (
         articleId: string,
         roundId: string,
@@ -140,6 +154,11 @@ declare global {
       addThesisSection: (thesisId: string, sectionType: string, title: string) => Promise<AppState>
       linkArticleToThesis: (thesisId: string, articleId: string) => Promise<AppState>
       unlinkArticleFromThesis: (thesisId: string, articleId: string) => Promise<AppState>
+      deleteThesis: (thesisId: string) => Promise<AppState>
+      addThesisTextBlock: (thesisId: string, sectionId: string, content: string, description?: string) => Promise<AppState>
+      updateThesisTextBlock: (thesisId: string, blockId: string, content: string, description?: string) => Promise<AppState>
+      deleteThesisBlock: (thesisId: string, blockId: string) => Promise<AppState>
+      exportThesisMarkdown: (thesisId: string) => Promise<string>
 
       // Writing streak operations
       getWritingStreak: () => Promise<WritingStreak>
@@ -153,6 +172,8 @@ declare global {
 
       // Citation operations
       addCitation: (articleId: string, citation: BibTeXEntry) => Promise<AppState>
+      updateCitation: (articleId: string, citationId: string, patch: Partial<Citation>) => Promise<AppState>
+      deleteCitation: (articleId: string, citationId: string) => Promise<AppState>
 
       // Theme operations
       getTheme: () => Promise<ThemeType>

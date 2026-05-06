@@ -136,7 +136,7 @@ async function ensureOk(response) {
   throw new Error(detail ? friendlyStatus(response.status) + '：' + detail : friendlyStatus(response.status));
 }
 async function callOpenAIStream(provider, apiKey, messages, tools, sessionId, mainWindow, abortSignal) {
-  const body = { model: provider.model, messages, stream: true, temperature: provider.temperature ?? 0.3 };
+  const body = { model: provider.model, messages, stream: true, temperature: provider.temperature ?? 0 };
   if (tools.length) { body.tools = openAiTools(tools); body.tool_choice = 'auto'; }
   if (provider.maxTokens && provider.maxTokens > 0) body.max_tokens = provider.maxTokens;
   const response = await fetch(endpoint(provider.baseUrl, '/chat/completions'), {
@@ -192,7 +192,7 @@ function splitAnthropicMessages(messages) {
 }
 async function callAnthropicStream(provider, apiKey, messages, tools, sessionId, mainWindow, abortSignal) {
   const split = splitAnthropicMessages(messages);
-  const body = { model: provider.model, max_tokens: provider.maxTokens && provider.maxTokens > 0 ? provider.maxTokens : 4096, system: split.system, messages: split.messages, stream: true, temperature: provider.temperature ?? 0.3 };
+  const body = { model: provider.model, max_tokens: provider.maxTokens && provider.maxTokens > 0 ? provider.maxTokens : 4096, system: split.system, messages: split.messages, stream: true, temperature: provider.temperature ?? 0 };
   if (tools.length) body.tools = anthropicTools(tools);
   const response = await fetch(endpoint(provider.baseUrl, '/v1/messages'), {
     method: 'POST',
@@ -380,7 +380,7 @@ function testRequest(provider, apiKey, signal) {
     return fetch(endpoint(provider.baseUrl, '/v1/messages'), {
       method: 'POST',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: provider.model, max_tokens: 10, messages: [{ role: 'user', content: 'ping' }], stream: false, temperature: provider.temperature ?? 0.3 }),
+      body: JSON.stringify({ model: provider.model, max_tokens: 10, messages: [{ role: 'user', content: 'ping' }], stream: false, temperature: provider.temperature ?? 0 }),
       signal,
     });
   }
@@ -388,7 +388,7 @@ function testRequest(provider, apiKey, signal) {
   return fetch(endpoint(provider.baseUrl, '/chat/completions'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
-    body: JSON.stringify({ model: provider.model, max_tokens: 10, messages: [{ role: 'user', content: 'ping' }], stream: false, temperature: provider.temperature ?? 0.3 }),
+    body: JSON.stringify({ model: provider.model, max_tokens: 10, messages: [{ role: 'user', content: 'ping' }], stream: false, temperature: provider.temperature ?? 0 }),
     signal,
   });
 }

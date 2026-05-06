@@ -20,7 +20,7 @@ import { ShareCard } from './components/ShareCard'
 import { ImportAssistantModal } from './components/ImportAssistantModal'
 import { ThesisDetailView } from './components/ThesisDetailView'
 import { pickJoke, pickAnalogy } from './utils/jokesAndAnalogies'
-import type { AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig, VocabPack, VocabPackSummary, SciSection, SciPhrase } from './types'
+import type { AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, UpdateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig, VocabPack, VocabPackSummary, SciSection, SciPhrase } from './types'
 import { BUILTIN_PACKS, aggregatePackWords, aggregatePackPhrases } from './data/sci-vocab'
 import type { BibTeXEntry } from './utils/bibtexParser'
 import { ARTICLE_STATUS_LABEL_ZH } from './utils/articleUtils'
@@ -144,6 +144,7 @@ function App() {
   const [presets, setPresets] = useState<LlmPreset[]>([])
   const [aiOpen, setAiOpen] = useState(false)
   const [importAssistantOpen, setImportAssistantOpen] = useState(false)
+  const [importAssistantMode, setImportAssistantMode] = useState<'manuscript' | 'review'>('manuscript')
   const [aiMessages, setAiMessages] = useState<AssistantMessage[]>([])
   const [aiBusy, setAiBusy] = useState(false)
   const [aiToolCallCount, setAiToolCallCount] = useState(0)
@@ -889,10 +890,58 @@ function App() {
   async function handleCreateThesis(payload: CreateThesisPayload) {
     await mutate(async () => {
       const nextState = await window.scipaper.createThesis(payload)
-      setRoute('library')
+      const newId = nextState.theses[0]?.id ?? null
+      setSelectedThesisId(newId)
+      if (newId) {
+        setRoute('thesis')
+      }
       setThesisWizardOpen(false)
       return nextState
     }, '已创建新学位论文')
+  }
+
+  async function handleUpdateThesis(thesisId: string, patch: UpdateThesisPayload) {
+    await mutate(() => window.scipaper.updateThesisMeta(thesisId, patch), '大论文信息已保存')
+  }
+
+  async function handleDeleteThesis(thesisId: string, title: string) {
+    await mutate(async () => {
+      const nextState = await window.scipaper.deleteThesis(thesisId)
+      if (selectedThesisId === thesisId) {
+        setSelectedThesisId(null)
+        setRoute('library')
+      }
+      return nextState
+    }, `已删除大论文「${title}」`)
+  }
+
+  async function handleLinkArticleToThesis(thesisId: string, articleId: string) {
+    await mutate(() => window.scipaper.linkArticleToThesis(thesisId, articleId), '已关联小论文')
+  }
+
+  async function handleUnlinkArticleFromThesis(thesisId: string, articleId: string) {
+    await mutate(() => window.scipaper.unlinkArticleFromThesis(thesisId, articleId), '已取消关联')
+  }
+
+  async function handleAddThesisTextBlock(thesisId: string, sectionId: string, content: string, description?: string) {
+    await mutate(() => window.scipaper.addThesisTextBlock(thesisId, sectionId, content, description), '大论文章节正文已添加')
+  }
+
+  async function handleUpdateThesisTextBlock(thesisId: string, blockId: string, content: string, description?: string) {
+    await mutate(() => window.scipaper.updateThesisTextBlock(thesisId, blockId, content, description), '大论文章节正文已保存')
+  }
+
+  async function handleDeleteThesisBlock(thesisId: string, blockId: string) {
+    await mutate(() => window.scipaper.deleteThesisBlock(thesisId, blockId), '大论文章节文本块已删除')
+  }
+
+  async function handleExportThesisMarkdown(thesisId: string) {
+    try {
+      await window.scipaper.exportThesisMarkdown(thesisId)
+      setNotice('大论文 Markdown 已导出')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '大论文导出失败')
+    }
   }
 
   async function saveMeta() {
@@ -926,6 +975,16 @@ function App() {
       const nextState = await window.scipaper.addCitation(selectedArticle.id, citation)
       return nextState
     }, '参考文献已添加')
+  }
+
+  async function handleUpdateCitation(citationId: string, patch: Partial<import('./types').Citation>) {
+    if (!selectedArticle) return
+    await mutate(() => window.scipaper.updateCitation(selectedArticle.id, citationId, patch), '参考文献已更新')
+  }
+
+  async function handleDeleteCitation(citationId: string) {
+    if (!selectedArticle) return
+    await mutate(() => window.scipaper.deleteCitation(selectedArticle.id, citationId), '参考文献已删除')
   }
 
   async function handleThemeChange(newTheme: ThemeType) {
@@ -1065,6 +1124,14 @@ function App() {
     setState(newState)
   }
 
+  async function handleUpdateProgressEntry(
+    entryId: string,
+    patch: { articleId?: string; kind?: ProgressEntryKind; title?: string; detail?: string; minutesSpent?: number },
+  ) {
+    const newState = await window.scipaper.updateProgressEntry(entryId, patch)
+    setState(newState)
+  }
+
   async function handleSetDailyPlan(planText: string) {
     const today = localIsoDate()
     const newState = await window.scipaper.setDailyPlan(today, planText)
@@ -1167,6 +1234,7 @@ function App() {
         open={importAssistantOpen}
         article={selectedArticle ?? null}
         busy={busy}
+        defaultMode={importAssistantMode}
         onClose={() => setImportAssistantOpen(false)}
         onApplied={async (nextState, message) => {
           setState(nextState)
@@ -1259,6 +1327,7 @@ function App() {
               onOpenThesis={openThesis}
               onNewArticle={() => setWizardOpen(true)}
               onNewThesis={() => setThesisWizardOpen(true)}
+              onDeleteThesis={handleDeleteThesis}
               onDeleteArticle={async (id, title) => {
                 try {
                   const next = await window.scipaper.deleteArticle(id)
@@ -1278,6 +1347,14 @@ function App() {
               articles={state.articles}
               onBack={() => setRoute('library')}
               onOpenArticle={openArticle}
+              onUpdate={handleUpdateThesis}
+              onDelete={handleDeleteThesis}
+              onLinkArticle={handleLinkArticleToThesis}
+              onUnlinkArticle={handleUnlinkArticleFromThesis}
+              onAddTextBlock={handleAddThesisTextBlock}
+              onUpdateTextBlock={handleUpdateThesisTextBlock}
+              onDeleteBlock={handleDeleteThesisBlock}
+              onExportMarkdown={handleExportThesisMarkdown}
             />
           ) : null}
 
@@ -1286,6 +1363,7 @@ function App() {
               state={state}
               onAddProgressEntry={handleAddProgressEntry}
               onDeleteProgressEntry={handleDeleteProgressEntry}
+              onUpdateProgressEntry={handleUpdateProgressEntry}
               onSetDailyPlan={handleSetDailyPlan}
               onEndDailySession={handleEndDailySession}
               onAddPomodoro={handleAddPomodoro}
@@ -1364,9 +1442,9 @@ function App() {
                     type="button"
                     className="ghost-button"
                     onClick={() => setMetaExpanded((v) => !v)}
-                    title={metaExpanded ? '折叠元信息' : '展开以编辑标题/期刊/状态'}
+                    title={metaExpanded ? '收起基础信息' : '修改标题/期刊/状态'}
                   >
-                    {metaExpanded ? '折叠元信息' : '展开元信息'}
+                    {metaExpanded ? '收起基础信息' : '修改标题/期刊/状态'}
                   </button>
                 </div>
 
@@ -1409,7 +1487,14 @@ function App() {
                       继续写 {SECTION_LABELS[activeSection.type]}
                     </button>
                   ) : null}
-                  <button className="ghost-button" type="button" onClick={() => setImportAssistantOpen(true)}>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => {
+                      setImportAssistantMode('manuscript')
+                      setImportAssistantOpen(true)
+                    }}
+                  >
                     导入正文/审稿
                   </button>
                   <button className="ghost-button" onClick={() => window.scipaper.exportMarkdown(selectedArticle.id)} type="button">
@@ -1651,6 +1736,28 @@ function App() {
                           '审稿状态已更新',
                         )
                       }
+                      onUpdateComment={(roundId, commentId, patch) =>
+                        mutate(
+                          () => window.scipaper.updateReviewComment(selectedArticle.id, roundId, commentId, patch),
+                          '审稿意见已更新',
+                        )
+                      }
+                      onDeleteComment={(roundId, commentId) =>
+                        mutate(
+                          () => window.scipaper.deleteReviewComment(selectedArticle.id, roundId, commentId),
+                          '审稿意见已删除',
+                        )
+                      }
+                      onDeleteRound={(roundId) =>
+                        mutate(
+                          () => window.scipaper.deleteReviewRound(selectedArticle.id, roundId),
+                          '审稿轮次已删除',
+                        )
+                      }
+                      onOpenImport={() => {
+                        setImportAssistantMode('review')
+                        setImportAssistantOpen(true)
+                      }}
                     />
                   ) : null}
 
@@ -1666,6 +1773,8 @@ function App() {
                     <CitationManager
                       article={selectedArticle}
                       onAddCitation={handleAddCitation}
+                      onUpdateCitation={handleUpdateCitation}
+                      onDeleteCitation={handleDeleteCitation}
                     />
                   ) : null}
 

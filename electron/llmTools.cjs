@@ -483,6 +483,54 @@ const TOOLS = [
     storageCall: 'addCitation',
   },
   {
+    name: 'update_citation',
+    description:
+      '更新指定论文中的一条参考文献。用于 BibTeX 导入后发现题名、作者、年份、期刊、DOI、URL 等字段错误时。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        articleId: {
+          type: 'string',
+          description: '论文项目 ID。',
+        },
+        citationId: {
+          type: 'string',
+          description: '要更新的参考文献 ID。',
+        },
+        patch: {
+          type: 'object',
+          description: '要更新的字段，如 title/authors/year/journal/doi/url/localPdfPath。',
+        },
+      },
+      required: ['articleId', 'citationId', 'patch'],
+      additionalProperties: false,
+    },
+    storageCall: 'updateCitation',
+  },
+  {
+    name: 'delete_citation',
+    description:
+      '删除指定论文中的一条参考文献。不可撤销；调用前应先 list_citations 确认 citationId。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        articleId: {
+          type: 'string',
+          description: '论文项目 ID。',
+        },
+        citationId: {
+          type: 'string',
+          description: '要删除的参考文献 ID。',
+        },
+      },
+      required: ['articleId', 'citationId'],
+      additionalProperties: false,
+    },
+    storageCall: 'deleteCitation',
+  },
+  {
     name: 'add_review_round',
     description:
       '为论文新增一轮审稿记录，用于收到投稿、返修或需要登记新审稿轮次时。该工具会写入 reviewRounds，适合在录入具体审稿意见前先建立轮次。',
@@ -703,6 +751,37 @@ const TOOLS = [
       additionalProperties: false,
     },
     storageCall: 'removeTag',
+  },
+  {
+    name: 'list_theses',
+    description:
+      '列出所有学位论文项目及其章节 id/type/title/blockCount。写入大论文章节正文前应先调用它或 get_thesis，确认 thesisId 和 sectionId。',
+    isWrite: false,
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+    storageCall: 'loadState',
+  },
+  {
+    name: 'get_thesis',
+    description:
+      '获取单个学位论文的完整记录，包括元信息、章节、正文块和关联小论文 id。用于写入或导出大论文前确认结构。',
+    isWrite: false,
+    parameters: {
+      type: 'object',
+      properties: {
+        thesisId: {
+          type: 'string',
+          description: '学位论文项目 ID。',
+        },
+      },
+      required: ['thesisId'],
+      additionalProperties: false,
+    },
+    storageCall: 'loadState',
   },
   {
     name: 'create_thesis',
@@ -1633,6 +1712,70 @@ const TOOLS = [
       additionalProperties: false,
     },
     storageCall: 'unlinkArticleFromThesis',
+  },
+  {
+    name: 'add_thesis_text_block',
+    description: '向学位论文的指定章节追加一个文本块。sectionId 可以来自 get_article/list_theses 后用户提供的 thesis.sections[].id。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        thesisId: { type: 'string' },
+        sectionId: { type: 'string' },
+        content: { type: 'string' },
+        description: { type: 'string' },
+      },
+      required: ['thesisId', 'sectionId', 'content'],
+      additionalProperties: false,
+    },
+    storageCall: 'addThesisTextBlock',
+  },
+  {
+    name: 'update_thesis_text_block',
+    description: '更新学位论文中的一个文本块。用于修改大论文章节正文，不影响小论文。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        thesisId: { type: 'string' },
+        blockId: { type: 'string' },
+        content: { type: 'string' },
+        description: { type: 'string' },
+      },
+      required: ['thesisId', 'blockId', 'content'],
+      additionalProperties: false,
+    },
+    storageCall: 'updateThesisTextBlock',
+  },
+  {
+    name: 'delete_thesis_block',
+    description: '删除学位论文中的一个文本块。不可撤销，只删除大论文正文块，不删除小论文。',
+    isWrite: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        thesisId: { type: 'string' },
+        blockId: { type: 'string' },
+      },
+      required: ['thesisId', 'blockId'],
+      additionalProperties: false,
+    },
+    storageCall: 'deleteThesisBlock',
+  },
+  {
+    name: 'export_thesis',
+    description: '将学位论文导出为 Markdown 文件，返回导出路径。当前只支持 markdown。',
+    isWrite: false,
+    parameters: {
+      type: 'object',
+      properties: {
+        thesisId: { type: 'string' },
+        format: { type: 'string', enum: ['markdown'] },
+      },
+      required: ['thesisId', 'format'],
+      additionalProperties: false,
+    },
+    storageCall: 'exportThesisMarkdown',
   },
 ];
 

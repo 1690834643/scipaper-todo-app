@@ -43,6 +43,16 @@ const ROUTER_ONLY_TOOLS = [
     storageCall: 'loadState',
     parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
   },
+  {
+    name: 'get_thesis',
+    storageCall: 'loadState',
+    parameters: {
+      type: 'object',
+      properties: { thesisId: { type: 'string' } },
+      required: ['thesisId'],
+      additionalProperties: false,
+    },
+  },
 ];
 
 const READ_DISPATCH = {
@@ -164,8 +174,24 @@ const READ_DISPATCH = {
   list_theses: (fn) =>
     (fn().theses || []).map((thesis) => {
       const articles = thesis.articles || thesis.articleIds || [];
-      return { id: thesis.id, title: thesis.title, status: thesis.status, articleCount: articles.length || 0 };
+      return {
+        id: thesis.id,
+        title: thesis.title,
+        status: thesis.status,
+        articleCount: articles.length || 0,
+        sections: (thesis.sections || []).map((section) => ({
+          id: section.id,
+          type: section.type,
+          title: section.title,
+          blockCount: (section.contentBlocks || []).length,
+        })),
+      };
     }),
+  get_thesis: (fn, args) => {
+    const thesis = (fn().theses || []).find((item) => item.id === args.thesisId);
+    if (!thesis) throw new Error('Thesis not found: ' + args.thesisId);
+    return thesis;
+  },
   get_writing_guidance: (fn, args) => fn(args.articleId, args.targetSection),
   list_progress_entries: (fn, args) => fn({
     articleId: args.articleId,
@@ -200,6 +226,8 @@ const WRITE_DISPATCH = {
   update_text_block: (fn, args) => fn(args.articleId, args.blockId, args.content, args.description, 'AI Co-write', 'ai'),
   delete_block: (fn, args) => fn(args.articleId, args.blockId, 'ai'),
   add_citation: (fn, args) => fn(args.articleId, args.payload),
+  update_citation: (fn, args) => fn(args.articleId, args.citationId, args.patch),
+  delete_citation: (fn, args) => fn(args.articleId, args.citationId),
   add_review_round: (fn, args) => fn(args.articleId, args.payload),
   add_review_comment: (fn, args) => fn(args.articleId, args.roundId, args.payload),
   update_review_comment_status: (fn, args) => fn(args.articleId, args.roundId, args.commentId, args.status),
@@ -258,6 +286,9 @@ const WRITE_DISPATCH = {
   update_thesis_meta: (fn, args) => fn(args.thesisId, args.patch),
   add_thesis_section: (fn, args) => fn(args.thesisId, args.sectionType, args.title),
   unlink_article_from_thesis: (fn, args) => fn(args.thesisId, args.articleId),
+  add_thesis_text_block: (fn, args) => fn(args.thesisId, args.sectionId, args.content, args.description, 'AI Co-write'),
+  update_thesis_text_block: (fn, args) => fn(args.thesisId, args.blockId, args.content, args.description, 'AI Co-write'),
+  delete_thesis_block: (fn, args) => fn(args.thesisId, args.blockId),
   export_article: async (_fn, args) => {
     const { articleId, format } = args;
     switch (format) {
@@ -283,6 +314,10 @@ const WRITE_DISPATCH = {
       default:
         throw new Error('unknown export format: ' + format);
     }
+  },
+  export_thesis: (fn, args) => {
+    if (args.format !== 'markdown') throw new Error('unknown thesis export format: ' + args.format);
+    return { format: args.format, path: fn(args.thesisId) };
   },
 };
 
@@ -413,6 +448,8 @@ function summarizeForApproval(name, args) {
     case 'update_text_block': return '更新论文 ' + input.articleId + ' 的文本块 ' + input.blockId;
     case 'delete_block': return '删除论文 ' + input.articleId + ' 的内容块 ' + input.blockId;
     case 'add_citation': return '向论文 ' + input.articleId + ' 添加参考文献';
+    case 'update_citation': return '更新论文 ' + input.articleId + ' 的参考文献 ' + input.citationId;
+    case 'delete_citation': return '删除论文 ' + input.articleId + ' 的参考文献 ' + input.citationId;
     case 'add_review_round': return '向论文 ' + input.articleId + ' 添加审稿轮次';
     case 'add_review_comment': return '向审稿轮次 ' + input.roundId + ' 添加审稿意见';
     case 'update_review_comment_status': return '将审稿意见 ' + input.commentId + ' 状态更新为 ' + input.status;
@@ -421,6 +458,10 @@ function summarizeForApproval(name, args) {
     case 'remove_tag': return '从论文 ' + input.articleId + ' 移除标签：' + input.tagId;
     case 'create_thesis': return '创建学位论文项目：' + (input.title || '未命名论文');
     case 'link_article_to_thesis': return '把论文 ' + input.articleId + ' 关联到学位论文 ' + input.thesisId;
+    case 'add_thesis_text_block': return '向学位论文 ' + input.thesisId + ' 的章节 ' + input.sectionId + ' 添加正文';
+    case 'update_thesis_text_block': return '更新学位论文 ' + input.thesisId + ' 的文本块 ' + input.blockId;
+    case 'delete_thesis_block': return '删除学位论文 ' + input.thesisId + ' 的文本块 ' + input.blockId;
+    case 'export_thesis': return '导出学位论文：' + input.thesisId;
     case 'attach_file': return '导入文件到论文 ' + input.articleId + ' 的 ' + input.sectionType + '：' + (input.sourcePath || '');
     case 'find_article': return '查找论文：' + (input.query || '');
     case 'list_sections': return '列出论文章节摘要：' + input.articleId;
