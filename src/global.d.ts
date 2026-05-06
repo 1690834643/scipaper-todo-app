@@ -7,6 +7,14 @@ declare global {
     scipaper: {
       bootstrap: () => Promise<AppState>
       getMcpInfo: () => Promise<McpInfo>
+      openDataFolder: () => Promise<boolean>
+      exportFullBackup: () => Promise<{ backupPath: string } | null>
+      restoreFullBackup: () => Promise<{
+        backupPath: string
+        restoredFiles: number
+        preRestoreBackupPath: string | null
+        state: AppState
+      } | null>
       createArticle: (payload: CreateArticlePayload) => Promise<AppState>
       deleteArticle: (articleId: string) => Promise<AppState>
       updateArticleMeta: (

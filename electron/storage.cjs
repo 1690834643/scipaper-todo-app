@@ -3439,6 +3439,118 @@ function createSharePackage(articleId) {
   return shareDir;
 }
 
+function walkFiles(rootDir) {
+  if (!fs.existsSync(rootDir)) return [];
+  const files = [];
+  const stack = [rootDir];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile()) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files.sort();
+}
+
+function isVolatileStoreFile(filePath) {
+  return filePath === DATABASE_PATH + '.lock' || filePath === DATABASE_PATH + '.tmp';
+}
+
+function backupFileName() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `SciPaperTodo-backup-${stamp}.scipaper-backup.json`;
+}
+
+function exportFullBackup(targetDirectory = BASE_DIRECTORY) {
+  ensureStore();
+  readDatabase();
+  fs.mkdirSync(targetDirectory, { recursive: true });
+
+  const exportPath = path.join(targetDirectory, backupFileName());
+  const files = walkFiles(BASE_DIRECTORY)
+    .filter((filePath) => !isVolatileStoreFile(filePath))
+    .filter((filePath) => path.resolve(filePath) !== path.resolve(exportPath))
+    .map((filePath) => ({
+      path: path.relative(BASE_DIRECTORY, filePath).split(path.sep).join('/'),
+      encoding: 'base64',
+      content: fs.readFileSync(filePath).toString('base64'),
+    }));
+
+  const payload = {
+    app: 'SciPaper Todo',
+    kind: 'full-backup',
+    formatVersion: 1,
+    createdAt: now(),
+    baseDirectoryName: path.basename(BASE_DIRECTORY),
+    files,
+  };
+
+  fs.writeFileSync(exportPath, JSON.stringify(payload, null, 2), 'utf-8');
+  return exportPath;
+}
+
+function assertSafeRelativePath(relativePath) {
+  if (!relativePath || typeof relativePath !== 'string') {
+    throw new Error('Invalid backup file path');
+  }
+  const normalized = path.normalize(relativePath);
+  if (path.isAbsolute(normalized) || normalized.startsWith('..') || normalized.includes(`..${path.sep}`)) {
+    throw new Error(`Unsafe backup file path: ${relativePath}`);
+  }
+  return normalized;
+}
+
+function restoreFullBackup(backupPath) {
+  const raw = fs.readFileSync(backupPath, 'utf-8');
+  const payload = JSON.parse(raw);
+  if (payload?.app !== 'SciPaper Todo' || payload?.kind !== 'full-backup' || payload?.formatVersion !== 1) {
+    throw new Error('Unsupported SciPaper Todo backup file');
+  }
+  if (!Array.isArray(payload.files)) {
+    throw new Error('Backup file is missing file entries');
+  }
+
+  let preRestoreBackupPath = null;
+  if (fs.existsSync(BASE_DIRECTORY)) {
+    preRestoreBackupPath = `${BASE_DIRECTORY}.before-restore-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+    fs.renameSync(BASE_DIRECTORY, preRestoreBackupPath);
+  }
+
+  fs.mkdirSync(BASE_DIRECTORY, { recursive: true });
+  let restoredFiles = 0;
+  try {
+    for (const entry of payload.files) {
+      const relativePath = assertSafeRelativePath(entry.path);
+      const destination = path.join(BASE_DIRECTORY, relativePath);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      const content = Buffer.from(String(entry.content || ''), entry.encoding === 'base64' ? 'base64' : 'utf-8');
+      fs.writeFileSync(destination, content);
+      restoredFiles += 1;
+    }
+    readDatabase();
+  } catch (error) {
+    fs.rmSync(BASE_DIRECTORY, { recursive: true, force: true });
+    if (preRestoreBackupPath && fs.existsSync(preRestoreBackupPath)) {
+      fs.renameSync(preRestoreBackupPath, BASE_DIRECTORY);
+    }
+    throw error;
+  }
+
+  return {
+    backupPath,
+    restoredFiles,
+    preRestoreBackupPath,
+  };
+}
+
 module.exports = {
   SECTION_TYPES,
   ARTICLE_STATUSES,
@@ -3551,6 +3663,8 @@ module.exports = {
   exportToHTML,
   exportToJSON,
   createSharePackage,
+  exportFullBackup,
+  restoreFullBackup,
   SUPPORTED_THEMES,
   getAutoApproveTools,
   setAutoApproveTools,

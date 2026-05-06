@@ -618,6 +618,46 @@ function App() {
     return window.scipaper.llmTestProvider(id)
   }
 
+  async function handleOpenDataFolder() {
+    try {
+      await window.scipaper.openDataFolder()
+      setNotice('已打开本地数据目录')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '打开数据目录失败')
+      throw error
+    }
+  }
+
+  async function handleExportFullBackup() {
+    try {
+      const result = await window.scipaper.exportFullBackup()
+      if (result?.backupPath) setNotice('完整备份已导出')
+      return result?.backupPath ?? null
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '导出备份失败')
+      throw error
+    }
+  }
+
+  async function handleRestoreFullBackup() {
+    try {
+      const result = await window.scipaper.restoreFullBackup()
+      if (!result) return null
+      setState(result.state)
+      setWritingStats(await window.scipaper.getWritingStats())
+      setSelectedArticleId(result.state.articles[0]?.id ?? null)
+      setSelectedThesisId(result.state.theses[0]?.id ?? null)
+      setNotice('备份已恢复')
+      return {
+        restoredFiles: result.restoredFiles,
+        preRestoreBackupPath: result.preRestoreBackupPath,
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '恢复备份失败')
+      throw error
+    }
+  }
+
   async function refreshScenarios() {
     const list = await window.scipaper.listScenarios()
     setScenarios(list)
@@ -1419,6 +1459,9 @@ function App() {
               onRenameVocabPack={handleRenameVocabPack}
               initialFocus={pendingSettingsFocus}
               onFocusConsumed={() => setPendingSettingsFocus(null)}
+              onOpenDataFolder={handleOpenDataFolder}
+              onExportFullBackup={handleExportFullBackup}
+              onRestoreFullBackup={handleRestoreFullBackup}
             />
           ) : null}
 

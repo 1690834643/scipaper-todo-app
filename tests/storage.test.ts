@@ -333,6 +333,83 @@ describe('storage derived data', () => {
     expect(updated.detail).toBe('Updated detail')
     expect(updated.minutesSpent).toBe(45)
   })
+
+  it('smoke-tests manuscript import, review response, thesis linking, and export', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    storage.importManuscriptSections(article.id, [
+      {
+        sectionType: 'Introduction',
+        content: 'This study asks a focused biological question.',
+        description: 'Imported introduction',
+        sourceName: 'draft.docx',
+      },
+      {
+        sectionType: 'Results',
+        content: 'The treatment increased expression by two fold.',
+        description: 'Imported results',
+        sourceName: 'draft.docx',
+      },
+    ])
+    storage.importReviewComments(article.id, {
+      submittedAt: '2026-05-06',
+      journalName: 'Journal',
+      manuscriptNumber: 'MS-42',
+      groups: [
+        {
+          reviewerId: 'Reviewer 1',
+          comments: [
+            {
+              originalText: 'Please explain the biological relevance.',
+              type: 'Major',
+              suggestedSection: 'Discussion',
+            },
+            {
+              originalText: 'Fix one typo in the methods.',
+              type: 'Minor',
+              suggestedSection: 'MaterialsAndMethods',
+            },
+          ],
+        },
+      ],
+    })
+
+    let state = storage.loadState()
+    const round = state.articles.find((item) => item.id === article.id)!.reviewRounds[0]
+    const comment = round.comments[0]
+    storage.addRevision(article.id, round.id, comment.id, {
+      description: 'Added biological relevance discussion',
+      responseText: 'We added one paragraph to the Discussion.',
+      markCompleted: true,
+    })
+    const thesis = storage.createThesis({
+      title: 'Smoke thesis',
+      titleEn: '',
+      author: 'Author',
+      supervisor: '',
+      institution: '',
+      department: '',
+      degree: 'Master',
+      abstractZh: '',
+      abstractEn: '',
+      keywords: [],
+    })
+    storage.linkArticleToThesis(thesis.id, article.id)
+    const thesisExport = storage.exportThesisMarkdown(thesis.id)
+    const articleExport = storage.exportMarkdown(article.id)
+
+    state = storage.loadState()
+    const updatedArticle = state.articles.find((item) => item.id === article.id)!
+    const updatedThesis = state.theses.find((item) => item.id === thesis.id)!
+
+    expect(updatedArticle.sections.find((section) => section.type === 'Results')?.contentBlocks[0]?.content).toContain('two fold')
+    expect(updatedArticle.reviewRounds[0].comments).toHaveLength(2)
+    expect(updatedArticle.reviewRounds[0].comments[0].status).toBe('Completed')
+    expect(updatedThesis.articleIds).toContain(article.id)
+    expect(fs.readFileSync(articleExport, 'utf-8')).toContain('focused biological question')
+    expect(fs.readFileSync(thesisExport, 'utf-8')).toContain('Smoke thesis')
+  })
 })
 
 describe('storage database recovery', () => {
@@ -408,6 +485,29 @@ describe('storage database recovery', () => {
     } finally {
       fs.renameSync = originalRename
     }
+  })
+
+  it('exports and restores a complete app backup with database and attachments', () => {
+    const home = makeHome()
+    const storage = loadStorage(home)
+    const article = createSmokeArticle(storage)
+    storage.addTextBlock(article.id, 'Results', 'backup protected content', 'draft')
+
+    const articleDir = storage.getArticleDirectory(article.id)
+    const attachmentDir = path.join(articleDir, 'Attachments')
+    fs.mkdirSync(attachmentDir, { recursive: true })
+    fs.writeFileSync(path.join(attachmentDir, 'result-table.txt'), 'attachment payload', 'utf-8')
+
+    const backupPath = storage.exportFullBackup(path.join(home, 'Desktop'))
+    fs.rmSync(storage.BASE_DIRECTORY, { recursive: true, force: true })
+
+    const restoreResult = storage.restoreFullBackup(backupPath)
+    const restoredState = storage.loadState()
+
+    expect(restoreResult.restoredFiles).toBeGreaterThan(0)
+    expect(restoredState.articles.find((item) => item.id === article.id)?.title).toBe('Smoke article')
+    expect(firstBlock(storage, article.id, 'Results')?.content).toBe('backup protected content')
+    expect(fs.readFileSync(path.join(attachmentDir, 'result-table.txt'), 'utf-8')).toBe('attachment payload')
   })
 })
 

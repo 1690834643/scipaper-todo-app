@@ -68,6 +68,9 @@ interface SettingsViewProps {
   onRenameVocabPack: (id: string, name: string) => Promise<void>
   initialFocus?: SettingsModule | null
   onFocusConsumed?: () => void
+  onOpenDataFolder: () => Promise<void>
+  onExportFullBackup: () => Promise<string | null>
+  onRestoreFullBackup: () => Promise<{ restoredFiles: number; preRestoreBackupPath: string | null } | null>
 }
 
 export type SettingsModule = 'profile' | 'theme' | 'fontScale' | 'storage' | 'ai' | 'scenarios' | 'italic' | 'zotero' | 'mcp' | 'stats' | 'autoApprove' | 'vocabPacks'
@@ -161,6 +164,8 @@ function UserProfilePanel(props: { displayName: string; onUpdate: (next: string)
 
 export function SettingsView(props: SettingsViewProps): JSX.Element {
   const [active, setActive] = useState<SettingsModule | null>(null)
+  const [storageBusy, setStorageBusy] = useState<'open' | 'export' | 'restore' | null>(null)
+  const [storageMessage, setStorageMessage] = useState('')
 
   useEffect(() => {
     if (props.initialFocus) {
@@ -246,10 +251,10 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">Storage</p>
-                  <h3>本地数据目录</h3>
+                  <h3>本地数据与备份</h3>
                 </div>
               </div>
-              <div className="plain-list">
+              <div className="plain-list" style={{ display: 'grid', gap: 'var(--sp-3)' }}>
                 <p>当前目录:</p>
                 <p style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', wordBreak: 'break-all' }}>
                   {props.state.baseDirectory || '载入中...'}
@@ -257,6 +262,68 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
                 <p className="muted-text">
                   所有稿件、附件、引文都存在这个目录里。MCP 写入也走这里。
                 </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    disabled={storageBusy !== null}
+                    onClick={async () => {
+                      setStorageBusy('open')
+                      setStorageMessage('')
+                      try {
+                        await props.onOpenDataFolder()
+                        setStorageMessage('已打开本地数据目录。')
+                      } finally {
+                        setStorageBusy(null)
+                      }
+                    }}
+                  >
+                    {storageBusy === 'open' ? '打开中…' : '打开数据目录'}
+                  </button>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={storageBusy !== null}
+                    onClick={async () => {
+                      setStorageBusy('export')
+                      setStorageMessage('')
+                      try {
+                        const backupPath = await props.onExportFullBackup()
+                        setStorageMessage(backupPath ? `备份已导出: ${backupPath}` : '已取消导出。')
+                      } finally {
+                        setStorageBusy(null)
+                      }
+                    }}
+                  >
+                    {storageBusy === 'export' ? '导出中…' : '导出完整备份'}
+                  </button>
+                  <button
+                    className="ghost-button danger"
+                    type="button"
+                    disabled={storageBusy !== null}
+                    onClick={async () => {
+                      if (!window.confirm('恢复备份会替换当前本地数据。继续前请确认你已经导出了当前数据的备份。')) return
+                      setStorageBusy('restore')
+                      setStorageMessage('')
+                      try {
+                        const result = await props.onRestoreFullBackup()
+                        if (!result) {
+                          setStorageMessage('已取消恢复。')
+                        } else {
+                          const safety = result.preRestoreBackupPath ? ` 当前数据已保留在: ${result.preRestoreBackupPath}` : ''
+                          setStorageMessage(`已恢复 ${result.restoredFiles} 个文件。${safety}`)
+                        }
+                      } finally {
+                        setStorageBusy(null)
+                      }
+                    }}
+                  >
+                    {storageBusy === 'restore' ? '恢复中…' : '从备份恢复'}
+                  </button>
+                </div>
+                {storageMessage && (
+                  <p className="muted-text" style={{ wordBreak: 'break-all' }}>{storageMessage}</p>
+                )}
               </div>
             </section>
           )}
