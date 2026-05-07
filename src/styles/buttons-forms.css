@@ -5,22 +5,28 @@
             color-picker, color-options, color-option
    ========================================================================= */
 
-/* ---------- Buttons (shared base) ---------- */
+/* ---------- Buttons (shared base) ----------
+   New design-pack surface is `.btn` plus variants. Legacy
+   `.primary-button` / `.ghost-button` are aliased so older components inherit
+   the same geometry while we migrate markup gradually. */
+.btn,
 .primary-button,
 .ghost-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-2);
-  padding: 10px 18px;
-  border-radius: var(--r-button);
-  border: 1px solid transparent;
-  font-family: var(--font-body);
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line-strong);
+  background: var(--c-panel);
+  color: var(--c-ink);
   font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  letter-spacing: 0.01em;
+  font-weight: 500;
   line-height: 1.2;
+  font-family: var(--font-body);
   white-space: nowrap;
+  cursor: pointer;
   transition:
     background var(--t-fast),
     color var(--t-fast),
@@ -29,32 +35,74 @@
     box-shadow var(--t-fast);
 }
 
+.btn:hover:not(:disabled),
+.ghost-button:hover:not(:disabled) {
+  background: var(--c-panel-sub);
+  border-color: var(--c-ink-muted);
+}
+
+.btn.primary,
 .primary-button {
   background: var(--c-accent);
   color: var(--c-on-accent);
+  border-color: var(--c-accent);
   box-shadow: var(--shadow-sm);
 }
 
+.btn.primary:hover:not(:disabled),
 .primary-button:hover:not(:disabled) {
   background: var(--c-accent-strong);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  border-color: var(--c-accent-strong);
 }
 
+.btn:active:not(:disabled),
 .primary-button:active:not(:disabled) {
   transform: translateY(0);
   box-shadow: var(--shadow-sm);
 }
 
+.btn.ghost,
 .ghost-button {
   background: transparent;
+  color: var(--c-ink-muted);
+  border-color: transparent;
+}
+
+.btn.ghost:hover:not(:disabled),
+.ghost-button:hover:not(:disabled) {
+  background: var(--c-panel-sub);
+  color: var(--c-ink);
+}
+
+.btn.subtle {
+  background: transparent;
+  border-color: var(--c-line);
+  color: var(--c-ink-muted);
+}
+.btn.subtle:hover:not(:disabled) {
+  background: var(--c-panel);
   color: var(--c-ink);
   border-color: var(--c-line-strong);
 }
-
-.ghost-button:hover:not(:disabled) {
-  background: var(--c-panel-sub);
-  border-color: var(--c-ink-muted);
+.btn.sm {
+  padding: 5px 10px;
+  font-size: var(--fs-xs);
+}
+.btn.lg {
+  padding: 10px 18px;
+  font-size: var(--fs-base);
+}
+.btn.icon-only {
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: var(--r-sm);
+}
+.btn:disabled,
+.primary-button:disabled,
+.ghost-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 
 .ghost-button.danger {
@@ -68,6 +116,7 @@
 }
 
 /* Pixel theme: hard offset shadow + uppercase */
+[data-theme="pixel"] .btn,
 [data-theme="pixel"] .primary-button,
 [data-theme="pixel"] .ghost-button {
   border: 2px solid #000;
@@ -79,29 +128,38 @@
   padding: 9px 16px;
 }
 
+[data-theme="pixel"] .btn.primary,
 [data-theme="pixel"] .primary-button {
   background: #000;
   color: #FFF;
 }
 
+[data-theme="pixel"] .btn.ghost,
 [data-theme="pixel"] .ghost-button {
-  background: #FFF;
+  background: transparent;
   color: #000;
+  box-shadow: none;
+  border-color: transparent;
 }
 
+[data-theme="pixel"] .btn:hover:not(:disabled),
 [data-theme="pixel"] .primary-button:hover:not(:disabled),
 [data-theme="pixel"] .ghost-button:hover:not(:disabled) {
   transform: translate(1px, 1px);
-  box-shadow: 2px 2px 0 #000;
+  box-shadow: 1px 1px 0 #000;
   background: #000;
   color: #FFF;
 }
 
+[data-theme="pixel"] .btn.ghost:hover:not(:disabled),
 [data-theme="pixel"] .ghost-button:hover:not(:disabled) {
   background: #FFF;
   color: #000;
+  box-shadow: 2px 2px 0 #000;
+  border-color: #000;
 }
 
+[data-theme="pixel"] .btn:active:not(:disabled),
 [data-theme="pixel"] .primary-button:active:not(:disabled),
 [data-theme="pixel"] .ghost-button:active:not(:disabled) {
   transform: translate(3px, 3px);

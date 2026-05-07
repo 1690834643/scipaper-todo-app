@@ -19,6 +19,7 @@ import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import type { SciPhrase, SciSection } from '../data/sci-vocab'
+import type { Citation } from '../types'
 
 const PLUGIN_KEY = new PluginKey<AutocompleteState>('focus-mode-autocomplete')
 
@@ -29,14 +30,26 @@ const MAX_ITEMS = 8
 // 整段词当作一个 token，否则替换范围只覆盖最后一段字母，导致重复粘连
 // （比如把 `CRISPR/CRISPR/Cas9` 留在文档里）。
 const WORD_BOUNDARY_REGEX = /[A-Za-z0-9][A-Za-z0-9'/-]*$/
+// `@<query>` triggers the citation picker. The leading `@` must sit on a word
+// boundary (start of doc or preceded by non-alphanumeric) so we don't fight
+// with email addresses or `arr@idx` shorthand. Empty query is allowed — typing
+// `@ ` immediately surfaces the full citation list.
+const CITATION_TRIGGER_REGEX = /(?:^|[^A-Za-z0-9])@([^@\s]*)$/
+const SCI_SECTIONS: SciSection[] = ['general', 'introduction', 'methods', 'results', 'discussion']
 
 export interface AutocompleteItem {
-  /** What gets inserted (replaces the typed query). */
+  /** What gets inserted (replaces the typed query). For citations this is the
+   *  display text shown inside the pill. */
   text: string
   /** What's shown in the popup (defaults to text). */
   label?: string
-  /** Word | Phrase — used for the small kind tag in the popup. */
-  kind: 'word' | 'phrase'
+  /** Word | Phrase | Citation — used for the small kind tag in the popup and
+   *  to switch the accept handler between insertText and insertCitation. */
+  kind: 'word' | 'phrase' | 'citation'
+  /** Citation only: the BibTeX-ish key the inline node anchors to. */
+  citeKey?: string
+  /** Citation only: secondary line shown beneath the label (e.g. journal/year). */
+  meta?: string
 }
 
 export interface AutocompleteState {
@@ -77,6 +90,28 @@ export interface AutocompleteOptions {
   words: Record<SciSection, string[]>
   /** Phrase dictionary keyed by section. */
   phrases: Record<SciSection, SciPhrase[]>
+  /** Returns the current article's citation list. The `@` trigger filters
+   *  this to surface citations as inline-pill candidates. Empty by default. */
+  getCitations: () => Citation[]
+}
+
+interface IndexedWord {
+  text: string
+  lower: string
+  dedupeKey: string
+}
+
+interface IndexedPhrase {
+  text: string
+  label?: string
+  triggerLower: string
+  triggerLength: number
+  dedupeKey: string
+}
+
+interface AutocompleteIndex {
+  words: Record<SciSection, IndexedWord[]>
+  phrases: Record<SciSection, IndexedPhrase[]>
 }
 
 export const AutocompleteExtension = Extension.create<AutocompleteOptions>({
@@ -88,11 +123,13 @@ export const AutocompleteExtension = Extension.create<AutocompleteOptions>({
       onStateChange: () => undefined,
       words: { general: [], introduction: [], methods: [], results: [], discussion: [] },
       phrases: { general: [], introduction: [], methods: [], results: [], discussion: [] },
+      getCitations: () => [],
     }
   },
 
   addProseMirrorPlugins() {
     const opts = this.options
+    const autocompleteIndex = buildAutocompleteIndex(opts)
     // IME 兜底：composition 刚结束时浏览器通常会再发一个 keydown（确认拼音
     // 选词的 Enter / Space）。某些浏览器此时 isComposing 已置 false，
     // autocomplete 会把它当成接受 suggestion → 抢走 IME 确认。50ms 抑制窗口
@@ -131,7 +168,7 @@ export const AutocompleteExtension = Extension.create<AutocompleteOptions>({
             // recompute from the new doc/selection. The reset clears any
             // prior dismiss flag BEFORE recomputing so a fresh popup can show.
             const baseline = meta?.dismissed === false ? { ...prev, dismissed: false } : prev
-            return computeState(newState, baseline, opts)
+            return computeState(newState, baseline, opts, autocompleteIndex)
           },
         },
 
@@ -226,6 +263,7 @@ function computeState(
   newState: EditorState,
   prev: AutocompleteState,
   opts: AutocompleteOptions,
+  autocompleteIndex: AutocompleteIndex,
 ): AutocompleteState {
   const { selection } = newState
   if (!selection.empty) return EMPTY_STATE
@@ -237,6 +275,36 @@ function computeState(
     undefined,
     '￼',
   )
+
+  // Citation trigger first: `@query` overrides word completion. The match
+  // group is `query` (may be empty); the `@` itself sits at match[0].length-
+  // group[1].length-1 from end of textBefore.
+  const citeMatch = textBefore.match(CITATION_TRIGGER_REGEX)
+  if (citeMatch) {
+    const query = citeMatch[1] ?? ''
+    const queryLower = query.toLowerCase()
+    const triggerKey = `@${queryLower}`
+    if (prev.dismissed && prev.query === triggerKey) {
+      return { ...prev, active: false, items: [], coords: null }
+    }
+    const items = rankCitationItems(query, opts.getCitations())
+    if (items.length === 0) return EMPTY_STATE
+    // `from` lands on the `@`; `to` is the cursor. Replacing this range
+    // with a Citation node deletes both `@` and the typed query.
+    const from = selection.from - query.length - 1
+    const to = selection.from
+    return {
+      active: true,
+      from,
+      to,
+      query: triggerKey,
+      items,
+      selectedIndex: prev.active && prev.query === triggerKey ? prev.selectedIndex : 0,
+      coords: null,
+      dismissed: false,
+    }
+  }
+
   const match = textBefore.match(WORD_BOUNDARY_REGEX)
   if (!match) return EMPTY_STATE
 
@@ -253,7 +321,7 @@ function computeState(
   }
 
   const section = opts.getSection()
-  const items = rankItems(word, section, opts)
+  const items = rankItems(word, section, autocompleteIndex)
   if (items.length === 0) return EMPTY_STATE
 
   const from = selection.from - word.length
@@ -271,16 +339,122 @@ function computeState(
   }
 }
 
+// ---- citation matching -----------------------------------------------------
+
+function dedupeKey(text: string): string {
+  return text.toLowerCase().replace(/[-/]/g, '')
+}
+
+function buildAutocompleteIndex(opts: AutocompleteOptions): AutocompleteIndex {
+  const words = Object.fromEntries(
+    SCI_SECTIONS.map((section) => [
+      section,
+      (opts.words[section] ?? []).map((word) => ({
+        text: word,
+        lower: word.toLowerCase(),
+        dedupeKey: dedupeKey(word),
+      })),
+    ]),
+  ) as Record<SciSection, IndexedWord[]>
+
+  const phrases = Object.fromEntries(
+    SCI_SECTIONS.map((section) => [
+      section,
+      (opts.phrases[section] ?? []).map((phrase) => ({
+        text: phrase.text,
+        label: phrase.label,
+        triggerLower: phrase.trigger.toLowerCase(),
+        triggerLength: phrase.trigger.length,
+        dedupeKey: dedupeKey(phrase.text),
+      })),
+    ]),
+  ) as Record<SciSection, IndexedPhrase[]>
+
+  return { words, phrases }
+}
+
+function firstAuthorLast(authors: string | undefined): string {
+  if (!authors) return ''
+  // Common shapes from Zotero / BibTeX import:
+  //   "Wilson, Matthew A.; McNaughton, Bruce L."
+  //   "Wilson MA, McNaughton BL"
+  //   "Matthew A. Wilson and Bruce L. McNaughton"
+  const first = authors.split(/[;]| and /i)[0]?.trim() ?? ''
+  if (!first) return ''
+  // "Lastname, Firstname" → take part before the first comma.
+  if (first.includes(',')) return first.split(',')[0].trim()
+  // "Firstname Lastname" → take the last whitespace-delimited token.
+  const tokens = first.split(/\s+/).filter(Boolean)
+  return tokens.length ? tokens[tokens.length - 1] : first
+}
+
+function citationDisplay(citation: Citation): string {
+  const last = firstAuthorLast(citation.authors)
+  const year = (citation.year || '').trim()
+  if (last && year) return `[${last} ${year}]`
+  if (last) return `[${last}]`
+  if (year) return `[${year}]`
+  if (citation.title) {
+    const title = citation.title.trim()
+    return `[${title.length > 30 ? title.slice(0, 30) + '…' : title}]`
+  }
+  return `[${citation.id ?? '?'}]`
+}
+
+function citationKey(citation: Citation): string {
+  // Prefer the explicit BibTeX key if present; fall back to the stable id.
+  if (citation.bibtex) {
+    const m = citation.bibtex.match(/@\w+\s*\{\s*([^,\s]+)/)
+    if (m) return m[1]
+  }
+  return citation.id ?? ''
+}
+
+function rankCitationItems(rawQuery: string, citations: Citation[]): AutocompleteItem[] {
+  const query = rawQuery.toLowerCase()
+  const matches: { item: AutocompleteItem; score: number }[] = []
+  const seenKeys = new Set<string>()
+
+  for (const citation of citations) {
+    const key = citationKey(citation)
+    if (!key || seenKeys.has(key)) continue
+    seenKeys.add(key)
+
+    const last = firstAuthorLast(citation.authors).toLowerCase()
+    const year = (citation.year || '').toLowerCase()
+    const title = (citation.title || '').toLowerCase()
+    const haystack = `${key.toLowerCase()} ${last} ${year} ${title}`
+
+    let score: number
+    if (query.length === 0) score = 1
+    else if (last.startsWith(query)) score = 100 - last.length
+    else if (key.toLowerCase().startsWith(query)) score = 90 - key.length
+    else if (title.startsWith(query)) score = 60 - Math.min(40, title.length)
+    else if (haystack.includes(query)) score = 30
+    else continue
+
+    const display = citationDisplay(citation)
+    const meta = [citation.year, citation.journal].filter(Boolean).join(' · ')
+    matches.push({
+      item: { text: display, label: display, kind: 'citation', citeKey: key, meta },
+      score,
+    })
+  }
+
+  matches.sort((a, b) => b.score - a.score)
+  return matches.slice(0, MAX_ITEMS).map((m) => m.item)
+}
+
 function rankItems(
   rawQuery: string,
   section: SciSection,
-  opts: AutocompleteOptions,
+  autocompleteIndex: AutocompleteIndex,
 ): AutocompleteItem[] {
   const query = rawQuery.toLowerCase()
-  const sectionWords = section === 'general' ? [] : opts.words[section] ?? []
-  const generalWords = opts.words.general ?? []
-  const sectionPhrases = section === 'general' ? [] : opts.phrases[section] ?? []
-  const generalPhrases = opts.phrases.general ?? []
+  const sectionWords = section === 'general' ? [] : autocompleteIndex.words[section] ?? []
+  const generalWords = autocompleteIndex.words.general ?? []
+  const sectionPhrases = section === 'general' ? [] : autocompleteIndex.phrases[section] ?? []
+  const generalPhrases = autocompleteIndex.phrases.general ?? []
 
   // Single dedupe set across ALL candidates, keyed on a normalized form of
   // the inserted text. Normalization strips '-' and '/' so visual variants
@@ -290,12 +464,7 @@ function rankItems(
   const seen = new Set<string>()
   const matched: { item: AutocompleteItem; score: number }[] = []
 
-  function dedupeKey(text: string): string {
-    return text.toLowerCase().replace(/[-/]/g, '')
-  }
-
-  function pushIfFresh(item: AutocompleteItem, score: number) {
-    const key = dedupeKey(item.text)
+  function pushIfFresh(item: AutocompleteItem, score: number, key: string) {
     if (seen.has(key)) return
     seen.add(key)
     matched.push({ item, score })
@@ -304,18 +473,20 @@ function rankItems(
   // Phrases first (higher score, more keystrokes saved).
   if (query.length >= 2) {
     for (const phrase of sectionPhrases) {
-      if (phrase.trigger.toLowerCase().startsWith(query)) {
+      if (phrase.triggerLower.startsWith(query)) {
         pushIfFresh(
           { text: phrase.text, label: phrase.label ?? phrase.text, kind: 'phrase' },
-          110 - phrase.trigger.length,
+          110 - phrase.triggerLength,
+          phrase.dedupeKey,
         )
       }
     }
     for (const phrase of generalPhrases) {
-      if (phrase.trigger.toLowerCase().startsWith(query)) {
+      if (phrase.triggerLower.startsWith(query)) {
         pushIfFresh(
           { text: phrase.text, label: phrase.label ?? phrase.text, kind: 'phrase' },
-          100 - phrase.trigger.length,
+          100 - phrase.triggerLength,
+          phrase.dedupeKey,
         )
       }
     }
@@ -325,15 +496,23 @@ function rankItems(
   // equal the query (no completion needed).
   if (query.length >= MIN_QUERY_LENGTH) {
     for (const word of sectionWords) {
-      const lower = word.toLowerCase()
-      if (lower.startsWith(query) && lower !== query) {
-        pushIfFresh({ text: word, kind: 'word' }, 60 - (word.length - query.length))
+      if (word.lower.startsWith(query) && word.lower !== query) {
+        if (seen.has(word.dedupeKey)) continue
+        seen.add(word.dedupeKey)
+        matched.push({
+          item: { text: word.text, kind: 'word' },
+          score: 60 - (word.text.length - query.length),
+        })
       }
     }
     for (const word of generalWords) {
-      const lower = word.toLowerCase()
-      if (lower.startsWith(query) && lower !== query) {
-        pushIfFresh({ text: word, kind: 'word' }, 50 - (word.length - query.length))
+      if (word.lower.startsWith(query) && word.lower !== query) {
+        if (seen.has(word.dedupeKey)) continue
+        seen.add(word.dedupeKey)
+        matched.push({
+          item: { text: word.text, kind: 'word' },
+          score: 50 - (word.text.length - query.length),
+        })
       }
     }
   }
@@ -344,6 +523,28 @@ function rankItems(
 
 function acceptItem(view: EditorView, state: AutocompleteState, item: AutocompleteItem) {
   const { from, to } = state
+
+  // Citation: replace the `@query` range with an inline-atom citation node,
+  // then drop a trailing space so typing flows on. Use the schema directly
+  // — TipTap commands aren't reachable from a raw EditorView dispatch.
+  if (item.kind === 'citation' && item.citeKey) {
+    const nodeType = view.state.schema.nodes.citation
+    if (nodeType) {
+      const node = nodeType.create({
+        citeKey: item.citeKey,
+        displayText: item.text,
+      })
+      const tr = view.state.tr.replaceWith(from, to, node)
+      // After the inserted node (1 step), drop a single space so the cursor
+      // sits past the pill and continued typing doesn't glue to it.
+      tr.insertText(' ', from + 1)
+      tr.setMeta(PLUGIN_KEY, { dismissed: false })
+      view.dispatch(tr)
+      view.focus()
+      return
+    }
+  }
+
   // Phrases inserted as-is. Words are inserted as-is too — capitalization
   // matches the dictionary entry. If the user already typed an uppercase
   // first letter, we capitalize the suggestion.

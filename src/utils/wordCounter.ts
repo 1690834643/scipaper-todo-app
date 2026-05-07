@@ -2,6 +2,7 @@
 
 import type { Article, Thesis, WordCountStats } from '../types'
 import { localIsoDate } from './dateUtils'
+import { stripHtml } from './htmlContent'
 
 function processSections(
   items: { sections: { id: string; type: string; title?: string; contentBlocks: { type: string; content: string; updatedAt: string }[] }[] }[],
@@ -44,14 +45,16 @@ function processSections(
 }
 
 export function countWords(text: string): number {
-  if (!text || text.trim().length === 0) return 0
+  if (!text) return 0
+  const plain = stripHtml(text)
+  if (plain.trim().length === 0) return 0
 
   // Count Chinese characters individually + English words
-  const chineseChars = text.match(/[\u4e00-\u9fa5]/g)
+  const chineseChars = plain.match(/[\u4e00-\u9fa5]/g)
   const chineseCount = chineseChars ? chineseChars.length : 0
 
   // Remove Chinese characters and count remaining English words
-  const withoutChinese = text.replace(/[\u4e00-\u9fa5]/g, ' ')
+  const withoutChinese = plain.replace(/[\u4e00-\u9fa5]/g, ' ')
   const englishWords = withoutChinese.trim().split(/\s+/).filter(word => word.length > 0)
 
   return chineseCount + englishWords.length
@@ -59,7 +62,7 @@ export function countWords(text: string): number {
 
 export function countTotalChars(text: string): number {
   if (!text) return 0
-  return text.replace(/\s/g, '').length
+  return stripHtml(text).replace(/\s/g, '').length
 }
 
 export function getWordCountStats(

@@ -1,5 +1,6 @@
 import type { Article, ArticleStatus, Thesis, ThesisStatus } from '../types'
 import { localIsoDate } from './dateUtils'
+import { stripHtml } from './htmlContent'
 
 /* ---------- Word counts (single source of truth) ---------- */
 
@@ -8,7 +9,7 @@ export function countArticleWords(item: Article | Thesis): number {
   for (const section of item.sections) {
     for (const block of section.contentBlocks) {
       if (block.type === 'Text' && block.content) {
-        total += block.content.replace(/\s+/g, '').length
+        total += stripHtml(block.content).replace(/\s+/g, '').length
       }
     }
   }

@@ -4,6 +4,7 @@ import type {
   McpInfo,
   ThemeType,
   LlmProvider,
+  LlmProvidersState,
   LlmPreset,
   WritingScenario,
   ItalicGuide,
@@ -34,7 +35,7 @@ interface SettingsViewProps {
   providers: LlmProvider[]
   activeProviderId: string | null
   presets: LlmPreset[]
-  onAddProvider: (draft: Omit<LlmProvider, 'id' | 'hasApiKey'> & { apiKey: string }) => Promise<void>
+  onAddProvider: (draft: Omit<LlmProvider, 'id' | 'hasApiKey'> & { apiKey: string }) => Promise<LlmProvidersState | void>
   onUpdateProvider: (
     id: string,
     patch: Partial<Omit<LlmProvider, 'id' | 'hasApiKey'>> & { apiKey?: string },

@@ -12,12 +12,36 @@
    See ../components/FocusModeEditor.design.md for full prompts.
    ========================================================================= */
 
-/* ----- Inline shell (sprint 6 阶段 8.6) -------------------------------- */
-/* Used to be a portaled full-screen overlay; now lives inside the article
- * view's content-stage as one tab among many. Fill-parent + own grid. */
+/* ----- Overlay shell (v1.0.48) ------------------------------------------
+ * FocusModeEditor portals into document.body as a full-screen overlay so it
+ * covers the sidebar, dashboard header, section nav, etc. The previous "tab
+ * inside content-stage" version is gone — preview lives in SectionEditor. */
+.focus-mode-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--c-bg);
+  animation: focus-mode-overlay-in 180ms ease-out;
+}
+body.focus-mode-active {
+  /* prevent any underlying scrolling while the overlay is up */
+  overflow: hidden;
+}
+/* When the AI drawer is open at the same time, leave room for it on the
+ * right so the writing canvas doesn't slide under the drawer. */
+body.ai-drawer-open .focus-mode-overlay {
+  right: var(--ai-drawer-width, 0);
+}
+@keyframes focus-mode-overlay-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .focus-mode-shell {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  /* header · toolbar · stage · footer. The toolbar row is `auto` and shrinks
+   * to 0 height when collapsed (via .focus-mode-toolbar.is-collapsed). */
+  grid-template-rows: auto auto 1fr auto;
   height: 100%;
   width: 100%;
   min-height: 0;
@@ -258,6 +282,22 @@ body.ai-drawer-open .focus-mode-stage.is-rail-open {
   font-size: var(--fs-xs);
   color: var(--c-ink-faint);
   font-feature-settings: "tnum";
+}
+.focus-mode-rail-add {
+  margin-left: var(--sp-2);
+  padding: 2px var(--sp-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  color: var(--c-accent-strong);
+  background: var(--c-accent-soft);
+  border: var(--bw) solid transparent;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.focus-mode-rail-add:hover {
+  background: var(--c-accent);
+  color: var(--c-on-accent);
 }
 .focus-mode-rail-tag {
   padding: 2px var(--sp-2);
@@ -552,7 +592,7 @@ body.ai-drawer-open .focus-mode-stage.is-rail-open {
   list-style: none;
   margin: 0;
   padding: var(--sp-1) 0;
-  max-height: 280px;
+  max-height: var(--autocomplete-max-height, 280px);
   overflow-y: auto;
 }
 .focus-mode-autocomplete-item {
@@ -922,3 +962,1086 @@ body.ai-drawer-open .focus-mode-stage.is-rail-open {
 
 /* ----- Pixel theme tweak ------------------------------------------------- */
 [data-theme="pixel"] .focus-mode-autocomplete { animation: none; }
+
+/* =========================================================================
+   v1.0.46 — Design package corrective pass for the REAL writing interface.
+   The supplied prototype used wp-* classes; the application uses
+   focus-mode-* classes. These overrides intentionally make "进入写作" visibly
+   match the iA Writer-style design without touching TipTap or data logic.
+   ========================================================================= */
+
+.focus-mode-shell {
+  position: relative;
+  background: var(--c-bg);
+  overflow: hidden;
+}
+
+.focus-mode-header,
+.focus-mode-stage,
+.focus-mode-footer {
+  position: relative;
+  z-index: 1;
+}
+
+.focus-mode-header {
+  min-height: 58px;
+  padding: 10px 28px;
+  background: color-mix(in srgb, var(--c-bg) 92%, var(--c-panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.focus-mode-header-side:first-child {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.focus-mode-section-tag {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.focus-mode-article-title {
+  max-width: min(42vw, 520px);
+  color: var(--c-ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.focus-mode-header-center {
+  align-items: center;
+  gap: 7px;
+  min-width: 86px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: var(--c-panel-sub);
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.focus-mode-save-dot {
+  width: 7px;
+  height: 7px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.focus-mode-save-label {
+  white-space: nowrap;
+}
+
+.focus-mode-header-side--right {
+  gap: 5px;
+}
+
+.focus-mode-icon-button,
+.focus-mode-font-select,
+.focus-mode-exit {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-ink-muted);
+  box-shadow: none;
+}
+
+.focus-mode-icon-button:hover,
+.focus-mode-font-select:hover,
+.focus-mode-exit:hover {
+  background: var(--c-panel-sub);
+  color: var(--c-ink);
+  border-color: transparent;
+}
+
+.focus-mode-icon-button.is-active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+  border-color: transparent;
+}
+
+.focus-mode-stage {
+  background: transparent;
+  --focus-rail-width: 340px;
+}
+
+.focus-mode-canvas {
+  padding: 56px clamp(20px, 5vw, 72px) 96px;
+  scroll-behavior: smooth;
+}
+
+.focus-mode-canvas-pane--editor {
+  width: min(760px, 100%);
+  align-items: stretch;
+  padding: 0;
+}
+
+.focus-mode-block-name {
+  width: 100%;
+  margin: 0 0 34px;
+  padding: 0 0 14px;
+  color: var(--c-ink);
+  font-family: var(--font-heading);
+  font-size: clamp(28px, 3.4vw, 42px);
+  line-height: 1.18;
+  font-weight: var(--fw-semi);
+  border-bottom: 1px solid var(--c-line);
+  text-wrap: balance;
+}
+
+.focus-mode-block-name::placeholder {
+  color: var(--c-ink-faint);
+  font-style: normal;
+}
+
+.focus-mode-block-name:focus {
+  border-bottom-color: var(--c-accent);
+}
+
+.focus-mode-editor-host {
+  width: 100%;
+  min-height: 65vh;
+}
+
+.focus-mode-prose {
+  min-height: 65vh;
+  padding: 0 0 160px;
+  color: var(--c-ink);
+  font-family: var(--focus-font-override, var(--font-body));
+  font-size: var(--focus-font-size, 18px);
+  line-height: 1.78;
+}
+
+.focus-mode-prose p,
+.focus-mode-prose ul,
+.focus-mode-prose ol,
+.focus-mode-prose blockquote {
+  margin-bottom: 18px;
+  text-wrap: pretty;
+}
+
+.focus-mode-prose h2 {
+  position: relative;
+  margin: 48px 0 14px;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.focus-mode-prose h2::before {
+  content: "##";
+  position: absolute;
+  left: -42px;
+  top: 4px;
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  opacity: .5;
+}
+
+.focus-mode-prose h3 {
+  position: relative;
+  margin: 32px 0 10px;
+  font-size: 18px;
+}
+
+.focus-mode-prose h3::before {
+  content: "###";
+  position: absolute;
+  left: -48px;
+  top: 2px;
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  opacity: .5;
+}
+
+.focus-mode-prose blockquote {
+  padding: 4px 0 4px 18px;
+  border-left: 3px solid var(--c-accent);
+  color: var(--c-ink-muted);
+  font-size: .95em;
+}
+
+.focus-mode-rail {
+  margin: 18px 18px 18px 0;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--c-panel) 78%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+}
+
+.focus-mode-rail-section {
+  padding: 18px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.focus-mode-rail-header {
+  align-items: center;
+}
+
+.focus-mode-rail-header h3 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-md);
+}
+
+.focus-mode-rail-count,
+.focus-mode-rail-tag {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--c-panel-sub);
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.focus-mode-annotation {
+  border-radius: var(--r-md);
+  background: var(--c-panel);
+}
+
+.focus-mode-annotation-anchor {
+  border-left: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--c-panel-sub);
+}
+
+.focus-mode-footer {
+  min-height: 42px;
+  padding: 9px 28px;
+  background: color-mix(in srgb, var(--c-bg) 94%, var(--c-panel));
+  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.focus-mode-footer-stat {
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--c-panel-sub);
+  color: var(--c-ink-muted);
+}
+
+.focus-mode-footer-hint {
+  color: var(--c-ink-faint);
+}
+
+.focus-mode-canvas--split {
+  padding: 0;
+}
+
+.focus-mode-canvas--split > .focus-mode-canvas-pane--editor {
+  width: 100%;
+  padding: 44px clamp(20px, 5vw, 72px) 24px;
+}
+
+.focus-mode-canvas--split .focus-mode-editor-host,
+.focus-mode-canvas--split .focus-mode-block-name {
+  width: min(760px, 100%);
+}
+
+.focus-mode-canvas-pane--prev {
+  background: color-mix(in srgb, var(--c-panel) 62%, transparent);
+}
+
+.focus-mode-prev-body {
+  border-radius: var(--r-md);
+  border-color: var(--c-line);
+}
+
+@media (max-width: 1080px) {
+  .focus-mode-rail {
+    margin: 0 18px 18px;
+  }
+}
+
+@media (max-width: 760px) {
+  .focus-mode-header {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+    gap: var(--sp-2);
+  }
+
+  .focus-mode-header-center,
+  .focus-mode-header-side--right {
+    justify-content: flex-start;
+  }
+
+  .focus-mode-canvas {
+    padding: 36px 20px 80px;
+  }
+
+  .focus-mode-prose h2::before,
+  .focus-mode-prose h3::before {
+    display: none;
+  }
+}
+
+[data-theme="pixel"] .focus-mode-shell::before {
+  opacity: .5;
+}
+
+[data-theme="pixel"] .focus-mode-header,
+[data-theme="pixel"] .focus-mode-footer,
+[data-theme="pixel"] .focus-mode-rail,
+[data-theme="pixel"] .focus-mode-annotation-anchor {
+  border: 2px solid #000;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+[data-theme="pixel"] .focus-mode-header {
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+}
+
+[data-theme="pixel"] .focus-mode-footer {
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+[data-theme="pixel"] .focus-mode-icon-button,
+[data-theme="pixel"] .focus-mode-font-select,
+[data-theme="pixel"] .focus-mode-footer-stat,
+[data-theme="pixel"] .focus-mode-header-center {
+  border: 2px solid #000;
+  border-radius: 0;
+  background: #fff;
+}
+
+/* =============================================================================
+   v1.0.47 — design-pack writing surface (writing-page.css translation).
+   Adds breadcrumb topbar, page-style canvas hero, hanging "##/###" markers,
+   inline citation pill, footer goal mini-bar. Token-only — no hex literals.
+   ============================================================================= */
+
+/* ---------- Topbar: scroll-aware border + breadcrumb ---------- */
+
+/* Borderless until the canvas scrolls past 8px (matches design pack spec).
+ * Override the always-on border in the base header rule above. */
+.focus-mode-header {
+  border-bottom-color: transparent;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.focus-mode-header.is-scrolled {
+  border-bottom-color: var(--c-line);
+}
+
+.focus-mode-crumb {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  color: var(--c-ink-faint);
+  text-transform: uppercase;
+  min-width: 0;
+}
+.focus-mode-crumb-article {
+  color: var(--c-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 28ch;
+}
+.focus-mode-crumb-sep {
+  opacity: 0.5;
+}
+/* Breadcrumb consumes the same .focus-mode-section-tag class that previously
+ * rendered the accent-soft pill. Inside the crumb it's a quiet mono token,
+ * not a pill — undo the background/padding so the breadcrumb reads as one
+ * line. The pill survives outside the crumb (annotation rail uses it). */
+.focus-mode-crumb .focus-mode-section-tag {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  color: var(--c-ink);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+}
+[data-theme="pixel"] .focus-mode-header.is-scrolled {
+  border-bottom: 2px solid #000;
+}
+
+/* ---------- Canvas hero (eyebrow + page title + byline) ---------- */
+
+.focus-mode-canvas-hero {
+  margin: 0 0 var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.focus-mode-canvas-eyebrow {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  color: var(--c-ink-faint);
+  text-transform: uppercase;
+}
+.focus-mode-canvas-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(1.75rem, 2.4vw + 1rem, 2.375rem);
+  line-height: 1.18;
+  font-weight: var(--fw-semi);
+  letter-spacing: -0.015em;
+  color: var(--c-ink);
+}
+.focus-mode-canvas-byline {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--c-ink-faint);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.focus-mode-canvas-byline-sep {
+  opacity: 0.55;
+}
+[data-theme="fresh"] .focus-mode-canvas-title {
+  color: var(--c-accent-strong);
+}
+
+/* ---------- Heading hanging markers ## / ### ---------- */
+
+/* Editor doc allows H2 + H3 (StarterKit config). Markers sit in the left
+ * gutter of the prose surface. relies on an existing left padding inside
+ * .focus-mode-prose; falls back gracefully if there's no room (markers
+ * clip into the margin and stay decorative). */
+.focus-mode-prose h2,
+.focus-mode-prose h3 {
+  position: relative;
+}
+.focus-mode-prose h2::before,
+.focus-mode-prose h3::before {
+  position: absolute;
+  font-family: var(--font-mono);
+  color: var(--c-ink-faint);
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+.focus-mode-prose h2::before {
+  content: "##";
+  left: -2.6em;
+  top: 0.32em;
+  font-size: 0.6em;
+}
+.focus-mode-prose h3::before {
+  content: "###";
+  left: -3em;
+  top: 0.28em;
+  font-size: 0.55em;
+}
+[data-theme="pixel"] .focus-mode-prose h2::before,
+[data-theme="pixel"] .focus-mode-prose h3::before {
+  color: var(--c-ink);
+  opacity: 1;
+}
+
+/* ---------- Inline citation pill (.wp-cite from Citation extension) ---------- */
+
+.focus-mode-prose .wp-cite,
+.wp-cite {
+  display: inline;
+  padding: 1px 6px 2px;
+  margin: 0 1px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast);
+  -webkit-user-select: all;
+  user-select: all;
+}
+.focus-mode-prose .wp-cite:hover,
+.wp-cite:hover {
+  background: color-mix(in srgb, var(--c-accent) 22%, transparent);
+}
+.focus-mode-prose .wp-cite.ProseMirror-selectednode,
+.wp-cite.ProseMirror-selectednode {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+[data-theme="pixel"] .focus-mode-prose .wp-cite,
+[data-theme="pixel"] .wp-cite {
+  background: #000;
+  color: #fff;
+  border-radius: 0;
+}
+[data-theme="fresh"] .focus-mode-prose .wp-cite,
+[data-theme="fresh"] .wp-cite {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+}
+
+/* ---------- Footer goal mini-bar + +today delta ---------- */
+
+.focus-mode-footer-stat b {
+  color: var(--c-ink);
+  font-weight: var(--fw-semi);
+  font-variant-numeric: tabular-nums;
+  margin-right: 4px;
+}
+.focus-mode-footer-goal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--c-ink-faint);
+  letter-spacing: 0.02em;
+}
+.focus-mode-footer-goal-bar {
+  position: relative;
+  width: 80px;
+  height: 4px;
+  background: var(--c-line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.focus-mode-footer-goal-fill {
+  display: block;
+  height: 100%;
+  background: var(--c-accent);
+  border-radius: 2px;
+  transition: width 240ms ease;
+}
+.focus-mode-footer-goal-pct {
+  color: var(--c-ink-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+}
+[data-theme="pixel"] .focus-mode-footer-goal-bar {
+  border: 1px solid #000;
+  border-radius: 0;
+  height: 6px;
+}
+[data-theme="pixel"] .focus-mode-footer-goal-fill {
+  background: repeating-linear-gradient(45deg, #000 0 4px, #fff 4px 8px);
+}
+
+/* ---------- Autocomplete: citation row meta + kind chip ---------- */
+
+.focus-mode-autocomplete-meta {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--c-ink-faint);
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+}
+.focus-mode-autocomplete-item--citation .focus-mode-autocomplete-text {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-semi);
+  color: var(--c-accent-strong);
+}
+.focus-mode-autocomplete-item--citation .focus-mode-autocomplete-kind {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+}
+[data-theme="pixel"] .focus-mode-autocomplete-item--citation .focus-mode-autocomplete-kind {
+  background: #000;
+  color: #fff;
+}
+
+/* ---------- Format toolbar drawer ---------- */
+
+.focus-mode-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 10px var(--sp-5);
+  background: var(--c-panel);
+  border-bottom: var(--bw) solid var(--c-line);
+  overflow: hidden;
+  max-height: 56px;
+  opacity: 1;
+  transition:
+    max-height 260ms ease,
+    padding 260ms ease,
+    opacity 200ms ease,
+    border-bottom-color 200ms ease;
+}
+.focus-mode-toolbar.is-collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  pointer-events: none;
+  border-bottom-color: transparent;
+}
+
+.focus-mode-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 9px;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--c-ink-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.focus-mode-tool:hover:not(:disabled) {
+  background: var(--c-panel-sub);
+  color: var(--c-ink);
+}
+.focus-mode-tool.is-active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+}
+.focus-mode-tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.focus-mode-tool-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.focus-mode-tool-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--c-line);
+  margin: 0 4px;
+  align-self: center;
+}
+
+[data-theme="pixel"] .focus-mode-toolbar {
+  border-bottom-width: 2px;
+  border-bottom-color: #000;
+}
+[data-theme="pixel"] .focus-mode-toolbar.is-collapsed {
+  border-bottom-color: transparent;
+}
+[data-theme="pixel"] .focus-mode-tool {
+  border-radius: 0;
+}
+[data-theme="pixel"] .focus-mode-tool:hover:not(:disabled),
+[data-theme="pixel"] .focus-mode-tool.is-active {
+  background: #000;
+  color: #fff;
+}
+[data-theme="pixel"] .focus-mode-tool-divider {
+  background: #000;
+}
+
+/* ---------- Outline rail (right margin, H2 ticks) ---------- */
+
+/* Anchored to the editor pane so it floats next to the prose without leaving
+ * the canvas. Pointer-events on the ticks themselves, not the host, so the
+ * negative-space "gutter" doesn't catch clicks meant for the canvas. */
+.focus-mode-canvas-pane--editor {
+  position: relative;
+}
+.focus-mode-outline-rail {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 3;
+  pointer-events: none;
+  max-height: 70vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.focus-mode-outline-tick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  pointer-events: auto;
+  white-space: nowrap;
+  transition: color 180ms ease;
+}
+.focus-mode-outline-tick::before {
+  content: "";
+  width: 18px;
+  height: 2px;
+  background: var(--c-line-strong);
+  border-radius: 1px;
+  transition: width 180ms ease, background 180ms ease;
+  flex: 0 0 auto;
+}
+.focus-mode-outline-tick:hover {
+  color: var(--c-ink);
+}
+.focus-mode-outline-tick:hover::before {
+  width: 26px;
+  background: var(--c-ink-muted);
+}
+.focus-mode-outline-tick.is-active {
+  color: var(--c-accent-strong);
+}
+.focus-mode-outline-tick.is-active::before {
+  width: 32px;
+  background: var(--c-accent);
+}
+.focus-mode-outline-tick-label {
+  opacity: 0;
+  transition: opacity 180ms ease;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.focus-mode-outline-rail:hover .focus-mode-outline-tick-label,
+.focus-mode-outline-tick.is-active .focus-mode-outline-tick-label {
+  opacity: 1;
+}
+[data-theme="pixel"] .focus-mode-outline-tick::before {
+  background: #000;
+  border-radius: 0;
+}
+[data-theme="pixel"] .focus-mode-outline-tick.is-active::before {
+  background: #000;
+  height: 3px;
+}
+
+/* Hide the rail on narrow viewports — keeps the prose breathing room. */
+@media (max-width: 1080px) {
+  .focus-mode-outline-rail {
+    display: none;
+  }
+}
+
+/* ---------- Topbar pomodoro chip (running session indicator) ---------- */
+
+.focus-mode-pomo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  margin-left: var(--sp-3);
+  border-radius: 999px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semi);
+}
+.focus-mode-pomo-badge.is-paused {
+  background: var(--c-panel-sub);
+  color: var(--c-ink-muted);
+}
+.focus-mode-pomo-badge-ring {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--c-accent) 0 calc(var(--p, 0) * 360deg),
+    color-mix(in srgb, var(--c-accent) 18%, transparent) 0
+  );
+  position: relative;
+  flex: 0 0 auto;
+}
+.focus-mode-pomo-badge-ring::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: var(--c-bg);
+  border-radius: 50%;
+}
+.focus-mode-pomo-badge-time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+[data-theme="pixel"] .focus-mode-pomo-badge {
+  border: 1.5px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+}
+[data-theme="pixel"] .focus-mode-pomo-badge.is-paused {
+  background: #eee;
+}
+[data-theme="pixel"] .focus-mode-pomo-badge-ring {
+  background: repeating-linear-gradient(45deg, #000 0 4px, #fff 4px 8px);
+  border: 1px solid #000;
+}
+[data-theme="pixel"] .focus-mode-pomo-badge-ring::after {
+  background: #fff;
+}
+
+.focus-mode-pomo-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 3px 8px 3px 4px;
+  border-radius: var(--r-pill);
+  background: var(--c-panel-sub);
+  color: var(--c-ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  contain: layout paint;
+}
+
+.focus-mode-pomo-controls.is-running {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+}
+
+.focus-mode-pomo-controls.is-paused {
+  background: var(--c-panel-sub);
+  color: var(--c-ink-muted);
+}
+
+.focus-mode-pomo-ring {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background:
+    conic-gradient(var(--c-accent) 0 calc(var(--p, 0) * 360deg),
+                   color-mix(in srgb, var(--c-accent) 18%, transparent) 0);
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.focus-mode-pomo-ring::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--c-bg);
+}
+
+.focus-mode-pomo-time {
+  min-width: 5ch;
+  font-weight: var(--fw-semi);
+}
+
+.focus-mode-pomo-presets {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.focus-mode-pomo-chip,
+.focus-mode-pomo-action {
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.focus-mode-pomo-chip:hover,
+.focus-mode-pomo-action:hover,
+.focus-mode-pomo-chip.is-active {
+  background: var(--c-panel);
+  color: var(--c-ink);
+}
+
+.focus-mode-pomo-action {
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+}
+
+.focus-mode-pomo-action:hover {
+  background: var(--c-accent-strong);
+  color: var(--c-on-accent);
+}
+
+.focus-mode-pomo-today {
+  color: var(--c-ink-faint);
+}
+
+[data-theme="pixel"] .focus-mode-pomo-controls {
+  border: 2px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+}
+
+[data-theme="pixel"] .focus-mode-pomo-ring {
+  border: 1px solid #000;
+  background: repeating-linear-gradient(45deg, #000 0 4px, #fff 4px 8px);
+}
+
+[data-theme="pixel"] .focus-mode-pomo-ring::after {
+  background: #fff;
+}
+
+[data-theme="pixel"] .focus-mode-pomo-chip,
+[data-theme="pixel"] .focus-mode-pomo-action {
+  border-radius: 0;
+}
+
+/* ---------- Writing-page regression guard: single scroll canvas ---------- */
+
+.focus-mode-overlay[data-focus-mode] {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1000;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  margin: 0;
+  background: var(--c-bg);
+  overflow: hidden;
+}
+
+body.ai-drawer-open .focus-mode-overlay[data-focus-mode] {
+  right: var(--ai-drawer-width, 0) !important;
+  width: auto;
+}
+
+body.focus-mode-active .app-shell {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.focus-mode-active .focus-mode-overlay[data-focus-mode] {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.focus-mode-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.focus-mode-header,
+.focus-mode-toolbar {
+  flex: 0 0 auto;
+}
+
+.focus-mode-stage {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.focus-mode-canvas {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 200px;
+}
+
+.focus-mode-footer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.focus-mode-footer > * {
+  pointer-events: auto;
+}
+
+.focus-mode-annotation-dock {
+  position: absolute;
+  top: 124px;
+  right: 28px;
+  bottom: 54px;
+  z-index: 6;
+  width: min(320px, calc(100vw - 56px));
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--c-panel) 86%, transparent);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(14px);
+}
+
+body.focus-mode-active .workspace::before {
+  background-image: none;
+  opacity: 0;
+}
+
+.focus-mode-overlay[data-focus-mode] .focus-mode-header,
+.focus-mode-overlay[data-focus-mode] .focus-mode-footer,
+.focus-mode-overlay[data-focus-mode] .focus-mode-annotation-dock {
+  backdrop-filter: none;
+}
+
+body.ai-drawer-open .focus-mode-annotation-dock {
+  right: 18px;
+}
+
+.focus-mode-annotation-dock .focus-mode-rail-section {
+  padding: 18px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.focus-mode-annotation-dock .focus-mode-rail-section:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 1080px) {
+  .focus-mode-annotation-dock {
+    top: auto;
+    right: 16px;
+    bottom: 54px;
+    left: 16px;
+    width: auto;
+    max-height: 42vh;
+  }
+}
+
+@media (max-width: 760px) {
+  .focus-mode-canvas {
+    padding-bottom: 180px;
+  }
+}

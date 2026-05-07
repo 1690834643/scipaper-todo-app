@@ -104,6 +104,14 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
   const totalCount = articles.length + theses.length
   const isCompletelyEmpty = totalCount === 0
   const isFilteredEmpty = filteredItems.length === 0 && !isCompletelyEmpty
+  const hasActiveFilters = filter !== 'all' || kindFilter !== 'all' || query.trim() !== ''
+
+  function clearFilters() {
+    setFilter('all')
+    setKindFilter('all')
+    setQuery('')
+    setSortKey('updatedDesc')
+  }
 
   return (
     <div>
@@ -141,6 +149,9 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
           </button>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <span className="muted-text" style={{ fontSize: 'var(--fs-xs)' }}>
+            显示 {filteredItems.length} / {totalCount}
+          </span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -158,6 +169,11 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
             <option value="titleAsc">标题 A-Z</option>
             <option value="wordsDesc">字数最多优先</option>
           </select>
+          {hasActiveFilters ? (
+            <button className="ghost-button" type="button" onClick={clearFilters}>
+              清空筛选
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -172,6 +188,9 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
         <div className="empty-library">
           <h3>没有符合筛选条件的稿件</h3>
           <p>调整关键词、类型或状态筛选，或在右上新建一篇</p>
+          <button className="ghost-button" type="button" onClick={clearFilters}>
+            清空筛选
+          </button>
         </div>
       )}
 

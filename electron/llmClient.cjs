@@ -245,6 +245,18 @@ async function waitForApproval(state, sessionId, callId, toolName, summary, args
 
 function shouldAutoApproveToolCall(definition, provider, state, globalAutoApprove) {
   if (!definition?.isWrite) return false;
+  const irreversibleWriteTools = new Set([
+    'delete_article',
+    'delete_block',
+    'delete_citation',
+    'delete_revision',
+    'delete_progress_entry',
+    'delete_finding',
+    'delete_scenario',
+    'delete_vocab_pack',
+    'delete_thesis_block',
+  ]);
+  if (irreversibleWriteTools.has(definition.name)) return false;
   return Boolean(
     globalAutoApprove ||
     provider?.trustForWrite ||

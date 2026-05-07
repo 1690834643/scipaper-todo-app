@@ -3,32 +3,31 @@
 // Section tab.
 //
 // Layout
-//   Header  — section tag · save dot · ← 预览 (when previewable) · 字体/字号
-//             · 上版本 toggle · 📸 manual snapshot · ?
-//   Canvas  — TipTap editor; optional 40/60 split with the previous version
-//             as a read-only pane below
-//   Rail    — selection draft (transient) → annotations → version history.
-//             AI lives in the bottom-right drawer (single global entry point);
-//             rail no longer hosts an AI section.
+//   Header  — breadcrumb · save dot / pomodoro · toolbar toggle.
+//   Canvas  — TipTap editor + design-pack H2 outline ticks.
+//   Footer  — word counts, daily goal, compact hints.
 //
 // Key UX rules
-//   - "AI 评论" fires LLM in BACKGROUND. User keeps writing while it thinks.
-//   - "我自己批注" opens an inline textarea right where the draft sits.
 //   - Save indicator = single quiet dot.
-//   - Snapshot policy: enter / 30-min interval / exit / Esc / manual 📸.
+//   - Snapshot policy: enter / 30-min interval / exit / Esc.
 // =============================================================================
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { EditorContent, useEditor } from '@tiptap/react'
 import type { Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Highlight from '@tiptap/extension-highlight'
+import Link from '@tiptap/extension-link'
 import {
   AutocompleteExtension,
   type AutocompleteState,
 } from '../utils/autocompleteExtension'
 import { AutocompleteList } from './AutocompleteList'
+import { Citation } from '../utils/citationExtension'
+import { FocusFormatToolbar } from './FocusFormatToolbar'
+import { FocusOutlineRail } from './FocusOutlineRail'
 import { SCI_PHRASES, SCI_WORDS, type SciPhrase, type SciSection } from '../data/sci-vocab'
 import type {
   AnnotationAuthor,
@@ -36,11 +35,10 @@ import type {
   Article,
   BlockAnnotation,
   ContentBlock,
-  ContentBlockVersion,
   Section,
   SectionType,
 } from '../types'
-import { DiffViewer } from './DiffViewer'
+import { normalizeContentForEditor, stripHtml } from '../utils/htmlContent'
 
 export interface FocusModeEditorProps {
   article: Article
@@ -58,25 +56,21 @@ export interface FocusModeEditorProps {
     patch: { comment?: string; status?: AnnotationStatus },
   ) => Promise<void>
   onDeleteAnnotation: (id: string) => Promise<void>
-  /** Called on Esc — owner typically routes the user out of the section
-   *  tab (e.g. to Outline). Inline mode has no "close" button; Esc is the
-   *  only escape hatch. */
+  onOpenAi: () => void
+  /** Close the overlay. Esc and the explicit "退出" button both call this.
+   *  Owner is expected to flip its writing-mode flag back to "preview". */
   onExit: () => void
-  /** Persist a snapshot of the current block content. Called on Esc, on
-   *  block switch, and from the manual "保存为版本" button. Owner wires it
+  /** Persist a snapshot of the current block content. Called on Esc / exit and
+   *  the 30-minute interval. Owner wires it
    *  to window.scipaper.recordBlockVersion. */
   onRecordVersion?: (changeDescription: string) => Promise<void>
-  /** Read-only view of the current section (rendered in 预览 mode).
-   *  Owner builds a `<SectionEditor previewOnly />` and passes it through.
-   *  Kept as a slot so this component does not have to know SectionEditor's
-   *  full prop surface. */
-  previewSlot?: ReactNode
-  // ---- Controlled view mode (sprint 7) ---------------------------------
-  // When provided, FocusModeEditor lets the parent own viewMode so external
-  // affordances (e.g. clicking a text block in the preview slot) can flip
-  // straight into edit mode without a second click on the toggle.
-  viewMode?: 'edit' | 'preview'
-  onViewModeChange?: (mode: 'edit' | 'preview') => void
+  /** Today's writing total + daily goal — feeds the footer goal mini-bar
+   *  (design pack §④ status row). Both optional; when omitted the footer
+   *  falls back to per-doc word/char counts only. */
+  todayWords?: number
+  dailyGoal?: number
+  pomodoroToday?: number
+  onAddPomodoro?: (duration: number) => Promise<void>
   // ---- Pre-aggregated autocomplete dictionary (sprint 15 / commit 4) ---
   // App.tsx merges enabled vocab packs + the legacy customVocab user pack
   // into a per-IMRaD-section view here. When omitted (e.g. unit tests)
@@ -133,45 +127,6 @@ function readInitialFontSizeId(): string {
   return 'md'
 }
 
-// ---- Rail section collapse state --------------------------------------
-// Rail no longer hosts AI chat (sprint 8 — AI lives only in the bottom-right
-// drawer to avoid two competing entries). Only annotations + versions left.
-type RailSectionId = 'annotations' | 'versions'
-const RAIL_COLLAPSE_STORAGE_KEY = 'scipaper.focusRailCollapsed'
-function readInitialRailCollapse(): Record<RailSectionId, boolean> {
-  const fallback: Record<RailSectionId, boolean> = {
-    annotations: false,
-    versions: false,
-  }
-  if (typeof window === 'undefined') return fallback
-  try {
-    const raw = window.localStorage.getItem(RAIL_COLLAPSE_STORAGE_KEY)
-    if (!raw) return fallback
-    const parsed = JSON.parse(raw)
-    return {
-      annotations: !!parsed.annotations,
-      versions: !!parsed.versions,
-    }
-  } catch {
-    return fallback
-  }
-}
-
-// ---- Previous-version split panel -------------------------------------
-// Always start closed: user has to opt in each session via the "上版本" toggle.
-// Wipes the legacy localStorage entry once per session (module-level guard) so
-// remounts don't repeat the I/O.
-let __orphanShowPrevCleaned = false
-function readInitialShowPrevVersion(): boolean {
-  if (typeof window !== 'undefined' && !__orphanShowPrevCleaned) {
-    try { window.localStorage.removeItem('scipaper.focusShowPrevVersion') } catch {
-      // Ignore legacy preference cleanup failures.
-    }
-    __orphanShowPrevCleaned = true
-  }
-  return false
-}
-
 // 30-minute auto snapshot interval. Combined with on-enter and on-exit
 // snapshots (and storage-side max 3 cap), this caps version churn while
 // preserving sensible recovery points.
@@ -186,6 +141,31 @@ const EMPTY_AUTOCOMPLETE: AutocompleteState = {
   selectedIndex: 0,
   coords: null,
   dismissed: false,
+}
+
+interface EditorStats {
+  wordCount: number
+  charCount: number
+}
+
+function countTextStats(text: string): EditorStats {
+  const trimmed = text.trim()
+  return {
+    wordCount: trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0,
+    charCount: text.length,
+  }
+}
+
+function statsFromEditor(editor: Editor): EditorStats {
+  const wordsText = editor.getText({ blockSeparator: ' ' })
+  return {
+    ...countTextStats(wordsText),
+    charCount: editor.getText().length,
+  }
+}
+
+function statsFromHtml(html: string | undefined): EditorStats {
+  return countTextStats(stripHtml(normalizeContentForEditor(html)))
 }
 
 const AnnotationHighlight = Highlight.extend({
@@ -226,16 +206,6 @@ function sectionTypeToSciSection(t: SectionType): SciSection {
   }
 }
 
-function plainTextToHtml(text: string): string {
-  if (!text) return ''
-  const escape = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  return text
-    .split(/\n{2,}/)
-    .map((paragraph) => `<p>${escape(paragraph).replace(/\n/g, '<br>')}</p>`)
-    .join('')
-}
-
 function findFirstAnchor(editor: Editor, needle: string): { from: number; to: number } | null {
   if (!needle) return null
   let result: { from: number; to: number } | null = null
@@ -274,18 +244,114 @@ function applyHighlightsForAnnotations(editor: Editor, annotations: BlockAnnotat
 }
 
 interface DraftState {
-  /** Verbatim selected text snapshot, used as anchor when saved. */
   anchorText: string
-  /** What the user has typed (or what AI has filled in). */
   comment: string
-  /** True while a background AI request is in flight for THIS draft. */
   aiPending: boolean
-  /** Source of the comment when it gets saved. */
   authorWhenSaved: AnnotationAuthor
 }
 
+const POMODORO_DURATIONS = [15, 25, 45]
 
-export function FocusModeEditor({
+function formatFocusTimer(seconds: number) {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+const FocusPomodoroControls = memo(function FocusPomodoroControls({
+  todaySessions = 0,
+  onAddPomodoro,
+}: {
+  todaySessions?: number
+  onAddPomodoro?: (duration: number) => Promise<void>
+}) {
+  const [duration, setDuration] = useState(25)
+  const [remainingSec, setRemainingSec] = useState(25 * 60)
+  const [phase, setPhase] = useState<'idle' | 'running' | 'paused'>('idle')
+  const onAddPomodoroRef = useRef(onAddPomodoro)
+  useEffect(() => { onAddPomodoroRef.current = onAddPomodoro }, [onAddPomodoro])
+
+  useEffect(() => {
+    if (phase !== 'running') return
+    const timer = window.setInterval(() => {
+      setRemainingSec((prev) => {
+        const next = Math.max(0, prev - 1)
+        if (next === 0) {
+          window.clearInterval(timer)
+          setPhase('idle')
+          void onAddPomodoroRef.current?.(duration)
+          return duration * 60
+        }
+        return next
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [phase, duration])
+
+  function chooseDuration(nextDuration: number) {
+    if (phase !== 'idle') return
+    setDuration(nextDuration)
+    setRemainingSec(nextDuration * 60)
+  }
+
+  function start() {
+    setRemainingSec(duration * 60)
+    setPhase('running')
+  }
+
+  function stop() {
+    setRemainingSec(duration * 60)
+    setPhase('idle')
+  }
+
+  const progress = 1 - remainingSec / (duration * 60)
+
+  return (
+    <div
+      className={`focus-mode-pomo-controls${phase !== 'idle' ? ' is-running' : ''}${phase === 'paused' ? ' is-paused' : ''}`}
+      style={{ ['--p' as never]: progress } as React.CSSProperties}
+      aria-label="番茄钟"
+    >
+      <span className="focus-mode-pomo-ring" aria-hidden />
+      <span className="focus-mode-pomo-time">
+        {phase === 'idle' ? `${duration}:00` : formatFocusTimer(remainingSec)}
+      </span>
+      {phase === 'idle' ? (
+        <span className="focus-mode-pomo-presets" role="group" aria-label="选择时长">
+          {POMODORO_DURATIONS.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={`focus-mode-pomo-chip${duration === item ? ' is-active' : ''}`}
+              onClick={() => chooseDuration(item)}
+            >
+              {item}
+            </button>
+          ))}
+          <button type="button" className="focus-mode-pomo-action" onClick={start}>
+            开始
+          </button>
+        </span>
+      ) : (
+        <span className="focus-mode-pomo-presets">
+          <button
+            type="button"
+            className="focus-mode-pomo-action"
+            onClick={() => setPhase((prev) => (prev === 'paused' ? 'running' : 'paused'))}
+          >
+            {phase === 'paused' ? '继续' : '暂停'}
+          </button>
+          <button type="button" className="focus-mode-pomo-chip" onClick={stop}>
+            停
+          </button>
+        </span>
+      )}
+      <span className="focus-mode-pomo-today">今 {todaySessions}</span>
+    </div>
+  )
+})
+
+export const FocusModeEditor = memo(function FocusModeEditor({
   article,
   section,
   block,
@@ -294,65 +360,80 @@ export function FocusModeEditor({
   onAddAnnotation,
   onUpdateAnnotation,
   onDeleteAnnotation,
+  onOpenAi,
   onExit,
   onRecordVersion,
   mergedWords,
   mergedPhrases,
-  previewSlot,
-  viewMode: viewModeProp,
-  onViewModeChange,
+  todayWords,
+  dailyGoal,
+  pomodoroToday,
+  onAddPomodoro,
 }: FocusModeEditorProps) {
   const [description, setDescription] = useState(block?.description ?? '')
   const [saveState, setSaveState] = useState<SaveState>('idle')
-  // viewMode is controlled when the parent passes it. Default for the
-  // uncontrolled fallback is "preview" (sprint 7 — chapter tabs land in
-  // preview first; clicking the manuscript flips to edit).
-  const [viewModeUncontrolled, setViewModeUncontrolled] = useState<'edit' | 'preview'>('preview')
-  const viewMode = viewModeProp ?? viewModeUncontrolled
-  function setViewMode(next: 'edit' | 'preview') {
-    if (onViewModeChange) onViewModeChange(next)
-    else setViewModeUncontrolled(next)
-  }
+  const [scrolled, setScrolled] = useState(false)
   const [selection, setSelection] = useState<{ text: string; empty: boolean }>({
     text: '',
     empty: true,
   })
-  const [showHelp, setShowHelp] = useState(false)
-  const [fontId, setFontId] = useState<string>(readInitialFontId)
-  const [fontSizeId, setFontSizeId] = useState<string>(readInitialFontSizeId)
-  const [railCollapsed, setRailCollapsed] = useState<Record<RailSectionId, boolean>>(
-    readInitialRailCollapse,
-  )
-  const [showPrevVersion, setShowPrevVersion] = useState<boolean>(readInitialShowPrevVersion)
+  const [editorStats, setEditorStats] = useState<EditorStats>(() => statsFromHtml(block?.content))
+  const canvasRef = useRef<HTMLElement>(null)
+  const scrolledRef = useRef(false)
+  const scrollFrameRef = useRef<number | null>(null)
+  const fontId = useMemo(() => readInitialFontId(), [])
+  const fontSizeId = useMemo(() => readInitialFontSizeId(), [])
+  const [toolbarCollapsed, setToolbarCollapsed] = useState<boolean>(false)
   const [autocompleteState, setAutocompleteState] = useState<AutocompleteState>(EMPTY_AUTOCOMPLETE)
-  useEffect(() => {
-    try { window.localStorage.setItem(FONT_STORAGE_KEY, fontId) } catch {
-      // Ignore preference persistence failures.
-    }
-  }, [fontId])
-  useEffect(() => {
-    try { window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSizeId) } catch {
-      // Ignore preference persistence failures.
-    }
-  }, [fontSizeId])
-  useEffect(() => {
-    try { window.localStorage.setItem(RAIL_COLLAPSE_STORAGE_KEY, JSON.stringify(railCollapsed)) } catch {
-      // Ignore preference persistence failures.
-    }
-  }, [railCollapsed])
-  const fontStack = FONT_OPTIONS.find((f) => f.id === fontId)?.stack || ''
-  const fontSizePx = FONT_SIZE_OPTIONS.find((f) => f.id === fontSizeId)?.px ?? 16
-  function toggleRail(id: RailSectionId) {
-    setRailCollapsed((prev) => ({ ...prev, [id]: !prev[id] }))
-  }
-  // Previous version = the most recent snapshot. Always show versions[0]
-  // when one exists (including manual 📸 snaps) — the user's intent is "let
-  // me see the last thing I saved", even if it currently equals the editor
-  // content. Once they start editing the diff appears naturally.
-  const prevVersion = block && block.versions && block.versions.length > 0 ? block.versions[0] : null
-  const prevVersionMatchesCurrent = !!(prevVersion && block && prevVersion.content === block.content)
   const [draft, setDraft] = useState<DraftState | null>(null)
   const [draftError, setDraftError] = useState('')
+  const draftRef = useRef<DraftState | null>(null)
+  const draftTextareaRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
+  // Scroll-aware topbar: the design pack draws a hairline only after the
+  // canvas scrolls past 8px. Listening on the canvas (not window) keeps it
+  // independent of any outer scroll containers the article view introduces.
+  useEffect(() => {
+    const el = canvasRef.current
+    if (!el) return
+    const updateScrolled = () => {
+      scrollFrameRef.current = null
+      const next = el.scrollTop > 8
+      if (scrolledRef.current === next) return
+      scrolledRef.current = next
+      setScrolled(next)
+    }
+    const onScroll = () => {
+      if (scrollFrameRef.current !== null) return
+      scrollFrameRef.current = window.requestAnimationFrame(updateScrolled)
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    updateScrolled()
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current)
+        scrollFrameRef.current = null
+      }
+    }
+  }, [])
+
+  // Lock body scroll while the overlay is up — guarantees no background
+  // scroll bleeds through. Mirrors the modal-overlay convention.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.body.classList.add('focus-mode-active')
+    return () => {
+      document.body.style.overflow = prev
+      document.body.classList.remove('focus-mode-active')
+    }
+  }, [])
+
+  const fontStack = FONT_OPTIONS.find((f) => f.id === fontId)?.stack || ''
+  const fontSizePx = FONT_SIZE_OPTIONS.find((f) => f.id === fontSizeId)?.px ?? 16
   const saveTimerRef = useRef<number | null>(null)
   const closingRef = useRef(false)
   const lastSavedTextRef = useRef(block?.content ?? '')
@@ -370,21 +451,36 @@ export function FocusModeEditor({
   function safeSetSaveState(value: SaveState) {
     if (mountedRef.current) setSaveState(value)
   }
-  const draftRef = useRef<DraftState | null>(null)
-  const draftTextareaRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    draftRef.current = draft
-  }, [draft])
 
   const currentSciSection = sectionTypeToSciSection(section.type)
 
-  const initialContent = useMemo(() => plainTextToHtml(block?.content ?? ''), [block?.id])
+  const initialContent = useMemo(() => normalizeContentForEditor(block?.content), [block?.id])
+  const annotationSignature = useMemo(
+    () =>
+      annotations
+        .map((a) => `${a.id}\u001f${a.anchorText}\u001f${a.author}\u001f${a.status}`)
+        .join('\u001e'),
+    [annotations],
+  )
+  const openAnnotationCount = useMemo(
+    () => annotations.reduce((count, annotation) => count + (annotation.status === 'open' ? 1 : 0), 0),
+    [annotationSignature],
+  )
 
-  function scheduleSave(text: string, desc: string) {
-    if (text === lastSavedTextRef.current && desc === lastSavedDescRef.current) {
+  function updateEditorStats(ed: Editor) {
+    const next = statsFromEditor(ed)
+    setEditorStats((prev) =>
+      prev.wordCount === next.wordCount && prev.charCount === next.charCount ? prev : next,
+    )
+  }
+
+  function scheduleSave(html: string, desc: string) {
+    if (html === lastSavedTextRef.current && desc === lastSavedDescRef.current) {
       return
     }
-    if (!block && !text.trim()) {
+    // Empty doc safety: TipTap emits "<p></p>" for blank content. Don't open
+    // a brand-new block from that — the user hasn't typed anything yet.
+    if (!block && !stripHtml(html).trim()) {
       return
     }
     safeSetSaveState('dirty')
@@ -392,8 +488,8 @@ export function FocusModeEditor({
     saveTimerRef.current = window.setTimeout(async () => {
       safeSetSaveState('saving')
       try {
-        await onSave(text, desc)
-        lastSavedTextRef.current = text
+        await onSave(html, desc)
+        lastSavedTextRef.current = html
         lastSavedDescRef.current = desc
         safeSetSaveState('saved')
         // Quietly fade back to idle after a short beat — no flashing text.
@@ -410,14 +506,25 @@ export function FocusModeEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [2, 3] },
+        heading: { levels: [1, 2, 3] },
         codeBlock: false,
+        link: false,
       }),
       Placeholder.configure({
         placeholder: '开始写……',
         emptyEditorClass: 'is-editor-empty',
       }),
       AnnotationHighlight.configure({ multicolor: true }),
+      Citation,
+      Link.configure({
+        // Open external links in the OS browser through Electron, not in
+        // Electron's renderer (would replace the app window). The actual
+        // open handler lives at app boot; here we just disable inline open.
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
+      }),
       AutocompleteExtension.configure({
         getSection: () => currentSciSection,
         onStateChange: setAutocompleteState,
@@ -427,6 +534,9 @@ export function FocusModeEditor({
         // a real merged view).
         words: mergedWords ?? SCI_WORDS,
         phrases: mergedPhrases ?? SCI_PHRASES,
+        // `@` trigger reads the live article.citations array. Updates land
+        // through the prop, so this closure always sees the latest.
+        getCitations: () => article.citations ?? [],
       }),
     ],
     content: initialContent,
@@ -438,13 +548,16 @@ export function FocusModeEditor({
       },
     },
     onUpdate: ({ editor: ed }) => {
-      const text = ed.getText({ blockSeparator: '\n\n' })
-      scheduleSave(text, description)
+      // HTML save: preserves headings, marks, and inline citation nodes
+      // through a save/load roundtrip. Word-count UI calls stripHtml.
+      const html = ed.getHTML()
+      updateEditorStats(ed)
+      scheduleSave(html, description)
     },
     onSelectionUpdate: ({ editor: ed }) => {
       const { from, to, empty } = ed.state.selection
       const text = empty ? '' : ed.state.doc.textBetween(from, to, '\n\n', ' ')
-      setSelection({ text, empty })
+      setSelection((prev) => (prev.empty === empty && prev.text === text ? prev : { text, empty }))
     },
   })
 
@@ -452,7 +565,7 @@ export function FocusModeEditor({
   useEffect(() => {
     if (!editor) return
     applyHighlightsForAnnotations(editor, annotations)
-  }, [editor, annotations])
+  }, [editor, annotationSignature])
 
   // Sync external block.content changes into the editor (e.g. AI tool call
   // wrote new content via update_text_block). Without this, the editor keeps
@@ -465,14 +578,15 @@ export function FocusModeEditor({
     if (!editor || !block) return
     const incoming = block.content ?? ''
     if (incoming === lastSavedTextRef.current) return
-    const currentText = editor.getText({ blockSeparator: '\n\n' })
-    if (currentText === incoming) return
-    if (currentText !== lastSavedTextRef.current) {
+    const currentHtml = editor.getHTML()
+    if (currentHtml === incoming) return
+    if (currentHtml !== lastSavedTextRef.current) {
       // Editor 处于 dirty 状态：用户正在打字，不要用外部内容覆盖
       return
     }
-    editor.commands.setContent(plainTextToHtml(incoming))
+    editor.commands.setContent(normalizeContentForEditor(incoming))
     lastSavedTextRef.current = incoming
+    updateEditorStats(editor)
     // Re-apply highlight marks because setContent wipes them.
     applyHighlightsForAnnotations(editor, annotations)
   }, [editor, block?.content])
@@ -481,8 +595,8 @@ export function FocusModeEditor({
   useEffect(() => {
     if (!editor) return
     if (description === lastSavedDescRef.current) return
-    const text = editor.getText({ blockSeparator: '\n\n' })
-    scheduleSave(text, description)
+    const html = editor.getHTML()
+    scheduleSave(html, description)
   }, [description, editor])
 
   // Single-block-per-section policy: no prev/next/list controls. Force any
@@ -494,39 +608,17 @@ export function FocusModeEditor({
       window.clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
     }
-    const text = editor.getText({ blockSeparator: '\n\n' })
-    if (text === lastSavedTextRef.current && description === lastSavedDescRef.current) {
+    const html = editor.getHTML()
+    if (html === lastSavedTextRef.current && description === lastSavedDescRef.current) {
       return
     }
-    if (!block && !text.trim()) return
+    if (!block && !stripHtml(html).trim()) return
     safeSetSaveState('saving')
     try {
-      await onSave(text, description)
-      lastSavedTextRef.current = text
+      await onSave(html, description)
+      lastSavedTextRef.current = html
       lastSavedDescRef.current = description
       safeSetSaveState('saved')
-    } catch {
-      safeSetSaveState('dirty')
-    }
-  }
-
-  async function handleRollback(version: ContentBlockVersion) {
-    if (!editor || !block) return
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
-    safeSetSaveState('saving')
-    try {
-      await onSave(version.content, description)
-      lastSavedTextRef.current = version.content
-      lastSavedDescRef.current = description
-      editor.commands.setContent(plainTextToHtml(version.content))
-      safeSetSaveState('saved')
-      window.setTimeout(
-        () => mountedRef.current && setSaveState((prev) => (prev === 'saved' ? 'idle' : prev)),
-        900,
-      )
     } catch {
       safeSetSaveState('dirty')
     }
@@ -547,7 +639,6 @@ export function FocusModeEditor({
   //   - On block entry (mount or block.id change) — captures baseline.
   //   - Every 30 minutes of continued editing.
   //   - On exit / Esc — already wired below.
-  //   - Manual 📸 — already wired.
   // updateTextBlock no longer writes per-edit versions, and storage caps the
   // list at 3 (oldest auto-evicted). Storage also de-dupes when latest snapshot
   // equals current content, so no-op enter snapshots cost nothing.
@@ -591,9 +682,8 @@ export function FocusModeEditor({
   }, [block?.id])
 
   // ---- Esc to exit ---------------------------------------------------------
-  // Inline mode: Esc snapshots current content + calls onExit. Owner usually
-  // routes the user to the Outline tab. Esc still defers to autocomplete /
-  // draft if those have keyboard ownership.
+  // Esc snapshots current content + closes the overlay. Esc still defers to
+  // autocomplete and any modal with keyboard ownership.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key !== 'Escape' || closingRef.current) return
@@ -622,9 +712,6 @@ export function FocusModeEditor({
     return () => window.removeEventListener('keydown', onKey)
   }, [onExit, onRecordVersion, autocompleteState.active, draft])
 
-  // ---- Auto-open / re-anchor draft on selection ---------------------------
-  // First non-empty selection opens an empty draft. Further selections
-  // re-anchor the same draft (preserving any text the user already typed).
   useEffect(() => {
     if (selection.empty || !selection.text.trim() || !block) return
     setDraft((prev) => {
@@ -639,7 +726,6 @@ export function FocusModeEditor({
     })
   }, [selection.empty, selection.text, block])
 
-  // ---- Draft actions -------------------------------------------------------
   function discardDraft() {
     setDraft(null)
     setDraftError('')
@@ -666,18 +752,8 @@ export function FocusModeEditor({
     if (!current || !editor || !block) return
     const { from, to } = editor.state.selection
     const docSize = editor.state.doc.content.size
-    const contextBefore = editor.state.doc.textBetween(
-      Math.max(0, from - 240),
-      from,
-      '\n\n',
-      ' ',
-    )
-    const contextAfter = editor.state.doc.textBetween(
-      to,
-      Math.min(docSize, to + 240),
-      '\n\n',
-      ' ',
-    )
+    const contextBefore = editor.state.doc.textBetween(Math.max(0, from - 240), from, '\n\n', ' ')
+    const contextAfter = editor.state.doc.textBetween(to, Math.min(docSize, to + 240), '\n\n', ' ')
     setDraft((prev) => (prev ? { ...prev, aiPending: true, authorWhenSaved: 'ai' } : prev))
     setDraftError('')
     try {
@@ -689,23 +765,12 @@ export function FocusModeEditor({
         articleLanguage: article.language === 'zh' ? 'zh' : 'en',
       })
       const comment = (result?.comment || '').trim()
-      // The user might have closed/replaced the draft while AI was thinking.
-      // Only auto-save if THIS draft is still the active one.
-      const stillSame = draftRef.current?.anchorText === current.anchorText
-      if (!stillSame) {
-        // User moved on. Drop the AI result silently — they didn't ask to wait.
-        return
-      }
+      if (draftRef.current?.anchorText !== current.anchorText) return
       if (!comment) {
-        setDraft((prev) =>
-          prev ? { ...prev, aiPending: false } : prev,
-        )
+        setDraft((prev) => (prev ? { ...prev, aiPending: false } : prev))
         setDraftError('AI 返回空内容')
         return
       }
-      // Background-mode happy path: AI is done, persist directly without
-      // waiting for the user to click save (their request was "let AI think
-      // for me"). Keep the draft open only on error so they see what went wrong.
       try {
         await onAddAnnotation({
           anchorText: current.anchorText,
@@ -714,9 +779,7 @@ export function FocusModeEditor({
         })
         setDraft(null)
       } catch (saveErr) {
-        setDraft((prev) =>
-          prev ? { ...prev, aiPending: false, comment } : prev,
-        )
+        setDraft((prev) => (prev ? { ...prev, aiPending: false, comment } : prev))
         setDraftError(saveErr instanceof Error ? saveErr.message : String(saveErr))
       }
     } catch (error) {
@@ -749,158 +812,176 @@ export function FocusModeEditor({
     editor.commands.setTextSelection(range)
   }
 
-  const wordCount = editor
-    ? editor
-        .getText({ blockSeparator: ' ' })
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean).length
-    : 0
-  const charCount = editor ? editor.getText().length : 0
-  const openAnnotations = annotations.filter((a) => a.status === 'open').length
+  const docWordCount = editorStats.wordCount
+  const docCharCount = editorStats.charCount
 
-  return (
-    <div className="focus-mode-shell" data-focus-mode role="region" aria-label="沉浸式写作">
-      <header className="focus-mode-header">
+  // Last-edited string for the canvas byline — matches the design pack's
+  // "Draft v7 · authors · last edited 14:22" rhythm. Falls back to "新草稿"
+  // for an unsaved block so the byline stays present and consistent.
+  const lastEditedLabel = (() => {
+    const ts = block?.updatedAt || article.updatedAt
+    if (!ts) return '新草稿'
+    try {
+      return new Intl.DateTimeFormat('zh-CN', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(ts))
+    } catch {
+      return '草稿'
+    }
+  })()
+
+  const goalPct = dailyGoal && dailyGoal > 0 && typeof todayWords === 'number'
+    ? Math.min(100, Math.round((todayWords / dailyGoal) * 100))
+    : null
+  return createPortal(
+    <div
+      className={`focus-mode-overlay focus-mode-shell ${scrolled ? 'is-scrolled' : ''}`}
+      data-focus-mode
+      role="dialog"
+      aria-modal="true"
+      aria-label="沉浸式写作"
+    >
+      <header className={`focus-mode-header ${scrolled ? 'is-scrolled' : ''}`}>
         <div className="focus-mode-header-side">
-          <span className="focus-mode-section-tag">{section.type}</span>
-          <span className="focus-mode-article-title">· {article.title}</span>
+          <button
+            type="button"
+            className="focus-mode-exit"
+            onClick={() => {
+              closingRef.current = true
+              void (async () => {
+                await flushPendingSave()
+                if (onRecordVersion) {
+                  try { await onRecordVersion('退出快照') } catch {
+                    // Snapshot failures should not block exit.
+                  }
+                }
+                onExit()
+              })()
+            }}
+            title="退出沉浸写作 (Esc)"
+            aria-label="退出沉浸写作"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            <span>退出</span>
+          </button>
+          <nav className="focus-mode-crumb" aria-label="位置">
+            <span className="focus-mode-crumb-article">{article.title}</span>
+            <span className="focus-mode-crumb-sep">/</span>
+            <span className="focus-mode-section-tag">§ {section.type}</span>
+          </nav>
         </div>
         <div className="focus-mode-header-center">
           <SaveDot state={saveState} />
+          <span className="focus-mode-save-label">
+            {saveState === 'saving' ? '保存中' : saveState === 'dirty' ? '未保存' : saveState === 'saved' ? '已保存' : '就绪'}
+          </span>
+          <FocusPomodoroControls
+            todaySessions={pomodoroToday}
+            onAddPomodoro={onAddPomodoro}
+          />
         </div>
         <div className="focus-mode-header-side focus-mode-header-side--right">
-          {viewMode === 'edit' && previewSlot ? (
-            <button
-              type="button"
-              className="focus-mode-icon-button"
-              onClick={() => setViewMode('preview')}
-              title="返回章节预览"
-            >
-              ← 预览
-            </button>
-          ) : null}
-          <select
-            className="focus-mode-font-select"
-            value={fontId}
-            onChange={(e) => setFontId(e.target.value)}
-            aria-label="正文字体"
-            title="正文字体"
-          >
-            {FONT_OPTIONS.map((f) => (
-              <option key={f.id} value={f.id}>{f.label}</option>
-            ))}
-          </select>
-          <select
-            className="focus-mode-font-select focus-mode-font-size-select"
-            value={fontSizeId}
-            onChange={(e) => setFontSizeId(e.target.value)}
-            aria-label="正文字号"
-            title="正文字号"
-          >
-            {FONT_SIZE_OPTIONS.map((f) => (
-              <option key={f.id} value={f.id}>{f.label} ({f.px}px)</option>
-            ))}
-          </select>
           <button
             type="button"
-            className={`focus-mode-icon-button${showPrevVersion ? ' is-active' : ''}`}
-            onClick={() => setShowPrevVersion((v) => !v)}
-            title={showPrevVersion ? '关闭上版本对照' : '在写作下方显示上一个版本'}
-            aria-pressed={showPrevVersion}
-          >
-            上版本
-          </button>
-          {onRecordVersion ? (
-            <button
-              className="focus-mode-icon-button"
-              type="button"
-              onClick={async () => {
-                await flushPendingSave()
-                try { await onRecordVersion('手动快照') } catch {
-                  // Manual snapshot failures should not discard saved text.
-                }
-              }}
-              title="把当前正文存为版本快照（不影响自动保存）"
-            >
-              📸
-            </button>
-          ) : null}
-          <button
             className="focus-mode-icon-button"
-            type="button"
-            onClick={() => setShowHelp((v) => !v)}
-            aria-label="键盘提示"
-            title="键盘提示"
+            onClick={() => {
+              canvasRef.current
+                ?.querySelector('.focus-mode-outline-tick.is-active, .focus-mode-outline-tick')
+                ?.scrollIntoView({ block: 'center' })
+            }}
+            title="章节大纲"
+            aria-label="章节大纲"
           >
-            ?
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={`focus-mode-icon-button${!toolbarCollapsed ? ' is-active' : ''}`}
+            onClick={() => setToolbarCollapsed((v) => !v)}
+            aria-pressed={!toolbarCollapsed}
+            title={toolbarCollapsed ? '展开格式工具条' : '收起格式工具条'}
+            aria-label="格式工具条"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M3 7h18M3 12h18M3 17h18" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="focus-mode-icon-button"
+            onClick={onOpenAi}
+            title="AI 助手"
+            aria-label="AI 助手"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="focus-mode-icon-button"
+            title="写作设置"
+            aria-label="写作设置"
+            onClick={() => setToolbarCollapsed(false)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="5" cy="12" r="1.5" />
+              <circle cx="12" cy="12" r="1.5" />
+              <circle cx="19" cy="12" r="1.5" />
+            </svg>
           </button>
         </div>
       </header>
 
-      <div className="focus-mode-stage is-rail-open">
-        {viewMode === 'edit' ? (
-          <main
-            className={`focus-mode-canvas${showPrevVersion && prevVersion ? ' focus-mode-canvas--split' : ''}`}
-            style={
-              {
-                ...(fontStack ? { ['--focus-font-override' as never]: fontStack } : {}),
-                ['--focus-font-size' as never]: `${fontSizePx}px`,
-              } as React.CSSProperties
-            }
-          >
-            <div className="focus-mode-canvas-pane focus-mode-canvas-pane--editor">
-              <input
-                className="focus-mode-block-name"
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="给这一段起个名字（可留空）"
-                aria-label="段落备注"
-              />
-              <EditorContent editor={editor} className="focus-mode-editor-host" />
-            </div>
-            {showPrevVersion && prevVersion ? (
-              <>
-                <div
-                  className="focus-mode-canvas-divider"
-                  role="separator"
-                  aria-label="上版本分割线"
-                />
-                <div className="focus-mode-canvas-pane focus-mode-canvas-pane--prev">
-                  <header className="focus-mode-prev-header">
-                    <span className="focus-mode-prev-label">
-                      上一个版本 · {prevVersion.changeDescription || '快照'} ·{' '}
-                      {new Date(prevVersion.modifiedAt).toLocaleString()}
-                      {prevVersionMatchesCurrent ? ' · 与当前一致' : ''}
-                    </span>
-                    <button
-                      type="button"
-                      className="focus-mode-prev-close"
-                      onClick={() => setShowPrevVersion(false)}
-                      aria-label="关闭上版本预览"
-                      title="关闭"
-                    >
-                      ×
-                    </button>
-                  </header>
-                  <pre className="focus-mode-prev-body">{prevVersion.content || '（空）'}</pre>
-                </div>
-              </>
-            ) : null}
-          </main>
-        ) : (
-          <main className="focus-mode-canvas focus-mode-canvas--preview">
-            <div className="focus-mode-preview-host">
-              {previewSlot ?? (
-                <p className="focus-mode-rail-empty">暂无预览。</p>
-              )}
-            </div>
-          </main>
-        )}
+      <FocusFormatToolbar editor={editor} collapsed={toolbarCollapsed} />
 
-        <aside className="focus-mode-rail">
-          {/* ---- Draft area (top) ----------------------------------------- */}
+      <div className="focus-mode-stage">
+        <main
+          ref={canvasRef}
+          className="focus-mode-canvas"
+          style={
+            {
+              ...(fontStack ? { ['--focus-font-override' as never]: fontStack } : {}),
+              ['--focus-font-size' as never]: `${fontSizePx}px`,
+            } as React.CSSProperties
+          }
+        >
+          <div className="focus-mode-canvas-pane focus-mode-canvas-pane--editor">
+            <header className="focus-mode-canvas-hero">
+              <p className="focus-mode-canvas-eyebrow">§ {section.type}</p>
+              <h1 className="focus-mode-canvas-title">{article.title}</h1>
+              <p className="focus-mode-canvas-byline">
+                <span>草稿 · {block ? `${block.versions?.length ?? 0} 个快照` : '未保存'}</span>
+                <span className="focus-mode-canvas-byline-sep">·</span>
+                <span>last edited {lastEditedLabel}</span>
+              </p>
+            </header>
+            <input
+              className="focus-mode-block-name"
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="给这一段起个名字（可留空）"
+              aria-label="段落备注"
+            />
+            <EditorContent editor={editor} className="focus-mode-editor-host" />
+            <FocusOutlineRail editor={editor} canvasRef={canvasRef} />
+          </div>
+        </main>
+      </div>
+
+      {(draft || annotations.length > 0) ? (
+        <aside
+          className={`focus-mode-annotation-dock${draft ? ' is-open' : ''}${annotations.length > 0 ? ' has-annotations' : ''}`}
+          aria-label="批注"
+        >
           {draft ? (
             <section className="focus-mode-rail-section focus-mode-rail-section--draft">
               <header className="focus-mode-rail-header">
@@ -917,7 +998,7 @@ export function FocusModeEditor({
               </header>
               <blockquote className="focus-mode-draft-anchor-inline">
                 {draft.anchorText.length > 120
-                  ? `${draft.anchorText.slice(0, 120)}…`
+                  ? `${draft.anchorText.slice(0, 120)}...`
                   : draft.anchorText}
               </blockquote>
               <textarea
@@ -927,7 +1008,7 @@ export function FocusModeEditor({
                 onChange={(e) =>
                   setDraft((prev) => (prev ? { ...prev, comment: e.target.value } : prev))
                 }
-                placeholder={draft.aiPending ? 'AI 正在思考中… 你可以继续写正文' : '写下你的想法'}
+                placeholder={draft.aiPending ? 'AI 正在思考中... 你可以继续写正文' : '写下你的想法'}
                 disabled={draft.aiPending}
                 rows={3}
                 onKeyDown={(e) => {
@@ -944,7 +1025,7 @@ export function FocusModeEditor({
               />
               {draftError ? (
                 <div className="focus-mode-draft-error-inline" role="alert">
-                  ⚠ {draftError}
+                  {draftError}
                 </div>
               ) : null}
               <div className="focus-mode-draft-actions-inline">
@@ -955,7 +1036,7 @@ export function FocusModeEditor({
                   disabled={draft.aiPending}
                   title="AI 在后台思考，不会打断你写正文"
                 >
-                  {draft.aiPending ? 'AI 思考中…' : '让 AI 评论'}
+                  {draft.aiPending ? 'AI 思考中...' : '让 AI 批注'}
                 </button>
                 <button
                   type="button"
@@ -969,28 +1050,14 @@ export function FocusModeEditor({
             </section>
           ) : null}
 
-          {/* ---- Annotation list ----------------------------------------- */}
-          <section
-            className={`focus-mode-rail-section focus-mode-rail-section--annotations${railCollapsed.annotations ? ' is-collapsed' : ''}`}
-          >
+          <section className="focus-mode-rail-section focus-mode-rail-section--annotations">
             <header className="focus-mode-rail-header">
-              <button
-                type="button"
-                className="focus-mode-rail-toggle"
-                onClick={() => toggleRail('annotations')}
-                aria-expanded={!railCollapsed.annotations}
-                title={railCollapsed.annotations ? '展开' : '收起'}
-              >
-                <span className="focus-mode-rail-chevron" aria-hidden>
-                  {railCollapsed.annotations ? '▸' : '▾'}
-                </span>
-                <h3>批注</h3>
-              </button>
+              <h3>批注</h3>
               <span className="focus-mode-rail-count">
-                {openAnnotations}/{annotations.length}
+                {openAnnotationCount}/{annotations.length}
               </span>
             </header>
-            {railCollapsed.annotations ? null : annotations.length === 0 ? (
+            {annotations.length === 0 ? (
               <p className="focus-mode-rail-empty">
                 {block ? '选中正文里的句子开始批注。' : '先打几个字、自动保存后才能批注。'}
               </p>
@@ -1008,7 +1075,7 @@ export function FocusModeEditor({
                       title="跳到正文位置"
                     >
                       {annotation.anchorText.length > 80
-                        ? `${annotation.anchorText.slice(0, 80)}…`
+                        ? `${annotation.anchorText.slice(0, 80)}...`
                         : annotation.anchorText}
                     </button>
                     <p className="focus-mode-annotation-body">
@@ -1036,67 +1103,40 @@ export function FocusModeEditor({
               </ul>
             )}
           </section>
-
-          {/* ---- Version history (DiffViewer) ---------------------------- */}
-          {block && block.versions && block.versions.length > 0 ? (
-            <section
-              className={`focus-mode-rail-section focus-mode-rail-section--versions${railCollapsed.versions ? ' is-collapsed' : ''}`}
-            >
-              <header className="focus-mode-rail-header">
-                <button
-                  type="button"
-                  className="focus-mode-rail-toggle"
-                  onClick={() => toggleRail('versions')}
-                  aria-expanded={!railCollapsed.versions}
-                  title={railCollapsed.versions ? '展开' : '收起'}
-                >
-                  <span className="focus-mode-rail-chevron" aria-hidden>
-                    {railCollapsed.versions ? '▸' : '▾'}
-                  </span>
-                  <h3>版本历史</h3>
-                </button>
-                <span className="focus-mode-rail-count">{block.versions.length}</span>
-              </header>
-              {railCollapsed.versions ? null : (
-                <DiffViewer
-                  versions={block.versions}
-                  currentContent={block.content}
-                  onRollback={(v) => void handleRollback(v)}
-                  compact
-                />
-              )}
-            </section>
-          ) : null}
-
-          {/* AI 助手已收回到右下角抽屉（唯一入口），不在 rail 重复展示。 */}
         </aside>
-      </div>
-
-      <footer className="focus-mode-footer">
-        <span className="focus-mode-footer-stat">{wordCount} 词</span>
-        <span className="focus-mode-footer-stat">{charCount} 字</span>
-        <span className="focus-mode-footer-spacer" />
-        <span className="focus-mode-footer-hint">Esc 退出 · 输入 3 字母看候选 · Tab 接受</span>
-      </footer>
-
-      {showHelp ? (
-        <div className="focus-mode-help" role="note">
-          <h4>键盘 / 操作提示</h4>
-          <ul>
-            <li><kbd>Esc</kbd> 退出沉浸模式（无候选弹窗时）</li>
-            <li>输入 3+ 字母 → 自动弹出 SCI 词候选，<kbd>Tab</kbd>/<kbd>Enter</kbd> 接受</li>
-            <li>选中正文 → 右侧自动出现批注框；点"让 AI 评论"AI 在后台思考，不打断写作</li>
-            <li>批注侧栏点引文 → 光标跳到正文那段</li>
-            <li>编辑后 1 秒自动保存（顶部小点闪一下）</li>
-          </ul>
-          <button type="button" onClick={() => setShowHelp(false)}>知道了</button>
-        </div>
       ) : null}
 
+      <footer className="focus-mode-footer">
+        <span className="focus-mode-footer-stat">
+          <b>{docWordCount.toLocaleString()}</b> 词
+        </span>
+        {typeof todayWords === 'number' ? (
+          <span className="focus-mode-footer-stat">
+            <b>+{todayWords.toLocaleString()}</b> 今天
+          </span>
+        ) : null}
+        <span className="focus-mode-footer-stat">{docCharCount} 字</span>
+        {dailyGoal && dailyGoal > 0 && goalPct !== null ? (
+          <span className="focus-mode-footer-goal" title={`今日目标 ${dailyGoal} 字`}>
+            目标 {dailyGoal.toLocaleString()}
+            <span className="focus-mode-footer-goal-bar" aria-hidden>
+              <span
+                className="focus-mode-footer-goal-fill"
+                style={{ width: `${goalPct}%` }}
+              />
+            </span>
+            <span className="focus-mode-footer-goal-pct">{goalPct}%</span>
+          </span>
+        ) : null}
+        <span className="focus-mode-footer-spacer" />
+        <span className="focus-mode-footer-hint">Esc 退出 · 输入 3 字母看候选 · @ 引用</span>
+      </footer>
+
       <AutocompleteList state={autocompleteState} />
-    </div>
+    </div>,
+    document.body,
   )
-}
+})
 
 function SaveDot({ state }: { state: SaveState }) {
   return (

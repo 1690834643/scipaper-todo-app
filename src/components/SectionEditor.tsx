@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import UTIF from 'utif'
 import { DiffViewer } from './DiffViewer'
 import type { Article, BlockPreview, ContentBlock, Section, Finding, FindingStatus } from '../types'
+import { stripHtml } from '../utils/htmlContent'
+import { countWords } from '../utils/wordCounter'
 
 // Section view is a permanent preview surface (sprint 6 阶段 8.5).
 // All text writing happens in FocusModeEditor; this component only displays
@@ -146,7 +148,7 @@ function formatDate(value: string) {
 }
 
 function getPreviewSummary(block: ContentBlock) {
-  const text = block.content.replace(/\s+/g, ' ').trim()
+  const text = stripHtml(block.content).replace(/\s+/g, ' ').trim()
   return text.length > 240 ? `${text.slice(0, 240)}...` : text
 }
 
@@ -338,12 +340,47 @@ export function SectionEditor({
   const [previewBlock, setPreviewBlock] = useState<ContentBlock | null>(null)
   const [previewPayload, setPreviewPayload] = useState<BlockPreview | null>(null)
   const [previewError, setPreviewError] = useState('')
+  // Per-block expanded / version-visible state for the design pack §①
+  // ManuscriptCard footer affordances. IDs are stored as strings.
+  const [expandedBlockIds, setExpandedBlockIds] = useState<Set<string>>(new Set())
+  const [versionsVisibleIds, setVersionsVisibleIds] = useState<Set<string>>(new Set())
+  const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null)
 
   useEffect(() => {
     setPreviewBlock(null)
     setPreviewPayload(null)
     setPreviewError('')
+    setExpandedBlockIds(new Set())
+    setVersionsVisibleIds(new Set())
+    setCopiedBlockId(null)
   }, [section.id])
+
+  function toggleBlockExpanded(id: string) {
+    setExpandedBlockIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  function toggleBlockVersions(id: string) {
+    setVersionsVisibleIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  async function copyBlockText(block: ContentBlock) {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return
+    try {
+      await navigator.clipboard.writeText(stripHtml(block.content || ''))
+      setCopiedBlockId(block.id)
+      setTimeout(() => setCopiedBlockId((cur) => (cur === block.id ? null : cur)), 1500)
+    } catch {
+      // Clipboard write can fail in restricted contexts; user still has UI cues.
+    }
+  }
 
   async function handlePreview(block: ContentBlock) {
     setPreviewBlock(block)
@@ -387,30 +424,119 @@ export function SectionEditor({
         />
       ) : null}
 
-      <section className="composer-card">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Section · 预览</p>
-            <h3>{section.type}</h3>
-            <p>展示当前章节的文本、图片、PDF 和备份文件。点右边"✨ 进入写作"或下方手稿卡片即可开始写。</p>
+      {/* PreviewCard — design pack §① Manuscript Dashboard.
+          Stats grid + two-line "进入写作" button + image/file/text 连体添加. */}
+      <section className="composer-card preview-card">
+        <div className="section-heading preview-head">
+          <div className="preview-meta">
+            <h3 className="preview-title">{section.type}</h3>
+            <p className="preview-sub">
+              点
+              <span className="kbd-inline">⌘E</span>
+              或下方手稿卡片进入写作。本页只展示文本/图片/PDF/备份。
+            </p>
           </div>
-          <div className="inline-actions">
+          <div className="preview-actions">
             {onEnterEdit ? (
-              <button className="primary-button" onClick={() => onEnterEdit()} type="button">
-                ✨ 进入写作
+              <button
+                className="enter-writing"
+                onClick={() => onEnterEdit()}
+                type="button"
+                title="进入沉浸式写作"
+              >
+                <span className="ew-text">
+                  <span className="ew-label">进入写作</span>
+                  <span className="ew-sub">Focus mode · {section.type}</span>
+                </span>
+                <span className="ew-right">
+                  <span className="ew-kbd">
+                    <span className="kbd-inline">⌘</span>
+                    <span className="kbd-inline">E</span>
+                  </span>
+                  <span className="ew-arrow" aria-hidden>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14M13 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </span>
               </button>
             ) : null}
-            {onAddImage ? (
-              <button className="ghost-button" onClick={onAddImage} type="button">
-                导入图片
-              </button>
-            ) : null}
-            {onAddFile ? (
-              <button className="ghost-button" onClick={onAddFile} type="button">
-                导入文件
-              </button>
+            {onAddImage || onAddFile ? (
+              <div className="add-row" role="group" aria-label="添加素材">
+                {onAddImage ? (
+                  <button className="add-btn" type="button" onClick={onAddImage}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <path d="m21 15-5-5L5 21" />
+                    </svg>
+                    <span>图片</span>
+                  </button>
+                ) : null}
+                {onAddImage && onAddFile ? <span className="add-sep" aria-hidden /> : null}
+                {onAddFile ? (
+                  <button className="add-btn" type="button" onClick={onAddFile}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+                    </svg>
+                    <span>文件</span>
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
+        </div>
+
+        <div className="preview-stats">
+          {(() => {
+            const textBlocks = section.contentBlocks.filter((b) => b.type === 'Text')
+            const imageBlocks = section.contentBlocks.filter((b) => b.type === 'Image')
+            const fileBlocks = section.contentBlocks.filter((b) => b.type === 'FileLink')
+            const totalWords = textBlocks.reduce((sum, b) => sum + countWords(b.content), 0)
+            const totalVersions = textBlocks.reduce((sum, b) => sum + (b.versions?.length || 0), 0)
+            const lastUpdate = section.contentBlocks
+              .map((b) => b.updatedAt)
+              .filter(Boolean)
+              .sort()
+              .pop()
+            return (
+              <>
+                <div className="stat">
+                  <span className="stat-label">字数</span>
+                  <span className="stat-value">{totalWords.toLocaleString()}</span>
+                  <span className="stat-trend muted">
+                    {textBlocks.length > 0
+                      ? `${textBlocks.length} 个文本块`
+                      : '未开始'}
+                  </span>
+                </div>
+                <div className="stat">
+                  <span className="stat-label">手稿块</span>
+                  <span className="stat-value">{section.contentBlocks.length}</span>
+                  <span className="stat-trend muted">
+                    {lastUpdate ? `最近 ${formatDate(lastUpdate)}` : '无活动'}
+                  </span>
+                </div>
+                <div className="stat">
+                  <span className="stat-label">附件</span>
+                  <span className="stat-value">{imageBlocks.length + fileBlocks.length}</span>
+                  <span className="stat-trend muted">
+                    {imageBlocks.length > 0 || fileBlocks.length > 0
+                      ? `图片 ${imageBlocks.length} · 文件 ${fileBlocks.length}`
+                      : '尚未导入'}
+                  </span>
+                </div>
+                <div className="stat">
+                  <span className="stat-label">版本</span>
+                  <span className="stat-value">{totalVersions}</span>
+                  <span className="stat-trend muted">
+                    {totalVersions > 0 ? '自动 + 手动快照' : '尚无快照'}
+                  </span>
+                </div>
+              </>
+            )
+          })()}
         </div>
       </section>
 
@@ -460,29 +586,135 @@ export function SectionEditor({
                 } : undefined}
                 title={enterable ? '点击进入沉浸式写作' : undefined}
               >
-                <div className="content-card-header">
+                <div className="content-card-header ms-card-head">
                   <div>
-                    <p className="eyebrow">手稿 · 点击进入写作</p>
-                    <strong>{block.description || '未命名文本块'}</strong>
-                    <p className="muted-text">
-                      来源 {block.updatedBy || block.createdBy || '未知'} · {formatDate(block.updatedAt)}
+                    <strong className="ms-card-title">{block.description || '未命名文本块'}</strong>
+                    <p className="ms-card-meta muted-text">
+                      {formatDate(block.updatedAt)} · {countWords(block.content)} 字
                     </p>
                   </div>
-                  <div className="inline-actions">
-                    <button className="ghost-button" onClick={() => onDeleteBlock(block.id)} type="button">
-                      删除
+                  <div className="inline-actions ms-card-actions">
+                    <button
+                      className="icon-button"
+                      type="button"
+                      title={copiedBlockId === block.id ? '已复制' : '复制纯文本'}
+                      aria-label="复制"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void copyBlockText(block)
+                      }}
+                    >
+                      {copiedBlockId === block.id ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                          <path d="M9 11l3 3L22 4" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                          <rect x="9" y="9" width="11" height="11" rx="2" />
+                          <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      className="icon-button icon-button--danger"
+                      type="button"
+                      title="删除"
+                      aria-label="删除"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDeleteBlock(block.id)
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      </svg>
                     </button>
                   </div>
                 </div>
 
-                <p className="text-block-preview">{getPreviewSummary(block)}</p>
+                <p className="text-block-preview ms-body">
+                  {expandedBlockIds.has(block.id)
+                    ? stripHtml(block.content)
+                    : getPreviewSummary(block)}
+                </p>
 
-                {block.versions.length > 0 && (
+                {block.versions.length > 0 ? (
+                  <section className="version-strip" aria-label="版本历史">
+                    <header className="version-strip-head">
+                      <span className="eyebrow muted">version history</span>
+                      <span className="version-strip-count">
+                        {block.versions.length} 个快照
+                      </span>
+                    </header>
+                    <ol className="version-strip-list">
+                      <li className="version-strip-item is-current">
+                        <span className="v-n">v{block.versions.length + 1}</span>
+                        <span className="v-time">当前</span>
+                        <span className="v-author">编辑中</span>
+                        <span className="v-words">{countWords(block.content)} 字</span>
+                        <span className="chip">当前</span>
+                      </li>
+                      {block.versions.slice(0, 4).map((version, vIdx) => {
+                        const versionNumber = block.versions.length - vIdx
+                        return (
+                          <li key={version.id} className="version-strip-item">
+                            <span className="v-n">v{versionNumber}</span>
+                            <span className="v-time">{formatDate(version.modifiedAt)}</span>
+                            <span className="v-author">
+                              {version.modifiedBy === 'ai' ? 'AI' : version.modifiedBy || '手动'}
+                            </span>
+                            <span className="v-words">{countWords(version.content)} 字</span>
+                            {version.changeDescription ? (
+                              <span className="v-desc" title={version.changeDescription}>
+                                {version.changeDescription}
+                              </span>
+                            ) : null}
+                          </li>
+                        )
+                      })}
+                      {block.versions.length > 4 ? (
+                        <li className="version-strip-more">
+                          + {block.versions.length - 4} 条更早
+                        </li>
+                      ) : null}
+                    </ol>
+                  </section>
+                ) : null}
+
+                <footer className="ms-card-foot">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleBlockExpanded(block.id)
+                    }}
+                  >
+                    {expandedBlockIds.has(block.id) ? '收起' : '展开全文'}
+                  </button>
+                  {block.versions.length > 0 ? (
+                    <>
+                      <span className="dot-sep" aria-hidden>·</span>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleBlockVersions(block.id)
+                        }}
+                      >
+                        {versionsVisibleIds.has(block.id) ? '关闭版本对比' : `查看版本 (${block.versions.length})`}
+                      </button>
+                    </>
+                  ) : null}
+                </footer>
+
+                {block.versions.length > 0 && versionsVisibleIds.has(block.id) ? (
                   <DiffViewer
                     versions={block.versions}
                     currentContent={block.content}
                   />
-                )}
+                ) : null}
               </article>
             )
           }

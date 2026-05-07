@@ -91,7 +91,7 @@ export function ArticleWizard({ open, busy, onClose, onSubmit }: ArticleWizardPr
 
         <div className="wizard-progress">
           {STEP_LABELS.map((label, index) => (
-            <div key={label} className={`wizard-step ${index === step ? 'active' : ''} ${index < step ? 'done' : ''}`}>
+            <div key={label} className={`wizard-step ${index === step ? 'active' : ''} ${index < step ? 'completed' : ''}`}>
               <span>{index + 1}</span>
               <strong>{label}</strong>
             </div>

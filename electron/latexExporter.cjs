@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { getArticleById, getArticleDirectory, resolveBlockPath } = require('./storage.cjs');
 const { parseInlineItalic } = require('./docxExporter.cjs');
+const { stripHtml } = require('./htmlContent.cjs');
 
 const SECTION_LABELS = {
   Title: 'Title',
@@ -223,7 +224,8 @@ function buildLatexDocument(article, opts) {
     for (const block of blocks) {
       const blockType = String(block.type || '').toLowerCase();
       if (blockType === 'text') {
-        const body = paragraphsToLatex(block.content);
+        // block.content is HTML since v1.0.47; render the prose, not the markup.
+        const body = paragraphsToLatex(stripHtml(block.content));
         if (body.trim()) {
           lines.push(body);
           lines.push('');

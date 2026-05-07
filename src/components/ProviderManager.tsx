@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { JSX } from 'react'
 
 export interface LlmProvider {
@@ -12,6 +12,12 @@ export interface LlmProvider {
   maxTokens?: number
   supportsToolUse: boolean
   trustForWrite?: boolean
+}
+
+export interface LlmProvidersState {
+  providers: LlmProvider[]
+  activeId: string | null
+  presets: LlmPreset[]
 }
 
 export interface LlmPreset {
@@ -28,7 +34,7 @@ interface Props {
   providers: LlmProvider[]
   activeId: string | null
   presets: LlmPreset[]
-  onAdd: (draft: Omit<LlmProvider, 'id' | 'hasApiKey'> & { apiKey: string }) => Promise<void>
+  onAdd: (draft: Omit<LlmProvider, 'id' | 'hasApiKey'> & { apiKey: string }) => Promise<LlmProvidersState | void>
   onUpdate: (id: string, patch: Partial<Omit<LlmProvider, 'id' | 'hasApiKey'>> & { apiKey?: string }) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onSetActive: (id: string) => Promise<void>
@@ -66,24 +72,11 @@ export function ProviderManager(props: Props): JSX.Element {
   const [addDraft, setAddDraft] = useState<Draft>({ ...emptyDraft })
   const [editDraft, setEditDraft] = useState<Draft>({ ...emptyDraft })
   const [tests, setTests] = useState<Record<string, { state: 'idle' | 'loading' | 'ok' | 'error'; msg: string }>>({})
-  const testTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
-
-  useEffect(() => {
-    const timeouts = testTimeouts.current
-    return () => {
-      for (const handle of timeouts.values()) clearTimeout(handle)
-      timeouts.clear()
-    }
-  }, [])
 
   function scheduleTestClear(id: string) {
-    const existing = testTimeouts.current.get(id)
-    if (existing) clearTimeout(existing)
-    const handle = setTimeout(() => {
-      testTimeouts.current.delete(id)
+    window.setTimeout(() => {
       setTests(prev => { const n = { ...prev }; delete n[id]; return n })
     }, 5000)
-    testTimeouts.current.set(id, handle)
   }
 
   function startAddFromPreset(p: LlmPreset) {
@@ -143,6 +136,24 @@ export function ProviderManager(props: Props): JSX.Element {
     setEditingId(null)
   }
 
+  async function submitAddAndTest() {
+    if (!isValidDraft(addDraft, true)) return
+    const data = await onAdd({ ...draftToPayload(addDraft), apiKey: addDraft.apiKey.trim() })
+    const newActiveId = data?.activeId
+    setShowAdd(false)
+    setAddDraft({ ...emptyDraft })
+    if (newActiveId) await runTest(newActiveId)
+  }
+
+  async function submitEditAndTest(id: string) {
+    if (!isValidDraft(editDraft, false)) return
+    const patch: Partial<Omit<LlmProvider, 'id' | 'hasApiKey'>> & { apiKey?: string } = draftToPayload(editDraft)
+    if (editDraft.apiKey.trim()) patch.apiKey = editDraft.apiKey.trim()
+    await onUpdate(id, patch)
+    setEditingId(null)
+    await runTest(id)
+  }
+
   async function runTest(id: string) {
     setTests(prev => ({ ...prev, [id]: { state: 'loading', msg: '' } }))
     try {
@@ -155,7 +166,7 @@ export function ProviderManager(props: Props): JSX.Element {
     scheduleTestClear(id)
   }
 
-  function formUI(draft: Draft, setDraft: React.Dispatch<React.SetStateAction<Draft>>, onSubmit: (e: React.FormEvent) => void, onCancel: () => void, isAdd: boolean, hasKey?: boolean) {
+  function formUI(draft: Draft, setDraft: React.Dispatch<React.SetStateAction<Draft>>, onSubmit: (e: React.FormEvent) => void, onCancel: () => void, isAdd: boolean, hasKey?: boolean, onSaveAndTest?: () => Promise<void>) {
     const canSubmit = isValidDraft(draft, isAdd)
     return (
       <form onSubmit={onSubmit} className="tag-form">
@@ -176,6 +187,11 @@ export function ProviderManager(props: Props): JSX.Element {
         {!canSubmit && <p className="muted-text" style={{ fontSize: 'var(--fs-xs)', color: 'var(--c-danger)' }}>请填写名称、Base URL、模型和 API Key；Temperature 需在 0-2 之间。</p>}
         <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
           <button className="primary-button" type="submit" disabled={!canSubmit}>{isAdd ? '添加' : '保存'}</button>
+          {onSaveAndTest ? (
+            <button className="ghost-button" type="button" disabled={!canSubmit} onClick={onSaveAndTest}>
+              {isAdd ? '添加并测试' : '保存并测试'}
+            </button>
+          ) : null}
           <button className="ghost-button" type="button" onClick={onCancel}>取消</button>
         </div>
       </form>
@@ -198,7 +214,7 @@ export function ProviderManager(props: Props): JSX.Element {
         ))}
       </div>
 
-      {showAdd && <div className="panel-card">{formUI(addDraft, setAddDraft, submitAdd, () => { setShowAdd(false); setAddDraft({ ...emptyDraft }) }, true)}</div>}
+      {showAdd && <div className="panel-card">{formUI(addDraft, setAddDraft, submitAdd, () => { setShowAdd(false); setAddDraft({ ...emptyDraft }) }, true, undefined, submitAddAndTest)}</div>}
 
       {providers.length === 0 && !showAdd && <p className="empty-text">暂无 Provider</p>}
 
@@ -229,7 +245,7 @@ export function ProviderManager(props: Props): JSX.Element {
               </div>
             </div>
 
-            {editingId === p.id && formUI(editDraft, setEditDraft, e => submitEdit(e, p.id), () => setEditingId(null), false, p.hasApiKey)}
+            {editingId === p.id && formUI(editDraft, setEditDraft, e => submitEdit(e, p.id), () => setEditingId(null), false, p.hasApiKey, () => submitEditAndTest(p.id))}
           </div>
         )
       })}

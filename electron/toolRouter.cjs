@@ -4,6 +4,7 @@ const path = require('path');
 const storage = require('./storage.cjs');
 const { TOOLS } = require('./llmTools.cjs');
 const zoteroClient = require('./zoteroClient.cjs');
+const { stripHtml } = require('./htmlContent.cjs');
 
 // 安全：attach_file 接受任意 sourcePath（绝对路径）→ 历史无校验，LLM/MCP 输入可读取
 // 系统配置/凭据。这里限制为用户家目录、/tmp、WSL /mnt/<drive>/ 下，且拒绝典型敏感子目录。
@@ -119,9 +120,9 @@ const READ_DISPATCH = {
         .sort()
         .pop() || null;
       const firstSentence = (() => {
-        const firstText = textBlocks.find((block) => (block.content || '').trim().length > 0);
+        const firstText = textBlocks.find((block) => stripHtml(block.content || '').trim().length > 0);
         if (!firstText) return '';
-        const trimmed = firstText.content.replace(/\s+/g, ' ').trim();
+        const trimmed = stripHtml(firstText.content).replace(/\s+/g, ' ').trim();
         const cut = trimmed.split(/(?<=[.!?。！？])\s/)[0] || trimmed;
         return cut.length > 160 ? cut.slice(0, 160) + '…' : cut;
       })();
@@ -140,7 +141,7 @@ const READ_DISPATCH = {
     const section = (article.sections || []).find((item) => item.type === args.sectionType);
     if (!section) throw new Error('Section not found: ' + args.sectionType);
     const textBlocks = (section.contentBlocks || []).filter((block) => block.type === 'Text');
-    const joined = textBlocks.map((block) => block.content || '').join('\n\n').trim();
+    const joined = textBlocks.map((block) => stripHtml(block.content || '')).join('\n\n').trim();
     const wordCount = textBlocks.reduce((sum, block) => sum + countWords(block.content || ''), 0);
     const head = joined.length > 280 ? joined.slice(0, 280) + '…' : joined;
     const tail = joined.length > 560 ? '…' + joined.slice(-280) : '';
@@ -346,14 +347,58 @@ function countArticleWords(article) {
 
 function countWords(text) {
   if (typeof text !== 'string') return 0;
-  return (text.match(/[\u4e00-\u9fa5]/g) || []).length + (text.match(/[a-zA-Z]+/g) || []).length;
+  // block.content is HTML since v1.0.47; strip tags so attribute names don't
+  // inflate counts and AI section summaries don't echo markup.
+  const plain = stripHtml(text);
+  return (plain.match(/[\u4e00-\u9fa5]/g) || []).length + (plain.match(/[a-zA-Z]+/g) || []).length;
 }
 
 function typeMatches(value, expected) {
   if (expected === 'array') return Array.isArray(value);
   if (expected === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (expected === 'integer') return Number.isInteger(value);
   if (['string', 'number', 'boolean'].includes(expected)) return typeof value === expected;
   return true;
+}
+
+function validateObjectAgainstSchema(schema, input, pathPrefix = '') {
+  const errors = [];
+  if (!schema || schema.type !== 'object') return errors;
+
+  const properties = schema.properties || {};
+  const required = schema.required || [];
+
+  for (const key of Object.keys(properties)) {
+    const value = input[key];
+    const property = properties[key] || {};
+    const pathName = pathPrefix ? `${pathPrefix}.${key}` : key;
+
+    if (required.includes(key) && value === undefined) {
+      errors.push('missing required: ' + pathName);
+      continue;
+    }
+    if (value === undefined) continue;
+    if (property.type && !typeMatches(value, property.type)) {
+      errors.push('invalid type for ' + pathName + ': expected ' + property.type);
+      continue;
+    }
+    if (property.enum && !property.enum.includes(value)) {
+      errors.push('invalid enum for ' + pathName + ': ' + value);
+    }
+    if (property.type === 'object' && property.properties && value && typeof value === 'object' && !Array.isArray(value)) {
+      errors.push(...validateObjectAgainstSchema(property, value, pathName));
+    }
+  }
+
+  if (schema.additionalProperties === false) {
+    for (const key of Object.keys(input)) {
+      if (!Object.prototype.hasOwnProperty.call(properties, key)) {
+        errors.push('unknown property: ' + (pathPrefix ? `${pathPrefix}.${key}` : key));
+      }
+    }
+  }
+
+  return errors;
 }
 
 function validateArgs(name, args) {
@@ -362,39 +407,8 @@ function validateArgs(name, args) {
 
   const schema = tool.parameters;
   const input = normalizeArgs(args);
-  const errors = [];
-  if (!schema || schema.type !== 'object') return { valid: true, errors };
-
-  const properties = schema.properties || {};
-  const required = schema.required || [];
-
-  for (const key of Object.keys(properties)) {
-    const value = input[key];
-    const property = properties[key] || {};
-
-    if (required.includes(key) && value === undefined) {
-      errors.push('missing required: ' + key);
-      continue;
-    }
-    if (value === undefined) continue;
-    if (property.type && !typeMatches(value, property.type)) {
-      errors.push('invalid type for ' + key + ': expected ' + property.type);
-    }
-    if (property.enum && !property.enum.includes(value)) {
-      errors.push('invalid enum for ' + key + ': ' + value);
-    }
-  }
-
-  if (schema.additionalProperties === false) {
-    // schema 明确禁止未知字段 → 必须 fail，否则旧 schema 调用（如 LLM 用旧版
-    // background/objectives/keyMethods 调 update_research_context）会 silent
-    // no-op，AI 还以为操作成功。
-    for (const key of Object.keys(input)) {
-      if (!Object.prototype.hasOwnProperty.call(properties, key)) {
-        errors.push('unknown property: ' + key);
-      }
-    }
-  }
+  if (!schema || schema.type !== 'object') return { valid: true, errors: [] };
+  const errors = validateObjectAgainstSchema(schema, input);
 
   return { valid: errors.length === 0, errors };
 }
