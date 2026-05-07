@@ -60,8 +60,18 @@ export function ThesisDetailView({
   const [keywordsText, setKeywordsText] = useState(thesis.keywords.join(', '))
   const [sectionDrafts, setSectionDrafts] = useState<Record<string, string>>({})
   const [blockDrafts, setBlockDrafts] = useState<Record<string, string>>({})
+  const [articleQuery, setArticleQuery] = useState('')
   const linkedArticles = articles.filter((article) => thesis.articleIds.includes(article.id))
   const availableArticles = articles.filter((article) => !thesis.articleIds.includes(article.id))
+  const normalizedArticleQuery = articleQuery.trim().toLowerCase()
+  const matchesArticleQuery = (article: Article) => {
+    if (!normalizedArticleQuery) return true
+    return [article.title, article.targetJournal, article.status]
+      .filter(Boolean)
+      .some((value) => value.toLowerCase().includes(normalizedArticleQuery))
+  }
+  const visibleLinkedArticles = linkedArticles.filter(matchesArticleQuery)
+  const visibleAvailableArticles = availableArticles.filter(matchesArticleQuery)
 
   useEffect(() => {
     setDraft({
@@ -104,6 +114,24 @@ export function ThesisDetailView({
       return
     }
     await onDelete(thesis.id, thesis.title)
+  }
+
+  async function unlinkArticle(article: Article) {
+    if (!confirm(`确定取消关联小论文「${article.title}」？\n\n这不会删除小论文，只会从当前大论文中移除关联。`)) return
+    await onUnlinkArticle(thesis.id, article.id)
+  }
+
+  async function addSectionText(sectionId: string, sectionTitle: string) {
+    const content = (sectionDrafts[sectionId] ?? '').trim()
+    if (!content) return
+    await onAddTextBlock(thesis.id, sectionId, content, `大论文: ${sectionTitle}`)
+    setSectionDrafts({ ...sectionDrafts, [sectionId]: '' })
+  }
+
+  async function saveTextBlock(block: ContentBlock) {
+    const content = (blockDrafts[block.id] ?? block.content).trim()
+    if (!content) return
+    await onUpdateTextBlock(thesis.id, block.id, content, block.description)
   }
 
   return (
@@ -260,10 +288,7 @@ export function ThesisDetailView({
                       className="ghost-button"
                       type="button"
                       disabled={!sectionDrafts[section.id]?.trim()}
-                      onClick={async () => {
-                        await onAddTextBlock(thesis.id, section.id, sectionDrafts[section.id] ?? '', `大论文: ${section.title}`)
-                        setSectionDrafts({ ...sectionDrafts, [section.id]: '' })
-                      }}
+                      onClick={() => addSectionText(section.id, section.title)}
                     >
                       添加到章节
                     </button>
@@ -286,7 +311,8 @@ export function ThesisDetailView({
                                 <button
                                   className="ghost-button"
                                   type="button"
-                                  onClick={() => onUpdateTextBlock(thesis.id, block.id, blockDrafts[block.id] ?? block.content, block.description)}
+                                  disabled={!(blockDrafts[block.id] ?? block.content).trim()}
+                                  onClick={() => saveTextBlock(block)}
                                 >
                                   保存文本块
                                 </button>
@@ -321,11 +347,29 @@ export function ThesisDetailView({
               <h3>关联小论文</h3>
             </div>
           </div>
+          <div className="header-actions">
+            <input
+              value={articleQuery}
+              onChange={(event) => setArticleQuery(event.target.value)}
+              placeholder="搜索小论文标题、期刊或状态"
+              style={{ minWidth: 260 }}
+            />
+            {articleQuery.trim() ? (
+              <button className="ghost-button" type="button" onClick={() => setArticleQuery('')}>
+                清空搜索
+              </button>
+            ) : null}
+            <span className="muted-text" style={{ fontSize: 'var(--fs-xs)' }}>
+              已关联 {visibleLinkedArticles.length}/{linkedArticles.length} · 可关联 {visibleAvailableArticles.length}/{availableArticles.length}
+            </span>
+          </div>
           {linkedArticles.length === 0 ? (
             <p className="empty-text">还没有关联小论文。可以从下方把小论文组织进大论文。</p>
+          ) : visibleLinkedArticles.length === 0 ? (
+            <p className="empty-text">已关联小论文里没有匹配搜索的条目。</p>
           ) : (
             <div className="plain-list">
-              {linkedArticles.map((article) => (
+              {visibleLinkedArticles.map((article) => (
                 <div key={article.id} className="revision-item">
                   <div>
                     <strong>{article.title}</strong>
@@ -335,7 +379,7 @@ export function ThesisDetailView({
                     <button className="ghost-button" type="button" onClick={() => onOpenArticle(article.id)}>
                       打开小论文
                     </button>
-                    <button className="ghost-button" type="button" onClick={() => onUnlinkArticle(thesis.id, article.id)}>
+                    <button className="ghost-button" type="button" onClick={() => unlinkArticle(article)}>
                       取消关联
                     </button>
                   </div>
@@ -346,19 +390,23 @@ export function ThesisDetailView({
           {availableArticles.length > 0 ? (
             <div className="panel-stack">
               <p className="muted-text">可关联的小论文</p>
-              <div className="plain-list">
-                {availableArticles.map((article) => (
-                  <div key={article.id} className="revision-item">
-                    <div>
-                      <strong>{article.title}</strong>
-                      <p>{article.targetJournal || '未填写期刊'}</p>
+              {visibleAvailableArticles.length === 0 ? (
+                <p className="empty-text">可关联小论文里没有匹配搜索的条目。</p>
+              ) : (
+                <div className="plain-list">
+                  {visibleAvailableArticles.map((article) => (
+                    <div key={article.id} className="revision-item">
+                      <div>
+                        <strong>{article.title}</strong>
+                        <p>{article.targetJournal || '未填写期刊'}</p>
+                      </div>
+                      <button className="ghost-button" type="button" onClick={() => onLinkArticle(thesis.id, article.id)}>
+                        关联到大论文
+                      </button>
                     </div>
-                    <button className="ghost-button" type="button" onClick={() => onLinkArticle(thesis.id, article.id)}>
-                      关联到大论文
-                    </button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
         </section>

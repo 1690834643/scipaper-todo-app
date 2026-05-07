@@ -61,6 +61,12 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
   const [targetRoundId, setTargetRoundId] = useState('__new__')
   const [text, setText] = useState('')
   const [sourceName, setSourceName] = useState('')
+  const [reviewMeta, setReviewMeta] = useState({
+    submittedAt: localIsoDate(),
+    journalName: '',
+    manuscriptNumber: '',
+    reviewReceivedAt: localIsoDate(),
+  })
   const [applying, setApplying] = useState(false)
   const [reformatting, setReformatting] = useState(false)
   const [editableSections, setEditableSections] = useState<EditableManuscriptSection[]>([])
@@ -70,8 +76,15 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
   const reviewGroups = useMemo(() => parseReviewLetter(text), [text])
 
   useEffect(() => {
-    if (open) setMode(defaultMode)
-  }, [open, defaultMode])
+    if (!open) return
+    setMode(defaultMode)
+    setReviewMeta({
+      submittedAt: localIsoDate(),
+      journalName: article?.targetJournal ?? '',
+      manuscriptNumber: '',
+      reviewReceivedAt: localIsoDate(),
+    })
+  }, [open, defaultMode, article?.targetJournal])
 
   useEffect(() => {
     setEditableSections(
@@ -172,6 +185,24 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
     )))
   }
 
+  function removeSection(sectionId: string) {
+    setEditableSections((prev) => prev.filter((section) => section.id !== sectionId))
+  }
+
+  function removeReviewerGroup(groupId: string) {
+    setEditableReviewGroups((prev) => prev.filter((group) => group.id !== groupId))
+  }
+
+  function removeReviewComment(groupId: string, commentId: string) {
+    setEditableReviewGroups((prev) => prev
+      .map((group) => (
+        group.id === groupId
+          ? { ...group, comments: group.comments.filter((comment) => comment.id !== commentId) }
+          : group
+      ))
+      .filter((group) => group.comments.length > 0))
+  }
+
   async function chooseFile() {
     try {
       const selected = await window.scipaper.selectImportTextFile()
@@ -202,10 +233,10 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
       } else {
         const nextState = await window.scipaper.importReviewComments(article.id, {
           roundId: targetRoundId === '__new__' ? undefined : targetRoundId,
-          submittedAt: localIsoDate(),
-          journalName: article.targetJournal,
-          manuscriptNumber: '',
-          reviewReceivedAt: localIsoDate(),
+          submittedAt: reviewMeta.submittedAt,
+          journalName: reviewMeta.journalName.trim() || article.targetJournal,
+          manuscriptNumber: reviewMeta.manuscriptNumber,
+          reviewReceivedAt: reviewMeta.reviewReceivedAt,
           sourceName,
           groups: enabledReviewGroups,
         })
@@ -303,6 +334,42 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                   </label>
                 )}
               </div>
+              {mode === 'review' ? (
+                <div className="form-grid" style={{ marginTop: 'var(--sp-3)' }}>
+                  <label className="field">
+                    <span>期刊</span>
+                    <input
+                      value={reviewMeta.journalName}
+                      onChange={(event) => setReviewMeta((prev) => ({ ...prev, journalName: event.target.value }))}
+                      placeholder={article.targetJournal || 'Journal name'}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>稿件号</span>
+                    <input
+                      value={reviewMeta.manuscriptNumber}
+                      onChange={(event) => setReviewMeta((prev) => ({ ...prev, manuscriptNumber: event.target.value }))}
+                      placeholder="Manuscript number"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>投稿日期</span>
+                    <input
+                      type="date"
+                      value={reviewMeta.submittedAt}
+                      onChange={(event) => setReviewMeta((prev) => ({ ...prev, submittedAt: event.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>收到审稿日期</span>
+                    <input
+                      type="date"
+                      value={reviewMeta.reviewReceivedAt}
+                      onChange={(event) => setReviewMeta((prev) => ({ ...prev, reviewReceivedAt: event.target.value }))}
+                    />
+                  </label>
+                </div>
+              ) : null}
               <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', marginTop: 'var(--sp-3)' }}>
                 <button className="ghost-button" onClick={chooseFile} type="button">选择 .txt/.md/.docx/.pdf 文件</button>
                 <button className="ghost-button" onClick={reformatWithAi} type="button" disabled={!text.trim() || reformatting}>
@@ -378,6 +445,9 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                               ))}
                             </select>
                           </label>
+                          <button className="ghost-button danger" type="button" onClick={() => removeSection(section.id)}>
+                            移出本次导入
+                          </button>
                         </div>
                         <label className="field" style={{ marginTop: 'var(--sp-2)' }}>
                           <span>内容</span>
@@ -410,6 +480,9 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                       </label>
                       <button className="ghost-button" type="button" onClick={() => addManualReviewComment(group.id)}>
                         给该审稿人补一条意见
+                      </button>
+                      <button className="ghost-button danger" type="button" onClick={() => removeReviewerGroup(group.id)}>
+                        移出该审稿人
                       </button>
                       <div className="plain-list" style={{ marginTop: 'var(--sp-2)' }}>
                         {group.comments.map((comment, commentIndex) => (
@@ -451,6 +524,9 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                                   <option value="Minor">Minor</option>
                                 </select>
                               </label>
+                              <button className="ghost-button danger" type="button" onClick={() => removeReviewComment(group.id, comment.id)}>
+                                移出该意见
+                              </button>
                             </div>
                             <label className="field" style={{ marginTop: 'var(--sp-2)' }}>
                               <span>建议关联章节</span>
