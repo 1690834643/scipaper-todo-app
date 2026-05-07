@@ -119,6 +119,59 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
   const hasPreview = mode === 'manuscript' ? enabledSections.length > 0 : enabledReviewGroups.length > 0
   const disabled = busy || applying || !article || !hasPreview
 
+  function addManualSection() {
+    setEditableSections((prev) => [
+      ...prev,
+      {
+        id: `manual-section-${Date.now()}`,
+        sectionType: 'Introduction',
+        title: 'Manual section',
+        content: '',
+        enabled: true,
+      },
+    ])
+  }
+
+  function addManualReviewerGroup() {
+    const nextIndex = editableReviewGroups.length + 1
+    setEditableReviewGroups((prev) => [
+      ...prev,
+      {
+        id: `manual-reviewer-${Date.now()}`,
+        reviewerId: `Reviewer ${nextIndex}`,
+        comments: [
+          {
+            id: `manual-comment-${Date.now()}`,
+            originalText: '',
+            type: 'Major',
+            suggestedSection: '',
+            enabled: true,
+          },
+        ],
+      },
+    ])
+  }
+
+  function addManualReviewComment(groupId: string) {
+    setEditableReviewGroups((prev) => prev.map((group) => (
+      group.id === groupId
+        ? {
+            ...group,
+            comments: [
+              ...group.comments,
+              {
+                id: `manual-comment-${Date.now()}`,
+                originalText: '',
+                type: 'Major',
+                suggestedSection: '',
+                enabled: true,
+              },
+            ],
+          }
+        : group
+    )))
+  }
+
   async function chooseFile() {
     try {
       const selected = await window.scipaper.selectImportTextFile()
@@ -280,12 +333,21 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                 <button className="primary-button" disabled={disabled} onClick={applyImport} type="button">
                   {applying ? '导入中...' : '确认导入'}
                 </button>
+                {mode === 'manuscript' ? (
+                  <button className="ghost-button" type="button" onClick={addManualSection}>
+                    手动补章节
+                  </button>
+                ) : (
+                  <button className="ghost-button" type="button" onClick={addManualReviewerGroup}>
+                    手动补审稿人
+                  </button>
+                )}
                 <button className="ghost-button" disabled={!article || applying} onClick={undoLastImport} type="button">
                   撤销最近导入
                 </button>
               </div>
 
-              {!text.trim() ? (
+              {!text.trim() && editableSections.length === 0 && editableReviewGroups.length === 0 ? (
                 <p className="empty-text">选择文件或粘贴文本后会在这里预览。</p>
               ) : mode === 'manuscript' ? (
                 editableSections.length > 0 ? (
@@ -346,6 +408,9 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                           )))}
                         />
                       </label>
+                      <button className="ghost-button" type="button" onClick={() => addManualReviewComment(group.id)}>
+                        给该审稿人补一条意见
+                      </button>
                       <div className="plain-list" style={{ marginTop: 'var(--sp-2)' }}>
                         {group.comments.map((comment, commentIndex) => (
                           <div key={comment.id} className="revision-item">

@@ -104,6 +104,11 @@ const MCP_PRESETS: Array<{
   },
 ]
 
+function shellQuote(value: string) {
+  if (/^[A-Za-z0-9_./:=+-]+$/.test(value)) return value
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
 export function McpPanel({ info }: McpPanelProps) {
   const [selectedPreset, setSelectedPreset] = useState<McpPresetKey>('cursor')
   const selected = useMemo(
@@ -121,6 +126,7 @@ export function McpPanel({ info }: McpPanelProps) {
   }
 
   const selectedConfig = info.examples?.[selected.key] ?? info.configJson
+  const launchCommand = [info.command, ...info.args].map(shellQuote).join(' ')
 
   return (
     <div className="panel-stack">
@@ -133,6 +139,14 @@ export function McpPanel({ info }: McpPanelProps) {
           <p>本地数据目录: {info.baseDirectory}</p>
           <p>实时同步: MCP 写入后，应用会自动刷新，不需要重启。</p>
           <p>附件备份: 通过 MCP 写入的图片和文件会自动复制到文章目录下的 Attachments。</p>
+        </div>
+        <div className="header-actions" style={{ marginTop: 'var(--sp-3)' }}>
+          <button className="ghost-button" type="button" onClick={() => window.scipaper.copyText(launchCommand)}>
+            复制启动命令
+          </button>
+          <code style={{ fontSize: 'var(--fs-xs)', color: 'var(--c-ink-muted)', wordBreak: 'break-all' }}>
+            {launchCommand}
+          </code>
         </div>
       </section>
 

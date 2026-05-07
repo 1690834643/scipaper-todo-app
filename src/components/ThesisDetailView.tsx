@@ -15,6 +15,7 @@ interface ThesisDetailViewProps {
   onUpdateTextBlock: (thesisId: string, blockId: string, content: string, description?: string) => Promise<void>
   onDeleteBlock: (thesisId: string, blockId: string) => Promise<void>
   onExportMarkdown: (thesisId: string) => Promise<void>
+  lastExportPath?: string
 }
 
 const THESIS_STATUSES: ThesisStatus[] = ['Proposal', 'InProgress', 'DefenseReady', 'Defended', 'Revised', 'Final']
@@ -39,6 +40,7 @@ export function ThesisDetailView({
   onUpdateTextBlock,
   onDeleteBlock,
   onExportMarkdown,
+  lastExportPath = '',
 }: ThesisDetailViewProps) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -126,6 +128,16 @@ export function ThesisDetailView({
             删除大论文
           </button>
         </div>
+        {lastExportPath ? (
+          <div className="notice-banner" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              最近导出：{lastExportPath}
+            </span>
+            <button className="ghost-button" type="button" onClick={() => window.scipaper.copyText(lastExportPath)}>
+              复制路径
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <section className="panel-stack">

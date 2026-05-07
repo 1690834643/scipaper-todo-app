@@ -85,6 +85,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | ✅ **回归清单与冒烟测试**（1.0.39） | 新增 `docs/manual-regression-checklist.md`，覆盖小论文、导入、审稿、大论文、AI Provider、导出和备份；storage 测试新增完整备份恢复与真实工作流 smoke path |
 | 🧑‍⚖️ **返修回复可修正**（1.0.40） | 审稿轮次元信息可修改；每条修回记录/回复文本可修改、删除和标记核验；手动空审稿意见/空修回记录会被拦截。AI/MCP 同步新增 `update_review_round` / `update_revision` / `delete_revision` |
 | 🧩 **MCP / 导入 / 导出体验补齐**（1.0.41） | Settings → MCP 可按 Cursor、Claude Code、Claude Desktop、VS Code、Cline、Roo Code、Kimi Code、Windsurf、Continue 或通用 MCP JSON 选择配置；正文/审稿导入预览可手动修正目标章节、审稿人、意见类型和内容；稿件库新增搜索/类型/排序；Markdown、docx、LaTeX、HTML、JSON、分享包导出后显示并可复制输出路径 |
+| 🔧 **下一轮六项使用修正**（1.0.42） | 导入助手可手动补漏识别的章节、审稿人和单条意见；AI Provider 支持添加并测试 / 保存并测试；大论文 Markdown 导出也显示可复制路径；稿件库显示筛选命中数并可一键清空；MCP 面板可复制启动命令；最近导出路径按当前小论文/大论文隔离 |
 
 ### 安装与使用
 
@@ -127,7 +128,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 ### 发行版构建
 
-- **推荐方式**：推送 `v1.0.41` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
+- **推荐方式**：推送 `v1.0.42` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
 - **手动方式**：在 GitHub 的 **Actions → Build & Release → Run workflow** 里触发，构建产物会作为 workflow artifact 上传；勾选 `publish` 时会发布到对应 tag 的 Release。
 - **本地 Windows**：`npm ci && npm run dist:win`。
 - **WSL/Linux 交叉打 Windows 包**：需要完整 Wine 32-bit 环境；否则会在 electron-builder 的 Windows 资源编辑步骤失败。一般直接用 GitHub Actions。
@@ -210,6 +211,7 @@ SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
 | ✅ **Regression checklist and smoke tests** (1.0.39) | Added `docs/manual-regression-checklist.md` plus storage smoke coverage for full backup/restore and a realistic manuscript → review → thesis → export workflow |
 | 🧑‍⚖️ **Correctable revision responses** (1.0.40) | Review round metadata can be edited; each revision response can be edited, deleted, and marked verified. Empty manual review comments / revision records are rejected. AI/MCP adds `update_review_round`, `update_revision`, and `delete_revision` |
 | 🧩 **MCP / import / export UX pass** (1.0.41) | Settings → MCP now offers selectable presets for Cursor, Claude Code, Claude Desktop, VS Code, Cline, Roo Code, Kimi Code, Windsurf, Continue, and generic MCP JSON. Manuscript/review import previews are editable before write. Library search/type/sort controls were added. Markdown, docx, LaTeX, HTML, JSON, and share-package exports show a copyable output path |
+| 🔧 **Next six workflow fixes** (1.0.42) | Import assistant can manually add missed sections, reviewer groups, and comments. AI Providers support add-and-test / save-and-test. Thesis Markdown export shows a copyable path. Library shows match counts with one-click clear. MCP panel can copy the launch command. Recent export paths are scoped to the active article/thesis |
 
 ### Install
 
@@ -252,7 +254,7 @@ SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
 
 ### Release Build
 
-- **Recommended**: push a tag such as `v1.0.41`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
+- **Recommended**: push a tag such as `v1.0.42`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
 - **Manual**: run **Actions → Build & Release → Run workflow** in GitHub; artifacts are uploaded to the workflow run, and checking `publish` attaches them to the matching tag release.
 - **Local Windows**: `npm ci && npm run dist:win`.
 - **WSL/Linux cross-build**: requires a full 32-bit Wine setup for electron-builder's Windows resource editing. Use GitHub Actions unless you specifically need local packaging.

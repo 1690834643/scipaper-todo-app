@@ -218,7 +218,7 @@ function App() {
   const [docxTemplate, setDocxTemplate] = useState<string>('academic-en')
   const [docxApplyItalic, setDocxApplyItalic] = useState(false)
   const [docxBusy, setDocxBusy] = useState(false)
-  const [lastExportPath, setLastExportPath] = useState('')
+  const [lastExport, setLastExport] = useState<{ kind: 'article' | 'thesis'; id: string; path: string } | null>(null)
 
   // Share card
   const [shareOpen, setShareOpen] = useState(false)
@@ -601,6 +601,7 @@ function App() {
     setProviders(data.providers)
     setActiveProviderId(data.activeId)
     setPresets(data.presets)
+    return data
   }
   async function handleUpdateProvider(
     id: string,
@@ -980,8 +981,9 @@ function App() {
 
   async function handleExportThesisMarkdown(thesisId: string) {
     try {
-      await window.scipaper.exportThesisMarkdown(thesisId)
-      setNotice('大论文 Markdown 已导出')
+      const exportPath = await window.scipaper.exportThesisMarkdown(thesisId)
+      setLastExport({ kind: 'thesis', id: thesisId, path: exportPath })
+      setNotice(`大论文 Markdown 已导出：${exportPath}`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '大论文导出失败')
     }
@@ -1059,7 +1061,7 @@ function App() {
     if (!selectedArticle) return
     try {
       const exportPath = await window.scipaper.exportArticleLatex(selectedArticle.id)
-      setLastExportPath(exportPath)
+      setLastExport({ kind: 'article', id: selectedArticle.id, path: exportPath })
       setNotice(`LaTeX 导出成功：${exportPath}`)
     } catch (error) {
       console.error(error)
@@ -1071,7 +1073,7 @@ function App() {
     if (!selectedArticle) return
     try {
       const exportPath = await window.scipaper.exportMarkdown(selectedArticle.id)
-      setLastExportPath(exportPath)
+      setLastExport({ kind: 'article', id: selectedArticle.id, path: exportPath })
       setNotice(`Markdown 导出成功：${exportPath}`)
     } catch (error) {
       console.error(error)
@@ -1088,7 +1090,7 @@ function App() {
         docxTemplate,
         docxApplyItalic,
       )
-      setLastExportPath(exportPath)
+      setLastExport({ kind: 'article', id: selectedArticle.id, path: exportPath })
       setNotice(`docx 导出成功：${exportPath}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -1102,7 +1104,7 @@ function App() {
     if (!selectedArticle) return
     try {
       const exportPath = await window.scipaper.exportToHTML(selectedArticle.id)
-      setLastExportPath(exportPath)
+      setLastExport({ kind: 'article', id: selectedArticle.id, path: exportPath })
       setNotice(`HTML 导出成功：${exportPath}`)
     } catch (error) {
       console.error(error)
@@ -1114,7 +1116,7 @@ function App() {
     if (!selectedArticle) return
     try {
       const exportPath = await window.scipaper.exportToJSON(selectedArticle.id)
-      setLastExportPath(exportPath)
+      setLastExport({ kind: 'article', id: selectedArticle.id, path: exportPath })
       setNotice(`JSON 导出成功：${exportPath}`)
     } catch (error) {
       console.error(error)
@@ -1126,7 +1128,7 @@ function App() {
     if (!selectedArticle) return
     try {
       const exportPath = await window.scipaper.createSharePackage(selectedArticle.id)
-      setLastExportPath(exportPath)
+      setLastExport({ kind: 'article', id: selectedArticle.id, path: exportPath })
       setNotice(`分享包创建成功：${exportPath}`)
     } catch (error) {
       console.error(error)
@@ -1433,6 +1435,7 @@ function App() {
               onUpdateTextBlock={handleUpdateThesisTextBlock}
               onDeleteBlock={handleDeleteThesisBlock}
               onExportMarkdown={handleExportThesisMarkdown}
+              lastExportPath={lastExport?.kind === 'thesis' && lastExport.id === selectedThesis.id ? lastExport.path : ''}
             />
           ) : null}
 
@@ -1631,12 +1634,12 @@ function App() {
                     保存信息
                   </button>
                 </div>
-                {lastExportPath ? (
+                {lastExport?.kind === 'article' && lastExport.id === selectedArticle.id ? (
                   <div className="notice-banner" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', justifyContent: 'space-between', marginTop: 'var(--sp-3)' }}>
                     <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      最近导出：{lastExportPath}
+                      最近导出：{lastExport.path}
                     </span>
-                    <button className="ghost-button" type="button" onClick={() => window.scipaper.copyText(lastExportPath)}>
+                    <button className="ghost-button" type="button" onClick={() => window.scipaper.copyText(lastExport.path)}>
                       复制路径
                     </button>
                   </div>
