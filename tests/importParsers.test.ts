@@ -54,4 +54,33 @@ Comment 2: The discussion should mention limitations.
     expect(parsed[1]?.comments).toHaveLength(2)
     expect(parsed[1]?.comments[0]?.type).toBe('Minor')
   })
+
+  it('recognizes Chinese thesis-style headings after AI or docx cleanup', () => {
+    const parsed = parseManuscriptDraft(`
+摘要
+这是摘要正文。
+
+1. 绪论
+研究背景内容。
+
+2.1 材料与方法
+供试昆虫与样品收集。
+
+3 结果
+主要结果内容。
+
+4. 讨论
+讨论内容。
+`)
+
+    expect(parsed.map((section) => section.sectionType)).toEqual([
+      'Abstract',
+      'Introduction',
+      'MaterialsAndMethods',
+      'Results',
+      'Discussion',
+    ])
+    expect(parsed.find((section) => section.sectionType === 'Introduction')?.content).toContain('研究背景内容')
+    expect(parsed.find((section) => section.sectionType === 'MaterialsAndMethods')?.content).toContain('供试昆虫')
+  })
 })

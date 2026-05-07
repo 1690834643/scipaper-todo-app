@@ -352,8 +352,49 @@ function countWords(text) {
 function typeMatches(value, expected) {
   if (expected === 'array') return Array.isArray(value);
   if (expected === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (expected === 'integer') return Number.isInteger(value);
   if (['string', 'number', 'boolean'].includes(expected)) return typeof value === expected;
   return true;
+}
+
+function validateObjectAgainstSchema(schema, input, pathPrefix = '') {
+  const errors = [];
+  if (!schema || schema.type !== 'object') return errors;
+
+  const properties = schema.properties || {};
+  const required = schema.required || [];
+
+  for (const key of Object.keys(properties)) {
+    const value = input[key];
+    const property = properties[key] || {};
+    const pathName = pathPrefix ? `${pathPrefix}.${key}` : key;
+
+    if (required.includes(key) && value === undefined) {
+      errors.push('missing required: ' + pathName);
+      continue;
+    }
+    if (value === undefined) continue;
+    if (property.type && !typeMatches(value, property.type)) {
+      errors.push('invalid type for ' + pathName + ': expected ' + property.type);
+      continue;
+    }
+    if (property.enum && !property.enum.includes(value)) {
+      errors.push('invalid enum for ' + pathName + ': ' + value);
+    }
+    if (property.type === 'object' && property.properties && value && typeof value === 'object' && !Array.isArray(value)) {
+      errors.push(...validateObjectAgainstSchema(property, value, pathName));
+    }
+  }
+
+  if (schema.additionalProperties === false) {
+    for (const key of Object.keys(input)) {
+      if (!Object.prototype.hasOwnProperty.call(properties, key)) {
+        errors.push('unknown property: ' + (pathPrefix ? `${pathPrefix}.${key}` : key));
+      }
+    }
+  }
+
+  return errors;
 }
 
 function validateArgs(name, args) {
@@ -362,39 +403,8 @@ function validateArgs(name, args) {
 
   const schema = tool.parameters;
   const input = normalizeArgs(args);
-  const errors = [];
-  if (!schema || schema.type !== 'object') return { valid: true, errors };
-
-  const properties = schema.properties || {};
-  const required = schema.required || [];
-
-  for (const key of Object.keys(properties)) {
-    const value = input[key];
-    const property = properties[key] || {};
-
-    if (required.includes(key) && value === undefined) {
-      errors.push('missing required: ' + key);
-      continue;
-    }
-    if (value === undefined) continue;
-    if (property.type && !typeMatches(value, property.type)) {
-      errors.push('invalid type for ' + key + ': expected ' + property.type);
-    }
-    if (property.enum && !property.enum.includes(value)) {
-      errors.push('invalid enum for ' + key + ': ' + value);
-    }
-  }
-
-  if (schema.additionalProperties === false) {
-    // schema 明确禁止未知字段 → 必须 fail，否则旧 schema 调用（如 LLM 用旧版
-    // background/objectives/keyMethods 调 update_research_context）会 silent
-    // no-op，AI 还以为操作成功。
-    for (const key of Object.keys(input)) {
-      if (!Object.prototype.hasOwnProperty.call(properties, key)) {
-        errors.push('unknown property: ' + key);
-      }
-    }
-  }
+  if (!schema || schema.type !== 'object') return { valid: true, errors: [] };
+  const errors = validateObjectAgainstSchema(schema, input);
 
   return { valid: errors.length === 0, errors };
 }

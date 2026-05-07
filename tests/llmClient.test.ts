@@ -49,6 +49,15 @@ describe('llmClient write approval policy', () => {
     expect(llmClient.shouldAutoApproveToolCall(definition, provider, state, false)).toBe(false)
   })
 
+  it('never auto-approves irreversible delete tools even for trusted providers or global auto-approve', () => {
+    const llmClient = loadLlmClient()
+    const state = { alwaysAllow: new Set<string>(['delete_article']) }
+    const definition = { name: 'delete_article', isWrite: true }
+    const provider = { id: 'trusted-provider', trustForWrite: true }
+
+    expect(llmClient.shouldAutoApproveToolCall(definition, provider, state, true)).toBe(false)
+  })
+
   it('emits autoApproved and completes trusted provider write calls without asking', async () => {
     const llmClient = loadLlmClient()
     const events: Array<{ channel: string; payload: Record<string, unknown> }> = []

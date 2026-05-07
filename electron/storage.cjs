@@ -585,6 +585,14 @@ function normalizeImportBatch(batch = {}) {
     blockIds: Array.isArray(batch.blockIds) ? batch.blockIds.filter((id) => typeof id === 'string') : [],
     commentIds: Array.isArray(batch.commentIds) ? batch.commentIds.filter((id) => typeof id === 'string') : [],
     roundIds: Array.isArray(batch.roundIds) ? batch.roundIds.filter((id) => typeof id === 'string') : [],
+    replacedSections: Array.isArray(batch.replacedSections)
+      ? batch.replacedSections
+        .filter((entry) => entry && typeof entry.sectionId === 'string' && Array.isArray(entry.contentBlocks))
+        .map((entry) => ({
+          sectionId: entry.sectionId,
+          contentBlocks: entry.contentBlocks.map(normalizeStoredBlock),
+        }))
+      : [],
   };
 }
 
@@ -795,38 +803,43 @@ function touchThesis(thesis) {
 function updateThesisMeta(thesisId, patch) {
   const database = readDatabase();
   const thesis = findThesis(database, thesisId);
+  const fields = assertKnownPatch(
+    patch,
+    ['title', 'titleEn', 'author', 'supervisor', 'institution', 'department', 'degree', 'status', 'abstractZh', 'abstractEn', 'keywords'],
+    'updateThesisMeta',
+  );
 
-  if (Object.prototype.hasOwnProperty.call(patch, 'title')) {
+  if (fields.includes('title')) {
     thesis.title = normalizeText(patch.title) || thesis.title;
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'titleEn')) {
+  if (fields.includes('titleEn')) {
     thesis.titleEn = normalizeText(patch.titleEn);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'author')) {
+  if (fields.includes('author')) {
     thesis.author = normalizeText(patch.author);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'supervisor')) {
+  if (fields.includes('supervisor')) {
     thesis.supervisor = normalizeText(patch.supervisor);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'institution')) {
+  if (fields.includes('institution')) {
     thesis.institution = normalizeText(patch.institution);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'department')) {
+  if (fields.includes('department')) {
     thesis.department = normalizeText(patch.department);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'degree')) {
+  if (fields.includes('degree')) {
     thesis.degree = DEGREE_TYPES.includes(patch.degree) ? patch.degree : thesis.degree;
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
+  if (fields.includes('status')) {
     thesis.status = THESIS_STATUSES.includes(patch.status) ? patch.status : thesis.status;
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'abstractZh')) {
+  if (fields.includes('abstractZh')) {
     thesis.abstractZh = normalizeText(patch.abstractZh);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'abstractEn')) {
+  if (fields.includes('abstractEn')) {
     thesis.abstractEn = normalizeText(patch.abstractEn);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'keywords')) {
+  if (fields.includes('keywords')) {
     thesis.keywords = Array.isArray(patch.keywords) ? patch.keywords.map(normalizeText).filter(Boolean) : thesis.keywords;
   }
   touchThesis(thesis);
@@ -1343,7 +1356,7 @@ function addPomodoroSession(duration, articleId = '', sectionType = '') {
   // Keep only last 365 days
   const oneYearAgo = localIsoDate(new Date(Date.now() - 365 * 86400000));
   database.pomodoroSessions = database.pomodoroSessions.filter(
-    s => s.startTime >= oneYearAgo
+    s => localIsoDate(new Date(s.startTime)) >= oneYearAgo
   );
   
   writeDatabase(database);
@@ -1355,7 +1368,7 @@ function getPomodoroStats() {
   const sessions = database.pomodoroSessions || [];
   const today = localIsoDate();
   
-  const todaySessions = sessions.filter(s => s.startTime.startsWith(today));
+  const todaySessions = sessions.filter(s => localIsoDate(new Date(s.startTime)) === today);
   const todayMinutes = todaySessions.reduce((sum, s) => sum + s.duration, 0);
   const totalSessions = sessions.length;
   const totalMinutes = sessions.reduce((sum, s) => sum + s.duration, 0);
@@ -1558,10 +1571,16 @@ function updateWritingScenario(id, patch = {}) {
   }
 
   if (scenario.builtin) {
+    assertKnownPatch(patch, ['systemPromptAddon'], 'updateWritingScenario');
     if (Object.prototype.hasOwnProperty.call(patch, 'systemPromptAddon')) {
       scenario.systemPromptAddon = patch.systemPromptAddon;
     }
   } else {
+    assertKnownPatch(
+      patch,
+      ['name', 'description', 'triggerSection', 'systemPromptAddon', 'enabled'],
+      'updateWritingScenario',
+    );
     Object.assign(scenario, patch);
   }
 
@@ -1998,13 +2017,35 @@ function loadState() {
   };
 }
 
+function assertKnownPatch(patch, allowedKeys, operationName) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+    throw new Error(`${operationName}: patch must be an object`);
+  }
+  const keys = Object.keys(patch);
+  const unknown = keys.filter((key) => !allowedKeys.includes(key));
+  if (unknown.length > 0) {
+    throw new Error(`${operationName}: 未识别字段 ${unknown.join(', ')}。允许字段: ${allowedKeys.join(' / ')}`);
+  }
+  if (keys.length === 0) {
+    throw new Error(`${operationName}: patch cannot be empty`);
+  }
+  return keys;
+}
+
 function updateArticleMeta(articleId, patch) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
+  const fields = assertKnownPatch(patch, ['title', 'targetJournal', 'status'], 'updateArticleMeta');
 
-  article.title = normalizeText(patch.title) || article.title;
-  article.targetJournal = normalizeText(patch.targetJournal);
-  article.status = ARTICLE_STATUSES.includes(patch.status) ? patch.status : article.status;
+  if (fields.includes('title')) {
+    article.title = normalizeText(patch.title) || article.title;
+  }
+  if (fields.includes('targetJournal')) {
+    article.targetJournal = normalizeText(patch.targetJournal);
+  }
+  if (fields.includes('status')) {
+    article.status = ARTICLE_STATUSES.includes(patch.status) ? patch.status : article.status;
+  }
   touchArticle(article);
 
   writeDatabase(database);
@@ -2193,6 +2234,7 @@ function importManuscriptSections(articleId, sections = [], mode = 'append') {
     blockIds: [],
     commentIds: [],
     roundIds: [],
+    replacedSections: [],
   };
 
   for (const item of sections) {
@@ -2203,6 +2245,10 @@ function importManuscriptSections(articleId, sections = [], mode = 'append') {
     const section = findSection(article, sectionType);
     const blockId = createId();
     if (mode === 'replace') {
+      batch.replacedSections.push({
+        sectionId: section.id,
+        contentBlocks: section.contentBlocks.map((block) => ({ ...block })),
+      });
       const nonTextBlocks = section.contentBlocks.filter((block) => normalizeBlockType(block.type) !== 'Text');
       section.contentBlocks = [
         {
@@ -2687,6 +2733,11 @@ function updateProgressEntry(entryId, patch) {
   database.progressEntries = database.progressEntries || [];
   const idx = database.progressEntries.findIndex((e) => e.id === entryId);
   if (idx < 0) throw new Error('ProgressEntry not found');
+  assertKnownPatch(
+    patch,
+    ['date', 'articleId', 'kind', 'title', 'detail', 'sectionId', 'findingId', 'citationId', 'minutesSpent'],
+    'updateProgressEntry',
+  );
 
   const existing = database.progressEntries[idx];
   const merged = normalizeProgressEntry({ ...existing, ...patch, id: existing.id });
@@ -2745,6 +2796,7 @@ function addFinding(articleId, sectionType, payload) {
 function updateFinding(articleId, findingId, patch) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
+  assertKnownPatch(patch, ['title', 'description', 'status'], 'updateFinding');
   let updated = null;
   for (const section of article.sections) {
     if (!Array.isArray(section.findings)) continue;
@@ -2923,21 +2975,26 @@ function updateReviewRound(articleId, roundId, patch = {}) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
   const round = article.reviewRounds.find((item) => item.id === roundId);
+  const fields = assertKnownPatch(
+    patch,
+    ['submittedAt', 'journalName', 'manuscriptNumber', 'reviewReceivedAt'],
+    'updateReviewRound',
+  );
 
   if (!round) {
     throw new Error('Review round not found');
   }
 
-  if (Object.prototype.hasOwnProperty.call(patch, 'submittedAt')) {
+  if (fields.includes('submittedAt')) {
     round.submittedAt = normalizeText(patch.submittedAt) || round.submittedAt;
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'journalName')) {
+  if (fields.includes('journalName')) {
     round.journalName = normalizeText(patch.journalName) || round.journalName;
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'manuscriptNumber')) {
+  if (fields.includes('manuscriptNumber')) {
     round.manuscriptNumber = normalizeText(patch.manuscriptNumber);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'reviewReceivedAt')) {
+  if (fields.includes('reviewReceivedAt')) {
     round.reviewReceivedAt = normalizeText(patch.reviewReceivedAt);
   }
 
@@ -3031,12 +3088,22 @@ function undoLastImportBatch(articleId) {
   const blockIds = new Set(batch.blockIds || []);
   const commentIds = new Set(batch.commentIds || []);
   const roundIds = new Set(batch.roundIds || []);
+  const replacedBySection = new Map(
+    (batch.replacedSections || []).map((entry) => [entry.sectionId, entry.contentBlocks || []]),
+  );
 
   for (const section of article.sections || []) {
     const before = section.contentBlocks.length;
-    section.contentBlocks = section.contentBlocks
-      .filter((block) => !blockIds.has(block.id))
-      .map((block, orderIndex) => ({ ...block, orderIndex }));
+    if (replacedBySection.has(section.id)) {
+      section.contentBlocks = (replacedBySection.get(section.id) || []).map((block, orderIndex) => ({
+        ...block,
+        orderIndex,
+      }));
+    } else {
+      section.contentBlocks = section.contentBlocks
+        .filter((block) => !blockIds.has(block.id))
+        .map((block, orderIndex) => ({ ...block, orderIndex }));
+    }
     if (section.contentBlocks.length !== before) {
       section.updatedAt = now();
     }

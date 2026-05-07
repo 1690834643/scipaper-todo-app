@@ -20,11 +20,11 @@ export interface ParsedReviewerGroup {
 const SECTION_ALIASES: Array<{ sectionType: SectionType; patterns: RegExp[]; title: string }> = [
   { sectionType: 'Title', title: 'Title', patterns: [/^title$/i, /^题目$/] },
   { sectionType: 'Abstract', title: 'Abstract', patterns: [/^abstract$/i, /^摘要$/] },
-  { sectionType: 'Introduction', title: 'Introduction', patterns: [/^introduction$/i, /^引言$/, /^前言$/] },
+  { sectionType: 'Introduction', title: 'Introduction', patterns: [/^introduction$/i, /^引言$/, /^前言$/, /^绪论$/] },
   {
     sectionType: 'MaterialsAndMethods',
     title: 'Materials and Methods',
-    patterns: [/^materials?\s+and\s+methods?$/i, /^methods?$/i, /^方法$/, /^材料与方法$/],
+    patterns: [/^materials?\s+and\s+methods?$/i, /^methods?$/i, /^方法$/, /^材料与方法$/, /^材料和方法$/],
   },
   { sectionType: 'Results', title: 'Results', patterns: [/^results?$/i, /^结果$/] },
   { sectionType: 'Discussion', title: 'Discussion', patterns: [/^discussion$/i, /^讨论$/] },
@@ -36,7 +36,12 @@ function cleanLines(text: string): string[] {
 }
 
 function normalizeHeading(line: string): string {
-  return line.replace(/^#+\s*/, '').replace(/^\d+(\.\d+)*[.)]?\s*/, '').replace(/[:：]\s*$/, '').trim()
+  return line
+    .replace(/^#+\s*/, '')
+    .replace(/^\d+(\.\d+)*[.)]?\s*/, '')
+    .replace(/(?<=[\u4e00-\u9fa5])\s*(?:[IVXLCDM]+|\d+)$/i, '')
+    .replace(/[:：]\s*$/, '')
+    .trim()
 }
 
 function matchSection(line: string) {

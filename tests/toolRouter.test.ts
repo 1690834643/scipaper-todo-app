@@ -99,4 +99,28 @@ describe('toolRouter section validation', () => {
       }),
     ).toEqual({ valid: true, errors: [] })
   })
+
+  it('rejects unknown nested patch fields', () => {
+    const result = validateArgs('update_article_meta', {
+      articleId: 'article-1',
+      patch: {
+        bogus: 'should not pass',
+      },
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors.join('\n')).toContain('unknown property: patch.bogus')
+  })
+
+  it('rejects non-integer values for integer schema fields', () => {
+    const result = validateArgs('update_progress_entry', {
+      entryId: 'entry-1',
+      patch: {
+        minutesSpent: 1.5,
+      },
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors.join('\n')).toContain('invalid type for patch.minutesSpent')
+  })
 })

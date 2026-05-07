@@ -756,6 +756,27 @@ describe('storage import workflows', () => {
     expect(imported?.sections.find((section) => section.type === 'Results')?.contentBlocks).toHaveLength(0)
   })
 
+  it('restores replaced section text when undoing a replace import batch', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    storage.addTextBlock(article.id, 'Results', 'Original result text that must survive undo.', 'original')
+    storage.importManuscriptSections(article.id, [
+      { sectionType: 'Results', content: 'Imported replacement result text.' },
+    ], 'replace')
+
+    let imported = storage.loadState().articles.find((item) => item.id === article.id)
+    expect(imported?.sections.find((section) => section.type === 'Results')?.contentBlocks.map((block) => block.content)).toEqual([
+      'Imported replacement result text.',
+    ])
+
+    storage.undoLastImportBatch(article.id)
+    imported = storage.loadState().articles.find((item) => item.id === article.id)
+    expect(imported?.sections.find((section) => section.type === 'Results')?.contentBlocks.map((block) => block.content)).toEqual([
+      'Original result text that must survive undo.',
+    ])
+  })
+
   it('allows unassigned daily progress entries', () => {
     const storage = loadStorage(makeHome())
 
@@ -768,5 +789,58 @@ describe('storage import workflows', () => {
     const entry = storage.loadState().progressEntries[0]
     expect(entry.articleId).toBe('')
     expect(entry.title).toBe('Unassigned idea')
+  })
+})
+
+describe('storage update guards', () => {
+  it('preserves target journal when updating only article title or status', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    storage.updateArticleMeta(article.id, { status: 'Submitted' })
+    storage.updateArticleMeta(article.id, { title: 'Renamed article' })
+
+    const updated = storage.loadState().articles.find((item) => item.id === article.id)
+    expect(updated?.title).toBe('Renamed article')
+    expect(updated?.status).toBe('Submitted')
+    expect(updated?.targetJournal).toBe('Journal')
+  })
+
+  it('rejects empty or unknown article metadata patches', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    expect(() => storage.updateArticleMeta(article.id, {})).toThrow(/未识别|field|patch/i)
+    expect(() => storage.updateArticleMeta(article.id, { bogus: 'x' })).toThrow(/未识别|field|patch/i)
+  })
+})
+
+describe('storage local-day statistics', () => {
+  it('counts pomodoro sessions by local calendar date instead of UTC date prefix', () => {
+    const storage = loadStorage(makeHome())
+    const RealDate = Date
+    const fixed = new RealDate(2026, 4, 7, 0, 30, 0)
+
+    class FixedDate extends RealDate {
+      constructor(...args: ConstructorParameters<typeof Date>) {
+        if (args.length === 0) {
+          super(fixed.getTime())
+        } else {
+          super(...args)
+        }
+      }
+
+      static now() {
+        return fixed.getTime()
+      }
+    }
+
+    globalThis.Date = FixedDate as DateConstructor
+    try {
+      storage.addPomodoroSession(25)
+      expect(storage.getPomodoroStats().todaySessions).toBe(1)
+    } finally {
+      globalThis.Date = RealDate
+    }
   })
 })
