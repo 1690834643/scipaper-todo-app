@@ -922,3 +922,375 @@ body.ai-drawer-open .focus-mode-stage.is-rail-open {
 
 /* ----- Pixel theme tweak ------------------------------------------------- */
 [data-theme="pixel"] .focus-mode-autocomplete { animation: none; }
+
+/* =========================================================================
+   v1.0.46 — Design package corrective pass for the REAL writing interface.
+   The supplied prototype used wp-* classes; the application uses
+   focus-mode-* classes. These overrides intentionally make "进入写作" visibly
+   match the iA Writer-style design without touching TipTap or data logic.
+   ========================================================================= */
+
+.focus-mode-shell {
+  position: relative;
+  min-height: calc(100vh - 180px);
+  background: var(--c-bg);
+  overflow: hidden;
+}
+
+.focus-mode-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--c-line) 24%, transparent) 0 1px, transparent 1px) center / 64px 64px,
+    linear-gradient(0deg, color-mix(in srgb, var(--c-line) 18%, transparent) 0 1px, transparent 1px) center / 64px 64px;
+  opacity: .28;
+}
+
+.focus-mode-header,
+.focus-mode-stage,
+.focus-mode-footer {
+  position: relative;
+  z-index: 1;
+}
+
+.focus-mode-header {
+  min-height: 58px;
+  padding: 10px 28px;
+  background: color-mix(in srgb, var(--c-bg) 92%, var(--c-panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.focus-mode-header-side:first-child {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.focus-mode-section-tag {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.focus-mode-article-title {
+  max-width: min(42vw, 520px);
+  color: var(--c-ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.focus-mode-header-center {
+  align-items: center;
+  gap: 7px;
+  min-width: 86px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: var(--c-panel-sub);
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.focus-mode-save-dot {
+  width: 7px;
+  height: 7px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.focus-mode-save-label {
+  white-space: nowrap;
+}
+
+.focus-mode-header-side--right {
+  gap: 5px;
+}
+
+.focus-mode-icon-button,
+.focus-mode-font-select,
+.focus-mode-exit {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-ink-muted);
+  box-shadow: none;
+}
+
+.focus-mode-icon-button:hover,
+.focus-mode-font-select:hover,
+.focus-mode-exit:hover {
+  background: var(--c-panel-sub);
+  color: var(--c-ink);
+  border-color: transparent;
+}
+
+.focus-mode-icon-button.is-active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+  border-color: transparent;
+}
+
+.focus-mode-stage {
+  background: transparent;
+  --focus-rail-width: 340px;
+}
+
+.focus-mode-canvas {
+  padding: 56px clamp(20px, 5vw, 72px) 96px;
+  scroll-behavior: smooth;
+}
+
+.focus-mode-canvas-pane--editor {
+  width: min(760px, 100%);
+  align-items: stretch;
+  padding: 0;
+}
+
+.focus-mode-block-name {
+  width: 100%;
+  margin: 0 0 34px;
+  padding: 0 0 14px;
+  color: var(--c-ink);
+  font-family: var(--font-heading);
+  font-size: clamp(28px, 3.4vw, 42px);
+  line-height: 1.18;
+  font-weight: var(--fw-semi);
+  border-bottom: 1px solid var(--c-line);
+  text-wrap: balance;
+}
+
+.focus-mode-block-name::placeholder {
+  color: var(--c-ink-faint);
+  font-style: normal;
+}
+
+.focus-mode-block-name:focus {
+  border-bottom-color: var(--c-accent);
+}
+
+.focus-mode-editor-host {
+  width: 100%;
+  min-height: 65vh;
+}
+
+.focus-mode-prose {
+  min-height: 65vh;
+  padding: 0 0 160px;
+  color: var(--c-ink);
+  font-family: var(--focus-font-override, var(--font-body));
+  font-size: var(--focus-font-size, 18px);
+  line-height: 1.78;
+}
+
+.focus-mode-prose p,
+.focus-mode-prose ul,
+.focus-mode-prose ol,
+.focus-mode-prose blockquote {
+  margin-bottom: 18px;
+  text-wrap: pretty;
+}
+
+.focus-mode-prose h2 {
+  position: relative;
+  margin: 48px 0 14px;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.focus-mode-prose h2::before {
+  content: "##";
+  position: absolute;
+  left: -42px;
+  top: 4px;
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  opacity: .5;
+}
+
+.focus-mode-prose h3 {
+  position: relative;
+  margin: 32px 0 10px;
+  font-size: 18px;
+}
+
+.focus-mode-prose h3::before {
+  content: "###";
+  position: absolute;
+  left: -48px;
+  top: 2px;
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  opacity: .5;
+}
+
+.focus-mode-prose blockquote {
+  padding: 4px 0 4px 18px;
+  border-left: 3px solid var(--c-accent);
+  color: var(--c-ink-muted);
+  font-size: .95em;
+}
+
+.focus-mode-rail {
+  margin: 18px 18px 18px 0;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--c-panel) 78%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+}
+
+.focus-mode-rail-section {
+  padding: 18px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.focus-mode-rail-header {
+  align-items: center;
+}
+
+.focus-mode-rail-header h3 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-md);
+}
+
+.focus-mode-rail-count,
+.focus-mode-rail-tag {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--c-panel-sub);
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.focus-mode-annotation {
+  border-radius: var(--r-md);
+  background: var(--c-panel);
+}
+
+.focus-mode-annotation-anchor {
+  border-left: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--c-panel-sub);
+}
+
+.focus-mode-footer {
+  min-height: 42px;
+  padding: 9px 28px;
+  background: color-mix(in srgb, var(--c-bg) 94%, var(--c-panel));
+  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.focus-mode-footer-stat {
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--c-panel-sub);
+  color: var(--c-ink-muted);
+}
+
+.focus-mode-footer-hint {
+  color: var(--c-ink-faint);
+}
+
+.focus-mode-canvas--split {
+  padding: 0;
+}
+
+.focus-mode-canvas--split > .focus-mode-canvas-pane--editor {
+  width: 100%;
+  padding: 44px clamp(20px, 5vw, 72px) 24px;
+}
+
+.focus-mode-canvas--split .focus-mode-editor-host,
+.focus-mode-canvas--split .focus-mode-block-name {
+  width: min(760px, 100%);
+}
+
+.focus-mode-canvas-pane--prev {
+  background: color-mix(in srgb, var(--c-panel) 62%, transparent);
+}
+
+.focus-mode-prev-body {
+  border-radius: var(--r-md);
+  border-color: var(--c-line);
+}
+
+@media (max-width: 1080px) {
+  .focus-mode-rail {
+    margin: 0 18px 18px;
+  }
+}
+
+@media (max-width: 760px) {
+  .focus-mode-header {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+    gap: var(--sp-2);
+  }
+
+  .focus-mode-header-center,
+  .focus-mode-header-side--right {
+    justify-content: flex-start;
+  }
+
+  .focus-mode-canvas {
+    padding: 36px 20px 80px;
+  }
+
+  .focus-mode-prose h2::before,
+  .focus-mode-prose h3::before {
+    display: none;
+  }
+}
+
+[data-theme="pixel"] .focus-mode-shell::before {
+  opacity: .5;
+}
+
+[data-theme="pixel"] .focus-mode-header,
+[data-theme="pixel"] .focus-mode-footer,
+[data-theme="pixel"] .focus-mode-rail,
+[data-theme="pixel"] .focus-mode-annotation-anchor {
+  border: 2px solid #000;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+[data-theme="pixel"] .focus-mode-header {
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+}
+
+[data-theme="pixel"] .focus-mode-footer {
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+[data-theme="pixel"] .focus-mode-icon-button,
+[data-theme="pixel"] .focus-mode-font-select,
+[data-theme="pixel"] .focus-mode-footer-stat,
+[data-theme="pixel"] .focus-mode-header-center {
+  border: 2px solid #000;
+  border-radius: 0;
+  background: #fff;
+}

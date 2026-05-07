@@ -768,6 +768,9 @@ export function FocusModeEditor({
         </div>
         <div className="focus-mode-header-center">
           <SaveDot state={saveState} />
+          <span className="focus-mode-save-label">
+            {saveState === 'saving' ? '保存中' : saveState === 'dirty' ? '未保存' : saveState === 'saved' ? '已保存' : '就绪'}
+          </span>
         </div>
         <div className="focus-mode-header-side focus-mode-header-side--right">
           {viewMode === 'edit' && previewSlot ? (

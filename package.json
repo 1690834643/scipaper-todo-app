@@ -1,7 +1,7 @@
 {
   "name": "scipaper-todo",
   "private": true,
-  "version": "1.0.45",
+  "version": "1.0.46",
   "description": "SciPaper Todo desktop app for local-first scientific manuscript management.",
   "author": "nee <ksjhunau@gmail.com>",
   "type": "module",
