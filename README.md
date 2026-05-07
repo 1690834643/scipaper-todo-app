@@ -88,6 +88,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 | 🔧 **下一轮六项使用修正**（1.0.42） | 导入助手可手动补漏识别的章节、审稿人和单条意见；AI Provider 支持添加并测试 / 保存并测试；大论文 Markdown 导出也显示可复制路径；稿件库显示筛选命中数并可一键清空；MCP 面板可复制启动命令；最近导出路径按当前小论文/大论文隔离 |
 | 🧾 **导入与大论文细节修正**（1.0.43） | 审稿意见导入前可填写期刊、稿件号、投稿日期、收到审稿日期；导入预览可移除误识别的正文章节、审稿人或单条意见；大论文关联小论文支持搜索；取消关联需二次确认；大论文章节空文本不会被保存 |
 | 🛡️ **P0/P1 逻辑漏洞修复**（1.0.44） | 替换式正文导入现在可真正撤销并恢复旧章节文本；AI/MCP 嵌套参数递归校验，未知 patch 不再静默成功；部分更新文章信息不会清空目标期刊；Pomodoro 今日统计按本地日期；自动批准不会绕过不可逆删除；中文大论文标题如“绪论 / 材料与方法”更稳地导入 |
+| 🎛️ **Claude Design UI 精修**（1.0.45） | 按用户提供的设计包选择性合并，不覆盖 1.0.44 逻辑修复；AI 抽屉新增常用任务快捷入口、模型/场景行和更清晰的输入框；正文/审稿导入预览、审稿意见分组、大论文章节块与关联小论文列表更易扫读 |
 
 ### 安装与使用
 
@@ -130,7 +131,7 @@ Screenshots are still being captured. Contributions welcome — drop 1080p PNGs 
 
 ### 发行版构建
 
-- **推荐方式**：推送 `v1.0.44` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
+- **推荐方式**：推送 `v1.0.45` 这类 tag 后，GitHub Actions 会运行测试、lint、Windows/macOS 打包，并把 `Setup` / `Portable` / `.dmg` / `.zip` / `.blockmap` 上传到 GitHub Release。
 - **手动方式**：在 GitHub 的 **Actions → Build & Release → Run workflow** 里触发，构建产物会作为 workflow artifact 上传；勾选 `publish` 时会发布到对应 tag 的 Release。
 - **本地 Windows**：`npm ci && npm run dist:win`。
 - **WSL/Linux 交叉打 Windows 包**：需要完整 Wine 32-bit 环境；否则会在 electron-builder 的 Windows 资源编辑步骤失败。一般直接用 GitHub Actions。
@@ -216,6 +217,7 @@ SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
 | 🔧 **Next six workflow fixes** (1.0.42) | Import assistant can manually add missed sections, reviewer groups, and comments. AI Providers support add-and-test / save-and-test. Thesis Markdown export shows a copyable path. Library shows match counts with one-click clear. MCP panel can copy the launch command. Recent export paths are scoped to the active article/thesis |
 | 🧾 **Import and thesis detail fixes** (1.0.43) | Review import now accepts journal name, manuscript number, submitted date, and review received date before writing. Import preview items can remove mistaken manuscript sections, reviewer groups, or individual comments. Thesis paper linking is searchable, unlinking asks for confirmation, and empty thesis text blocks are blocked |
 | 🛡️ **P0/P1 logic hardening** (1.0.44) | Replace-style manuscript imports now undo by restoring the previous section text. AI/MCP nested arguments are validated recursively, unknown patches no longer silently succeed, partial article metadata updates preserve target journals, Pomodoro daily stats use local dates, auto-approval cannot bypass irreversible deletes, and Chinese thesis headings import more reliably |
+| 🎛️ **Claude Design UI polish** (1.0.45) | Selectively merges the user-provided design package without overwriting 1.0.44 logic fixes. The AI drawer gets common-task shortcuts, clearer model/scenario rows, and a cleaner composer; manuscript/review import previews, review groups, thesis text blocks, and linked-paper rows are easier to scan |
 
 ### Install
 
@@ -258,7 +260,7 @@ SciPaperTodo-backup-2026-05-06T06-30-00-000Z.scipaper-backup.json
 
 ### Release Build
 
-- **Recommended**: push a tag such as `v1.0.44`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
+- **Recommended**: push a tag such as `v1.0.45`; GitHub Actions runs tests, lint, Windows/macOS packaging, then uploads `Setup`, `Portable`, `.dmg`, `.zip`, and `.blockmap` files to the GitHub Release.
 - **Manual**: run **Actions → Build & Release → Run workflow** in GitHub; artifacts are uploaded to the workflow run, and checking `publish` attaches them to the matching tag release.
 - **Local Windows**: `npm ci && npm run dist:win`.
 - **WSL/Linux cross-build**: requires a full 32-bit Wine setup for electron-builder's Windows resource editing. Use GitHub Actions unless you specifically need local packaging.

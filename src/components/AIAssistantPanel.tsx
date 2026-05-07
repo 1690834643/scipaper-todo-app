@@ -65,6 +65,23 @@ const STATUS_LABEL: Record<string, string> = {
 const WIDTH_KEY = 'scipaper.aiPanelWidth'
 const MIN_WIDTH = 320
 const MAX_WIDTH_RATIO = 0.7
+const EMPTY_PRESETS = [
+  {
+    label: '整理当前写作上下文',
+    hint: '汇总当前文章、章节和下一步可做事项',
+    prompt: '请根据当前上下文汇总这篇文章的状态，并列出下一步最值得做的 3 件事。',
+  },
+  {
+    label: '处理审稿意见',
+    hint: '列出未完成意见并生成修回顺序',
+    prompt: '请列出当前文章未完成的审稿意见，按优先级给出修回计划。',
+  },
+  {
+    label: '检查导入文本',
+    hint: '清理 Word/PDF 导入后的目录、断行和标题',
+    prompt: '我准备导入一段手稿或审稿意见，请帮我清理格式、去掉目录字段，并保留可识别的章节/审稿人结构。',
+  },
+]
 
 function readSavedWidth(): number {
   if (typeof window === 'undefined') return 420
@@ -210,11 +227,12 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
       <div className="ai-drawer-meta">
         {activeProvider && providers.length > 0 && onSwitchProvider ? (
           <div className="ai-drawer-meta-row">
+            <span className="ai-row-label">模型</span>
             <select
               value={activeProvider.id}
               onChange={(e) => onSwitchProvider(e.target.value)}
               disabled={busy}
-              style={{ flex: 1, fontSize: 'var(--fs-sm)', padding: '4px 8px', minWidth: 0 }}
+              className="ai-provider-select"
               title={busy ? '会话进行中,无法切换模型' : '切换 LLM 模型'}
             >
               {providers.map((p) => (
@@ -227,6 +245,7 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
           </div>
         ) : activeProvider ? (
           <div className="ai-drawer-meta-row">
+            <span className="ai-row-label">模型</span>
             <span>{activeProvider.name} · {activeProvider.model}</span>
             <span className="chip">{activeProvider.supportsToolUse ? '支持工具调用' : '纯文本'}</span>
           </div>
@@ -245,12 +264,12 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
         )}
 
         {onChangeScenario && (
-          <div className="ai-drawer-meta-row" style={{ marginTop: 'var(--sp-2)' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--c-ink-muted)' }}>写作场景:</span>
+          <div className="ai-drawer-meta-row ai-drawer-scenario-row">
+            <span className="ai-row-label">场景</span>
             <select
               value={currentScenarioId}
               onChange={(e) => onChangeScenario(e.target.value)}
-              style={{ flex: 1, fontSize: 'var(--fs-xs)', padding: '2px 6px' }}
+              className="ai-scenario-select"
             >
               <option value="auto">自动 (跟随当前章节)</option>
               <option value="off">关闭 (纯对话)</option>
@@ -265,8 +284,23 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
       <div ref={messagesRef} className="ai-drawer-messages">
         {messages.length === 0 && (
           <div className="ai-drawer-empty">
-            <p>跟 AI 说你想做什么。</p>
-            <p className="muted-text">举例: 列出我有哪些文章 / 给当前 Discussion 补一句回扣假设。</p>
+            <div className="ai-empty-mark">AI</div>
+            <h3>从当前稿件继续</h3>
+            <p className="muted-text">选择一个常用任务，或直接输入要 AI 帮你完成的事。</p>
+            <div className="ai-preset-list">
+              {EMPTY_PRESETS.map((preset) => (
+                <button
+                  className="ai-preset-button"
+                  disabled={busy || !activeProvider}
+                  key={preset.label}
+                  onClick={() => setInput(preset.prompt)}
+                  type="button"
+                >
+                  <span>{preset.label}</span>
+                  <small>{preset.hint}</small>
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((msg) => {
@@ -324,26 +358,33 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
       </div>
 
       <footer className="ai-drawer-footer">
-        <textarea
-          rows={3}
-          placeholder="跟 AI 说你想做什么。Enter 发送,Shift+Enter 换行。"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={!activeProvider || busy}
-        />
-        <div className="ai-drawer-footer-actions">
-          {busy && (
-            <button className="ghost-button" onClick={onCancel} type="button">中断</button>
-          )}
-          <button
-            className="primary-button"
-            disabled={!input.trim() || busy || !activeProvider}
-            onClick={handleSend}
-            type="button"
-          >
-            发送
-          </button>
+        <div className="ai-composer-frame">
+          <textarea
+            rows={3}
+            placeholder={activeProvider ? '输入任务。Enter 发送，Shift+Enter 换行。' : '先到 Settings 添加 LLM Provider。'}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={!activeProvider || busy}
+          />
+          <div className="ai-composer-foot">
+            <span className="ai-composer-meta">
+              {busy ? 'AI 正在处理，可中断' : activeProvider ? '会使用当前文章上下文' : '未配置模型'}
+            </span>
+            <div className="ai-drawer-footer-actions">
+              {busy && (
+                <button className="ghost-button" onClick={onCancel} type="button">中断</button>
+              )}
+              <button
+                className="primary-button"
+                disabled={!input.trim() || busy || !activeProvider}
+                onClick={handleSend}
+                type="button"
+              >
+                发送
+              </button>
+            </div>
+          </div>
         </div>
       </footer>
     </aside>,

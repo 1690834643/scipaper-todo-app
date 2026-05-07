@@ -270,7 +270,7 @@ export function ThesisDetailView({
           </div>
           <div className="plain-list">
             {thesis.sections.map((section) => (
-              <div key={section.id} className="revision-item">
+              <div key={section.id} className="revision-item thesis-section-item">
                 <div style={{ width: '100%' }}>
                   <strong>{section.title}</strong>
                   <p>{section.contentBlocks.length} 个内容块</p>
@@ -296,7 +296,7 @@ export function ThesisDetailView({
                   {section.contentBlocks.length > 0 ? (
                     <div className="plain-list" style={{ marginTop: 'var(--sp-3)' }}>
                       {section.contentBlocks.map((block) => (
-                        <div key={block.id} className="revision-item">
+                        <div key={block.id} className="revision-item thesis-block-item">
                           {block.type === 'Text' ? (
                             <div style={{ width: '100%' }}>
                               <label className="field">
@@ -352,7 +352,7 @@ export function ThesisDetailView({
               value={articleQuery}
               onChange={(event) => setArticleQuery(event.target.value)}
               placeholder="搜索小论文标题、期刊或状态"
-              style={{ minWidth: 260 }}
+              className="thesis-link-search"
             />
             {articleQuery.trim() ? (
               <button className="ghost-button" type="button" onClick={() => setArticleQuery('')}>
@@ -370,7 +370,7 @@ export function ThesisDetailView({
           ) : (
             <div className="plain-list">
               {visibleLinkedArticles.map((article) => (
-                <div key={article.id} className="revision-item">
+                <div key={article.id} className="revision-item thesis-article-row">
                   <div>
                     <strong>{article.title}</strong>
                     <p>{article.targetJournal || '未填写期刊'}</p>
@@ -395,7 +395,7 @@ export function ThesisDetailView({
               ) : (
                 <div className="plain-list">
                   {visibleAvailableArticles.map((article) => (
-                    <div key={article.id} className="revision-item">
+                    <div key={article.id} className="revision-item thesis-article-row">
                       <div>
                         <strong>{article.title}</strong>
                         <p>{article.targetJournal || '未填写期刊'}</p>

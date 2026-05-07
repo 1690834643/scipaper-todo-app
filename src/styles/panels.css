@@ -136,3 +136,108 @@
   background: #FFF;
   box-shadow: 3px 3px 0 #000;
 }
+
+/* ---------- Import assistant preview ---------- */
+.import-action-row,
+.import-reviewer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.import-action-row {
+  margin-top: var(--sp-3);
+}
+
+.import-action-row .muted-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-reviewer-head {
+  align-items: flex-end;
+  justify-content: space-between;
+  width: 100%;
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px dashed var(--c-line);
+}
+
+.import-reviewer-head .field {
+  flex: 1 1 220px;
+}
+
+.import-preview-card {
+  align-items: stretch;
+  background: var(--c-panel);
+}
+
+.import-preview-card--nested {
+  background: var(--c-panel-sub);
+}
+
+/* ---------- Thesis detail lists ---------- */
+.thesis-section-item,
+.thesis-block-item,
+.thesis-article-row {
+  align-items: stretch;
+  background: var(--c-panel);
+}
+
+.thesis-section-item > div,
+.thesis-block-item > div {
+  min-width: 0;
+}
+
+.thesis-block-item {
+  border-left: 3px solid var(--c-accent-soft);
+}
+
+.thesis-article-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.thesis-link-search {
+  min-width: min(260px, 100%);
+  flex: 1 1 260px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-input);
+  background: var(--c-panel);
+  color: var(--c-ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.thesis-link-search:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-soft);
+}
+
+@media (max-width: 720px) {
+  .import-reviewer-head,
+  .thesis-article-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+[data-theme="pixel"] .import-reviewer-head {
+  border-bottom: 2px dashed #000;
+}
+
+[data-theme="pixel"] .thesis-block-item {
+  border-left: 2px solid #000;
+}
+
+[data-theme="pixel"] .thesis-link-search {
+  border: 2px solid #000;
+  border-radius: 0;
+}

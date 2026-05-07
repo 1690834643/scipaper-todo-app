@@ -370,7 +370,7 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                   </label>
                 </div>
               ) : null}
-              <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', marginTop: 'var(--sp-3)' }}>
+              <div className="import-action-row">
                 <button className="ghost-button" onClick={chooseFile} type="button">选择 .txt/.md/.docx/.pdf 文件</button>
                 <button className="ghost-button" onClick={reformatWithAi} type="button" disabled={!text.trim() || reformatting}>
                   {reformatting ? 'AI 整理中...' : 'AI 重排版/清理'}
@@ -420,7 +420,7 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                 editableSections.length > 0 ? (
                   <div className="plain-list">
                     {editableSections.map((section, index) => (
-                      <div key={section.id} className="revision-item">
+                      <div key={section.id} className="revision-item import-preview-card">
                         <div className="form-grid">
                           <label className="checkbox-row">
                             <input
@@ -468,25 +468,29 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
               ) : editableReviewGroups.length > 0 ? (
                 <div className="plain-list">
                   {editableReviewGroups.map((group, groupIndex) => (
-                    <div key={group.id} className="revision-item">
-                      <label className="field">
-                        <span>审稿人</span>
-                        <input
-                          value={group.reviewerId}
-                          onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
-                            item.id === group.id ? { ...item, reviewerId: event.target.value } : item
-                          )))}
-                        />
-                      </label>
-                      <button className="ghost-button" type="button" onClick={() => addManualReviewComment(group.id)}>
-                        给该审稿人补一条意见
-                      </button>
-                      <button className="ghost-button danger" type="button" onClick={() => removeReviewerGroup(group.id)}>
-                        移出该审稿人
-                      </button>
+                    <div key={group.id} className="revision-item import-preview-card">
+                      <div className="import-reviewer-head">
+                        <label className="field">
+                          <span>审稿人</span>
+                          <input
+                            value={group.reviewerId}
+                            onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
+                              item.id === group.id ? { ...item, reviewerId: event.target.value } : item
+                            )))}
+                          />
+                        </label>
+                        <div className="inline-actions">
+                          <button className="ghost-button" type="button" onClick={() => addManualReviewComment(group.id)}>
+                            给该审稿人补一条意见
+                          </button>
+                          <button className="ghost-button danger" type="button" onClick={() => removeReviewerGroup(group.id)}>
+                            移出该审稿人
+                          </button>
+                        </div>
+                      </div>
                       <div className="plain-list" style={{ marginTop: 'var(--sp-2)' }}>
                         {group.comments.map((comment, commentIndex) => (
-                          <div key={comment.id} className="revision-item">
+                          <div key={comment.id} className="revision-item import-preview-card import-preview-card--nested">
                             <div className="form-grid">
                               <label className="checkbox-row">
                                 <input
