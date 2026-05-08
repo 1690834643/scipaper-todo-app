@@ -73,7 +73,7 @@ export function AppSidebar({
          * is visible to screen readers via aria-disabled. */}
         <button
           type='button'
-          className='home-sidebar-collapse'
+          className='btn ghost icon-only home-sidebar-collapse'
           onClick={onToggleCollapsed}
           disabled={!onToggleCollapsed}
           aria-disabled={!onToggleCollapsed}
@@ -185,10 +185,10 @@ export function AppSidebar({
           <>
             <p className='home-section-label' style={{ marginTop: 'var(--sp-5)' }}>Create</p>
             <div className='sidebar-create'>
-              <button className='ghost-button full-width' onClick={onNewArticle} type='button'>
+              <button className='btn ghost sm full-width' onClick={onNewArticle} type='button'>
                 + 新建小论文
               </button>
-              <button className='ghost-button full-width' onClick={onNewThesis} type='button'>
+              <button className='btn ghost sm full-width' onClick={onNewThesis} type='button'>
                 + 新建大论文
               </button>
             </div>

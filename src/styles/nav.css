@@ -5,6 +5,7 @@
    ========================================================================= */
 
 .section-nav {
+  --section-nav-collapsed-width: 58px;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
@@ -60,6 +61,7 @@
 .section-nav.is-collapsed {
   padding: var(--sp-2);
   align-items: stretch;
+  width: var(--section-nav-collapsed-width);
 }
 .nav-chip-glyph { display: none; }
 .section-nav.is-collapsed .nav-chip {
@@ -147,6 +149,84 @@
 .nav-chip.active em {
   background: var(--c-on-accent);
   color: var(--c-accent-strong);
+}
+
+/* =========================================================================
+   IMRaD dual-label nav chip — design pack §① v1.0.47.
+   Hide legacy .nav-chip-label / .nav-chip-glyph on the imrad variant in
+   expanded mode; show CN abbrev big + EN small stacked. Collapsed mode
+   re-uses .nav-chip-glyph (CN char) like the rest of the nav.
+   ========================================================================= */
+.nav-chip--imrad {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+}
+.nav-chip--imrad .imrad-cn {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  line-height: 1;
+  font-weight: var(--fw-semi);
+  color: var(--c-ink);
+  letter-spacing: 0;
+  flex: 0 0 auto;
+}
+.nav-chip--imrad .imrad-en {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-ink-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-chip--imrad.active .imrad-cn {
+  color: var(--c-accent-strong);
+}
+.nav-chip--imrad.active .imrad-en {
+  color: var(--c-accent-strong);
+}
+.nav-chip--imrad .nav-chip-count {
+  font-style: normal;
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-ink-faint);
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--c-ink) 6%, transparent);
+}
+.nav-chip--imrad.active .nav-chip-count {
+  background: var(--c-on-accent);
+  color: var(--c-accent-strong);
+}
+/* Hide the legacy single-line label/glyph when imrad mode is active in
+ * expanded sidebar. Collapsed mode rules below (.section-nav.is-collapsed)
+ * still apply via the existing rules — they re-show .nav-chip-glyph. */
+.section-nav:not(.is-collapsed) .nav-chip--imrad .nav-chip-label {
+  display: none;
+}
+.section-nav:not(.is-collapsed) .nav-chip--imrad .nav-chip-glyph {
+  display: none;
+}
+/* When collapsed: hide the dual-label and EN text, show only the CN char.
+ * Keep nav-chip-glyph visible (the existing collapsed-mode rule). */
+.section-nav.is-collapsed .nav-chip--imrad .imrad-cn,
+.section-nav.is-collapsed .nav-chip--imrad .imrad-en,
+.section-nav.is-collapsed .nav-chip--imrad .nav-chip-count {
+  display: none;
+}
+
+[data-theme="pixel"] .nav-chip--imrad .imrad-cn {
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+}
+[data-theme="pixel"] .nav-chip--imrad.active .imrad-cn,
+[data-theme="pixel"] .nav-chip--imrad.active .imrad-en {
+  color: #fff;
 }
 
 /* Pixel theme: chips are inverted blocks */

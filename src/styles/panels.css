@@ -60,6 +60,234 @@
   justify-content: center;
 }
 
+/* =========================================================================
+   Manuscript Dashboard preview card — design pack §① v1.0.47.
+   Two-line "进入写作" button + 图片/文件 add-row + 4-stat strip beneath head.
+   Selectors scope tightly under .composer-card.preview-card so they only
+   override the new layout, not the inline-actions block above.
+   ========================================================================= */
+.composer-card.preview-card {
+  padding: 0;
+  overflow: hidden;
+}
+.preview-head {
+  margin-bottom: 0;
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+.preview-meta {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.preview-title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semi);
+  letter-spacing: -0.01em;
+  margin: 4px 0 6px;
+}
+.preview-sub {
+  margin: 0;
+  color: var(--c-ink-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+.preview-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: stretch;
+  min-width: 280px;
+}
+
+.enter-writing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 10px 14px;
+  border: 1px solid var(--c-accent);
+  border-radius: var(--r-md);
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+  font: inherit;
+  cursor: pointer;
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+.enter-writing:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.ew-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.ew-label {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semi);
+  letter-spacing: 0.01em;
+}
+.ew-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  opacity: 0.78;
+  letter-spacing: 0.04em;
+}
+.ew-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.ew-kbd {
+  display: inline-flex;
+  gap: 2px;
+}
+.ew-arrow {
+  display: inline-flex;
+}
+
+/* Inline kbd glyph used in preview-sub + enter-writing. */
+.kbd-inline {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin: 0 1px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: inherit;
+  opacity: 0.85;
+}
+.preview-sub .kbd-inline {
+  background: var(--c-panel-sub);
+  border-color: var(--c-line);
+  color: var(--c-ink);
+  opacity: 1;
+}
+
+/* 图片 / 文件 连体 add-row. */
+.add-row {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 2px;
+  gap: 0;
+  align-self: stretch;
+}
+.add-btn {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--c-ink-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.add-btn:hover {
+  background: var(--c-panel-sub);
+  color: var(--c-ink);
+}
+.add-sep {
+  align-self: center;
+  width: 1px;
+  height: 16px;
+  background: var(--c-line);
+}
+
+/* Stats strip beneath the head — 4-up grid of label/value/trend. */
+.preview-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5) var(--sp-5);
+  border-top: 1px solid var(--c-line);
+  background: var(--c-panel-sub);
+}
+.preview-stats .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.preview-stats .stat-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-ink-faint);
+}
+.preview-stats .stat-value {
+  font-family: var(--font-heading);
+  font-size: 1.6rem;
+  font-weight: var(--fw-semi);
+  line-height: 1.05;
+  color: var(--c-ink);
+}
+.preview-stats .stat-trend {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--c-ink-muted);
+  letter-spacing: 0.02em;
+}
+.preview-stats .stat-trend.muted {
+  color: var(--c-ink-faint);
+}
+
+[data-theme="pixel"] .enter-writing {
+  border: 2px solid #000;
+  border-radius: 0;
+  background: #000;
+  color: #fff;
+  box-shadow: 4px 4px 0 #000;
+}
+[data-theme="pixel"] .enter-writing:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 #000;
+}
+[data-theme="pixel"] .add-row {
+  border: 2px solid #000;
+  border-radius: 0;
+  padding: 0;
+}
+[data-theme="pixel"] .add-btn {
+  border-radius: 0;
+}
+[data-theme="pixel"] .add-btn:hover {
+  background: #000;
+  color: #fff;
+}
+[data-theme="pixel"] .add-sep {
+  background: #000;
+}
+[data-theme="pixel"] .preview-stats {
+  border-top: 2px solid #000;
+}
+
+@media (max-width: 720px) {
+  .preview-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* ---------- Section heading (eyebrow + title + optional action) ---------- */
 .section-heading {
   display: flex;

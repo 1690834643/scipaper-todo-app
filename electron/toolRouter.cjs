@@ -4,6 +4,7 @@ const path = require('path');
 const storage = require('./storage.cjs');
 const { TOOLS } = require('./llmTools.cjs');
 const zoteroClient = require('./zoteroClient.cjs');
+const { stripHtml } = require('./htmlContent.cjs');
 
 // 安全：attach_file 接受任意 sourcePath（绝对路径）→ 历史无校验，LLM/MCP 输入可读取
 // 系统配置/凭据。这里限制为用户家目录、/tmp、WSL /mnt/<drive>/ 下，且拒绝典型敏感子目录。
@@ -119,9 +120,9 @@ const READ_DISPATCH = {
         .sort()
         .pop() || null;
       const firstSentence = (() => {
-        const firstText = textBlocks.find((block) => (block.content || '').trim().length > 0);
+        const firstText = textBlocks.find((block) => stripHtml(block.content || '').trim().length > 0);
         if (!firstText) return '';
-        const trimmed = firstText.content.replace(/\s+/g, ' ').trim();
+        const trimmed = stripHtml(firstText.content).replace(/\s+/g, ' ').trim();
         const cut = trimmed.split(/(?<=[.!?。！？])\s/)[0] || trimmed;
         return cut.length > 160 ? cut.slice(0, 160) + '…' : cut;
       })();
@@ -140,7 +141,7 @@ const READ_DISPATCH = {
     const section = (article.sections || []).find((item) => item.type === args.sectionType);
     if (!section) throw new Error('Section not found: ' + args.sectionType);
     const textBlocks = (section.contentBlocks || []).filter((block) => block.type === 'Text');
-    const joined = textBlocks.map((block) => block.content || '').join('\n\n').trim();
+    const joined = textBlocks.map((block) => stripHtml(block.content || '')).join('\n\n').trim();
     const wordCount = textBlocks.reduce((sum, block) => sum + countWords(block.content || ''), 0);
     const head = joined.length > 280 ? joined.slice(0, 280) + '…' : joined;
     const tail = joined.length > 560 ? '…' + joined.slice(-280) : '';
@@ -346,7 +347,10 @@ function countArticleWords(article) {
 
 function countWords(text) {
   if (typeof text !== 'string') return 0;
-  return (text.match(/[\u4e00-\u9fa5]/g) || []).length + (text.match(/[a-zA-Z]+/g) || []).length;
+  // block.content is HTML since v1.0.47; strip tags so attribute names don't
+  // inflate counts and AI section summaries don't echo markup.
+  const plain = stripHtml(text);
+  return (plain.match(/[\u4e00-\u9fa5]/g) || []).length + (plain.match(/[a-zA-Z]+/g) || []).length;
 }
 
 function typeMatches(value, expected) {

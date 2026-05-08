@@ -64,6 +64,25 @@ export function PomodoroTimer({
     return () => clearInterval(interval)
   }, [phase, duration])
 
+  // Broadcast timer state to anyone interested (FocusModeEditor's topbar chip
+  // is the first consumer). One global event channel per app — keeps this
+  // component standalone instead of dragging state up to App. Listeners get
+  // an initial snapshot when they mount via the {phase: 'idle'} dispatch on
+  // unmount/idle paths below.
+  useEffect(() => {
+    const totalSeconds = duration * 60
+    const remaining = phase === 'idle' ? totalSeconds : Math.max(0, totalSeconds - elapsed)
+    window.dispatchEvent(
+      new CustomEvent('scipaper:pomodoro', {
+        detail: {
+          phase,
+          remainingSec: remaining,
+          totalSec: totalSeconds,
+        },
+      }),
+    )
+  }, [phase, elapsed, duration])
+
   const isIdle = phase === 'idle'
   const isPaused = phase === 'paused'
   const totalSeconds = duration * 60

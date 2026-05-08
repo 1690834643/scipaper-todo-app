@@ -1,4 +1,5 @@
 import type { Article, Finding, ProgressEntry, Section, SectionType } from '../types'
+import { stripHtml } from '../utils/htmlContent'
 
 interface OutlineViewProps {
   article: Article
@@ -27,7 +28,7 @@ const FINDING_STATUS_LABELS: Record<Finding['status'], string> = {
 }
 
 function countWords(content: string) {
-  const text = content.trim()
+  const text = stripHtml(content).trim()
   if (!text) return 0
   return text.split(/\s+/).filter(Boolean).length
 }
@@ -46,10 +47,10 @@ function truncateText(value: string, maxLength: number) {
 }
 
 function getFirstSentence(section: Section) {
-  const textBlock = getTextBlocks(section).find((block) => block.content.trim())
+  const textBlock = getTextBlocks(section).find((block) => stripHtml(block.content).trim())
   if (!textBlock) return 'No text yet'
 
-  const normalized = textBlock.content.replace(/\s+/g, ' ').trim()
+  const normalized = stripHtml(textBlock.content).replace(/\s+/g, ' ').trim()
   const sentence = normalized.match(/^.*?[.!?。！？]/)?.[0] ?? normalized
   return truncateText(sentence, 80)
 }

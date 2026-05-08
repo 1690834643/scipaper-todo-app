@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ContentBlockVersion } from '../types'
+import { stripHtml } from '../utils/htmlContent'
 
 interface DiffViewerProps {
   versions: ContentBlockVersion[]
@@ -47,7 +48,11 @@ export function DiffViewer({ versions, currentContent, onRollback, compact = fal
     return diff
   }
 
-  const diff = selectedVersion ? computeDiff(selectedVersion.content, currentContent) : []
+  // Diff on the rendered text, not on raw HTML — tag noise dominates the
+  // line-based diff and hides actual prose changes from the user.
+  const diff = selectedVersion
+    ? computeDiff(stripHtml(selectedVersion.content), stripHtml(currentContent))
+    : []
 
   return (
     <section className={compact ? 'diff-viewer-compact' : 'panel-card'}>

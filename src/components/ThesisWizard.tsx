@@ -84,7 +84,7 @@ export function ThesisWizard({ open, busy, onClose, onSubmit }: ThesisWizardProp
           {STEP_LABELS.map((label, index) => (
             <div
               key={label}
-              className={`wizard-step ${index === step ? 'active' : ''} ${index < step ? 'done' : ''}`}
+              className={`wizard-step ${index === step ? 'active' : ''} ${index < step ? 'completed' : ''}`}
             >
               <span>{index + 1}</span>
               <strong>{label}</strong>

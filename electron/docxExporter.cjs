@@ -2,6 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const { stripHtml } = require('./htmlContent.cjs');
 const {
   Document,
   Packer,
@@ -279,7 +280,7 @@ async function buildItalicMarkMap(article, signal) {
       if ((block.type || '').toLowerCase() !== 'text') continue;
       const id = block.id;
       jobs.push(
-        applyItalicMarks(block.content || '', guide.prompt, undefined, signal).then((marked) => {
+        applyItalicMarks(stripHtml(block.content || ''), guide.prompt, undefined, signal).then((marked) => {
           map.set(id, marked);
         })
       );
@@ -419,7 +420,8 @@ function buildDocument(article, spec, italicMap) {
       const blockType = (block.type || '').toLowerCase();
 
       if (blockType === 'text') {
-        const content = marks.has(block.id) ? marks.get(block.id) : (block.content || '');
+        // block.content is HTML since v1.0.47; render plain prose for docx.
+        const content = marks.has(block.id) ? marks.get(block.id) : stripHtml(block.content || '');
         const indent = isReferences ? { left: 720, hanging: 720 } : { firstLine: spec.firstLineIndentTwips };
         const paras = bodyParagraph(content, spec, indent, citeMap);
         children.push(...paras);

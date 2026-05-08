@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { ArticleWizard } from './components/ArticleWizard'
 import { CitationManager } from './components/CitationManager'
 import { OutlineView } from './components/OutlineView'
@@ -13,6 +13,7 @@ import { LibraryView } from './components/LibraryView'
 import { DailyLogView } from './components/DailyLogView'
 import { SettingsView } from './components/SettingsView'
 import { AppSidebar, type AppRoute } from './components/AppSidebar'
+import { ArticleRightRail } from './components/ArticleRightRail'
 import { AIAssistantPanel, type AssistantMessage } from './components/AIAssistantPanel'
 import { ApprovalDialog } from './components/ApprovalDialog'
 import { SplashScreen } from './components/SplashScreen'
@@ -20,10 +21,10 @@ import { ShareCard } from './components/ShareCard'
 import { ImportAssistantModal } from './components/ImportAssistantModal'
 import { ThesisDetailView } from './components/ThesisDetailView'
 import { pickJoke, pickAnalogy } from './utils/jokesAndAnalogies'
-import type { AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, UpdateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig, VocabPack, VocabPackSummary, SciSection, SciPhrase } from './types'
+import type { AnnotationAuthor, AnnotationStatus, AppState, ArticleStatus, CreateArticlePayload, CreateThesisPayload, UpdateThesisPayload, LlmPreset, LlmProvider, McpInfo, MoodType, ProgressEntryKind, SectionType, TagColor, ThemeType, WritingStats as WritingStatsType, ApprovalRequest, WritingScenario, ItalicGuide, ZoteroConfig, VocabPack, VocabPackSummary, SciSection, SciPhrase } from './types'
 import { BUILTIN_PACKS, aggregatePackWords, aggregatePackPhrases } from './data/sci-vocab'
 import type { BibTeXEntry } from './utils/bibtexParser'
-import { ARTICLE_STATUS_LABEL_ZH } from './utils/articleUtils'
+import { ARTICLE_STATUS_LABEL_ZH, relativeTime } from './utils/articleUtils'
 import { localIsoDate } from './utils/dateUtils'
 
 const SECTION_LABELS: Record<SectionType, string> = {
@@ -34,6 +35,27 @@ const SECTION_LABELS: Record<SectionType, string> = {
   Results: '结果',
   Discussion: '讨论',
   References: '参考文献',
+}
+
+// Single-char CN abbreviations + EN full names — design pack §① IMRaD rail
+// dual-label treatment. Used by section-nav chips to render CN big / EN small.
+const SECTION_ABBREV_CN: Record<SectionType, string> = {
+  Title: '题',
+  Abstract: '摘',
+  Introduction: '前',
+  MaterialsAndMethods: '材',
+  Results: '结',
+  Discussion: '讨',
+  References: '参',
+}
+const SECTION_ABBREV_EN: Record<SectionType, string> = {
+  Title: 'Title',
+  Abstract: 'Abstract',
+  Introduction: 'Intro',
+  MaterialsAndMethods: 'Methods',
+  Results: 'Results',
+  Discussion: 'Discuss',
+  References: 'Refs',
 }
 
 type ArticleTab = SectionType | 'ResearchContext' | 'Outline' | 'Citations' | 'Review' | 'Tags'
@@ -120,6 +142,24 @@ function App() {
     }
   }, [sidebarCollapsed])
 
+  const [rightRailOpen, setRightRailOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      const saved = window.localStorage.getItem('scipaper.articleRightRailOpen')
+      // Default open — but respect explicit '0' (user collapsed it).
+      return saved !== '0'
+    } catch {
+      return true
+    }
+  })
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('scipaper.articleRightRailOpen', rightRailOpen ? '1' : '0')
+    } catch {
+      // Ignore preference persistence failures.
+    }
+  }, [rightRailOpen])
+
   const [sectionNavCollapsed, setSectionNavCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     try { return window.localStorage.getItem('scipaper.sectionNavCollapsed') === '1' } catch { return false }
@@ -188,17 +228,6 @@ function App() {
   useEffect(() => {
     setFocusViewMode('preview')
   }, [articleTab])
-
-  // Entering edit mode (writing) → reclaim screen for the canvas: collapse
-  // both left columns and pop the AI drawer. User can still manually expand
-  // them back during the session if they want to see the nav.
-  useEffect(() => {
-    if (focusViewMode === 'edit') {
-      setSidebarCollapsed(true)
-      setSectionNavCollapsed(true)
-      setAiOpen(true)
-    }
-  }, [focusViewMode])
 
   // Leaving the article route while focusViewMode is still 'edit' would carry
   // immersive collapse semantics into Home/Daily/Settings unexpectedly. Reset
@@ -365,11 +394,21 @@ function App() {
         event.preventDefault()
         setAiOpen(true)
       }
+
+      if (mod && (event.key === 'e' || event.key === 'E')) {
+        if (isInputFocused()) return
+        // Only fire when an article + section tab is active and we're not
+        // already in edit mode — Cmd+E is a "jump into writing" shortcut.
+        if (route === 'article' && isSectionTab(articleTab) && focusViewMode !== 'edit') {
+          event.preventDefault()
+          setFocusViewMode('edit')
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [theme, wizardOpen, thesisWizardOpen])
+  }, [theme, wizardOpen, thesisWizardOpen, route, articleTab, focusViewMode])
 
   // Load LLM providers on mount
   useEffect(() => {
@@ -1176,6 +1215,52 @@ function App() {
     }
   }
 
+  async function focusModeAddAnnotation(payload: {
+    anchorText: string
+    comment: string
+    author: AnnotationAuthor
+  }) {
+    if (!selectedArticle || !focusBlock) return
+    const next = await window.scipaper.addAnnotation(selectedArticle.id, focusBlock.id, payload)
+    setState(next)
+  }
+
+  async function focusModeUpdateAnnotation(
+    id: string,
+    patch: { comment?: string; status?: AnnotationStatus },
+  ) {
+    if (!selectedArticle) return
+    const next = await window.scipaper.updateAnnotation(selectedArticle.id, id, patch)
+    setState(next)
+  }
+
+  async function focusModeDeleteAnnotation(id: string) {
+    if (!selectedArticle) return
+    const next = await window.scipaper.deleteAnnotation(selectedArticle.id, id)
+    setState(next)
+  }
+
+  const handleOpenFocusAi = useCallback(() => {
+    setAiOpen(true)
+  }, [])
+
+  const handleExitFocusMode = useCallback(() => {
+    setFocusViewMode('preview')
+  }, [])
+
+  const handleRecordFocusVersion = useCallback(
+    async (changeDescription: string) => {
+      if (!selectedArticleId || !focusBlock) return
+      const next = await window.scipaper.recordBlockVersion(
+        selectedArticleId,
+        focusBlock.id,
+        changeDescription,
+      )
+      setState(next)
+    },
+    [selectedArticleId, focusBlock],
+  )
+
   function openArticle(id: string) {
     setSelectedArticleId(id)
     setSelectedThesisId(null)
@@ -1308,6 +1393,15 @@ function App() {
         scenarios={scenarios.filter((s) => s.enabled)}
         currentScenarioId={currentScenarioId}
         onChangeScenario={setCurrentScenarioId}
+        articleTitle={selectedArticle?.title}
+        onSwitchArticle={
+          selectedArticle
+            ? () => {
+                setAiOpen(false)
+                setRoute('library')
+              }
+            : undefined
+        }
       />
 
       <ImportAssistantModal
@@ -1331,6 +1425,31 @@ function App() {
         onApprove={(callId, alwaysAllow) => handleApprove(callId, alwaysAllow)}
         onReject={(callId) => handleReject(callId)}
       />
+
+      {focusViewMode === 'edit' && selectedArticle && focusSection ? (
+        <FocusModeEditor
+          // 强制按 block.id / section.id 切换时 remount。否则 dirty 守卫会
+          // 跳过覆盖，旧 block 的 ProseMirror 状态会被错位写到新 block 上。
+          key={`${focusSection.id}:${focusBlock?.id ?? 'empty'}`}
+          article={selectedArticle}
+          section={focusSection}
+          block={focusBlock}
+          annotations={focusBlock?.annotations ?? []}
+          onSave={focusModeSave}
+          onAddAnnotation={focusModeAddAnnotation}
+          onUpdateAnnotation={focusModeUpdateAnnotation}
+          onDeleteAnnotation={focusModeDeleteAnnotation}
+          onOpenAi={handleOpenFocusAi}
+          onExit={handleExitFocusMode}
+          onRecordVersion={handleRecordFocusVersion}
+          mergedWords={mergedVocabWords}
+          mergedPhrases={mergedVocabPhrases}
+          todayWords={state?.writingStreak?.todayWords ?? undefined}
+          dailyGoal={state?.writingStreak?.dailyGoal ?? undefined}
+          pomodoroToday={state?.pomodoroStats?.todaySessions ?? 0}
+          onAddPomodoro={handleAddPomodoro}
+        />
+      ) : null}
 
       {state ? (
         <ShareCard
@@ -1516,10 +1635,30 @@ function App() {
 
           {state && route === 'article' && selectedArticle ? (
             <div className="workspace article-view">
-              <header className={`workspace-top${metaExpanded ? '' : ' workspace-top--collapsed'}`}>
+              <header className={`workspace-top dash-head${metaExpanded ? '' : ' workspace-top--collapsed'}`}>
+                <div className="dash-head-top">
+                  <p className="eyebrow">manuscript dashboard</p>
+                  <span className="dash-status">
+                    <span className="status-dot" aria-hidden />
+                    {ARTICLE_STATUS_LABEL_ZH[selectedArticle.status]}
+                    {selectedArticle.reviewRounds && selectedArticle.reviewRounds.length > 0 ? (
+                      <> · 第 {selectedArticle.reviewRounds.length} 轮</>
+                    ) : null}
+                    {selectedArticle.updatedAt ? (
+                      <> · 上次保存 {relativeTime(selectedArticle.updatedAt)}</>
+                    ) : null}
+                  </span>
+                </div>
                 <div className="meta-heading">
-                  <p className="eyebrow">Manuscript Dashboard</p>
-                  <h2>{selectedArticle.title}</h2>
+                  <h2 className="dash-title">{selectedArticle.title}</h2>
+                  <p className="dash-journal">
+                    {selectedArticle.targetJournal ? (
+                      <span className="chip outline">{selectedArticle.targetJournal}</span>
+                    ) : null}
+                    <span className="chip neutral">
+                      Article · {ARTICLE_STATUS_LABEL_ZH[selectedArticle.status]}
+                    </span>
+                  </p>
                 </div>
                 <div className="meta-toggle-row">
                   <button
@@ -1530,6 +1669,16 @@ function App() {
                   >
                     {metaExpanded ? '收起基础信息' : '修改标题/期刊/状态'}
                   </button>
+                  {isSectionTab(articleTab) ? (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => setRightRailOpen((v) => !v)}
+                      title={rightRailOpen ? '收起右侧侧栏' : '展开右侧侧栏'}
+                    >
+                      {rightRailOpen ? '收起侧栏 →' : '← 侧栏'}
+                    </button>
+                  ) : null}
                 </div>
 
                 <div className="meta-grid">
@@ -1561,78 +1710,111 @@ function App() {
                   </label>
                 </div>
 
-                <div className="header-actions">
-                  {activeSection ? (
+                {/* Design pack §① 9-button cluster split into 3 groups:
+                    主行动 (continue/import) · 导出 (6 formats + docx settings) · 元信息 (save). */}
+                <div className="dash-toolbar">
+                  <div className="toolbar-row primary-row">
+                    {activeSection ? (
+                      <button
+                        className="btn primary lg"
+                        type="button"
+                        onClick={() => setFocusViewMode('edit')}
+                        title="进入沉浸式写作"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+                          <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        继续写 · {SECTION_LABELS[activeSection.type]}
+                      </button>
+                    ) : null}
+
+                    <span className="toolbar-divider" aria-hidden />
+
                     <button
-                      className="primary-button"
+                      className="btn"
                       type="button"
-                      onClick={() => setFocusViewMode('edit')}
+                      onClick={() => {
+                        setImportAssistantMode('manuscript')
+                        setImportAssistantOpen(true)
+                      }}
                     >
-                      继续写 {SECTION_LABELS[activeSection.type]}
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      导入正文 / 审稿
                     </button>
-                  ) : null}
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => {
-                      setImportAssistantMode('manuscript')
-                      setImportAssistantOpen(true)
-                    }}
-                  >
-                    导入正文/审稿
-                  </button>
-                  <button className="ghost-button" onClick={handleExportMarkdown} type="button">
-                    导出 Markdown
-                  </button>
-                  <select
-                    className="ghost-button"
-                    value={docxTemplate}
-                    onChange={(event) => setDocxTemplate(event.target.value)}
-                    title="docx 模板"
-                  >
-                    <option value="academic-en">通用学术 (英文)</option>
-                    <option value="thesis-zh">中文学位论文</option>
-                    <option value="nature">Nature 风格</option>
-                  </select>
-                  <label
-                    className="ghost-button"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-                    title={
-                      docxApplyItalic
-                        ? '导出前调 LLM 按拉丁/学名规范自动加斜体（按 Settings → 拉丁斜体规范 的 prompt）'
-                        : '勾选后导出前会调 LLM 给学名/拉丁短语等加斜体（成本更高、更慢）'
-                    }
-                  >
-                    <input
-                      type="checkbox"
-                      checked={docxApplyItalic}
-                      onChange={(event) => setDocxApplyItalic(event.target.checked)}
-                    />
-                    套斜体规范
-                  </label>
-                  <button
-                    className="ghost-button"
-                    disabled={docxBusy}
-                    onClick={handleExportDocx}
-                    type="button"
-                  >
-                    {docxBusy ? '导出中…' : '导出 docx'}
-                  </button>
-                  <button className="ghost-button" onClick={handleExportLatex} type="button" title="导出 LaTeX 工程（.tex + references.bib + 图片）">
-                    导出 LaTeX
-                  </button>
-                  <button className="ghost-button" onClick={handleExportHTML} type="button">
-                    导出 HTML
-                  </button>
-                  <button className="ghost-button" onClick={handleExportJSON} type="button">
-                    导出 JSON
-                  </button>
-                  <button className="ghost-button" onClick={handleCreateSharePackage} type="button">
-                    分享包
-                  </button>
-                  <button className="primary-button" disabled={busy} onClick={saveMeta} type="button">
-                    保存信息
-                  </button>
+
+                    <div className="export-group" role="group" aria-label="导出">
+                      <span className="export-label">导出</span>
+                      <div className="export-buttons">
+                        <button className="btn sm subtle" onClick={handleExportMarkdown} type="button">
+                          Markdown
+                        </button>
+                        <button
+                          className="btn sm subtle"
+                          disabled={docxBusy}
+                          onClick={handleExportDocx}
+                          type="button"
+                          title="导出 docx，可在元信息行配模板与斜体"
+                        >
+                          {docxBusy ? 'docx…' : 'docx'}
+                        </button>
+                        <button
+                          className="btn sm subtle"
+                          onClick={handleExportLatex}
+                          type="button"
+                          title="导出 LaTeX 工程（.tex + references.bib + 图片）"
+                        >
+                          LaTeX
+                        </button>
+                        <button className="btn sm subtle" onClick={handleExportHTML} type="button">
+                          HTML
+                        </button>
+                        <button className="btn sm subtle" onClick={handleExportJSON} type="button">
+                          JSON
+                        </button>
+                        <button className="btn sm subtle" onClick={handleCreateSharePackage} type="button">
+                          分享包
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="toolbar-row meta-row">
+                    <label className="select-inline">
+                      <span className="meta-label">模板</span>
+                      <select
+                        className="select sm"
+                        value={docxTemplate}
+                        onChange={(event) => setDocxTemplate(event.target.value)}
+                        title="docx 模板"
+                      >
+                        <option value="academic-en">通用学术 (英文)</option>
+                        <option value="thesis-zh">中文学位论文</option>
+                        <option value="nature">Nature 风格</option>
+                      </select>
+                    </label>
+                    <label
+                      className="checkbox-inline"
+                      title={
+                        docxApplyItalic
+                          ? '导出前调 LLM 按拉丁/学名规范自动加斜体（按 Settings → 拉丁斜体规范 的 prompt）'
+                          : '勾选后导出前会调 LLM 给学名/拉丁短语等加斜体（成本更高、更慢）'
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={docxApplyItalic}
+                        onChange={(event) => setDocxApplyItalic(event.target.checked)}
+                      />
+                      <span>套斜体规范</span>
+                      <span className="hint">导出前 LLM 自动给学名 / 拉丁短语 / 统计变量打斜体</span>
+                    </label>
+                    <span className="grow" />
+                    <button className="btn primary sm" disabled={busy} onClick={saveMeta} type="button">
+                      保存信息
+                    </button>
+                  </div>
                 </div>
                 {lastExport?.kind === 'article' && lastExport.id === selectedArticle.id ? (
                   <div className="notice-banner" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', justifyContent: 'space-between', marginTop: 'var(--sp-3)' }}>
@@ -1646,7 +1828,11 @@ function App() {
                 ) : null}
               </header>
 
-              <div className={`workspace-grid${sectionNavCollapsed ? ' is-nav-collapsed' : ''}`}>
+              <div
+                className={`workspace-grid${sectionNavCollapsed ? ' is-nav-collapsed' : ''}${
+                  rightRailOpen && isSectionTab(articleTab) ? ' is-rail-open' : ''
+                }`}
+              >
                 <nav className={`section-nav${sectionNavCollapsed ? ' is-collapsed' : ''}`}>
                   <button
                     type="button"
@@ -1658,18 +1844,21 @@ function App() {
                     {sectionNavCollapsed ? '»' : '«'}
                   </button>
 
-                  <div className="nav-group">
+                  <div className="nav-group nav-group--imrad">
                     {selectedArticle.sections.map((section) => (
                       <button
                         key={section.id}
-                        className={`nav-chip ${articleTab === section.type ? 'active' : ''}`}
+                        className={`nav-chip nav-chip--imrad ${articleTab === section.type ? 'active' : ''}`}
                         onClick={() => setArticleTab(section.type)}
                         type="button"
                         title={SECTION_LABELS[section.type]}
                       >
+                        <span className="imrad-cn" aria-hidden>{SECTION_ABBREV_CN[section.type]}</span>
+                        <span className="imrad-en">{SECTION_ABBREV_EN[section.type]}</span>
+                        <em className="nav-chip-count">{section.contentBlocks.length}</em>
+                        {/* Legacy fallback used by .is-collapsed icon-only mode. */}
                         <span className="nav-chip-label">{SECTION_LABELS[section.type]}</span>
-                        <span className="nav-chip-glyph" aria-hidden>{SECTION_LABELS[section.type].slice(0, 1)}</span>
-                        <em>{section.contentBlocks.length}</em>
+                        <span className="nav-chip-glyph" aria-hidden>{SECTION_ABBREV_CN[section.type]}</span>
                       </button>
                     ))}
                   </div>
@@ -1692,94 +1881,48 @@ function App() {
 
                 <section className="content-stage">
                   {activeSection && focusSection ? (
-                    <FocusModeEditor
-                      // 强制按 block.id / section.id 切换时 remount。否则 dirty
-                      // 守卫在 P0-6 加上后，外部 sync 会跳过覆盖，旧 block 的
-                      // ProseMirror 状态会被错位写到新 block 上。
-                      key={`${focusSection.id}:${focusBlock?.id ?? 'empty'}`}
+                    <SectionEditor
                       article={selectedArticle}
                       section={focusSection}
-                      block={focusBlock}
-                      annotations={focusBlock?.annotations ?? []}
-                      onSave={focusModeSave}
-                      onAddAnnotation={async (payload) => {
-                        if (!selectedArticleId || !focusBlock) return
-                        const next = await window.scipaper.addAnnotation(
-                          selectedArticleId,
-                          focusBlock.id,
-                          payload,
+                      onEnterEdit={() => setFocusViewMode('edit')}
+                      onAddImage={() =>
+                        mutate(
+                          () => window.scipaper.importAssetBlock(selectedArticle.id, focusSection.type, 'image'),
+                          '已添加图片附件',
                         )
-                        setState(next)
-                      }}
-                      onUpdateAnnotation={async (id, patch) => {
-                        if (!selectedArticleId) return
-                        const next = await window.scipaper.updateAnnotation(selectedArticleId, id, patch)
-                        setState(next)
-                      }}
-                      onDeleteAnnotation={async (id) => {
-                        if (!selectedArticleId) return
-                        const next = await window.scipaper.deleteAnnotation(selectedArticleId, id)
-                        setState(next)
-                      }}
-                      onExit={() => setFocusViewMode('preview')}
-                      onRecordVersion={async (changeDescription) => {
-                        if (!selectedArticleId || !focusBlock) return
-                        const next = await window.scipaper.recordBlockVersion(
-                          selectedArticleId,
-                          focusBlock.id,
-                          changeDescription,
+                      }
+                      onAddFile={() =>
+                        mutate(
+                          () => window.scipaper.importAssetBlock(selectedArticle.id, focusSection.type, 'file'),
+                          '已导入并备份文件',
                         )
-                        setState(next)
+                      }
+                      onDeleteBlock={(blockId) =>
+                        mutate(
+                          () => window.scipaper.deleteBlock(selectedArticle.id, blockId),
+                          '内容块已删除',
+                        )
+                      }
+                      onOpenAsset={async (blockId) => {
+                        await window.scipaper.openBlockAsset(selectedArticle.id, blockId)
                       }}
-                      viewMode={focusViewMode}
-                      onViewModeChange={setFocusViewMode}
-                      mergedWords={mergedVocabWords}
-                      mergedPhrases={mergedVocabPhrases}
-                      previewSlot={
-                        <SectionEditor
-                          article={selectedArticle}
-                          section={focusSection}
-                          onEnterEdit={() => setFocusViewMode('edit')}
-                          onAddImage={() =>
-                            mutate(
-                              () => window.scipaper.importAssetBlock(selectedArticle.id, focusSection.type, 'image'),
-                              '已添加图片附件',
-                            )
-                          }
-                          onAddFile={() =>
-                            mutate(
-                              () => window.scipaper.importAssetBlock(selectedArticle.id, focusSection.type, 'file'),
-                              '已导入并备份文件',
-                            )
-                          }
-                          onDeleteBlock={(blockId) =>
-                            mutate(
-                              () => window.scipaper.deleteBlock(selectedArticle.id, blockId),
-                              '内容块已删除',
-                            )
-                          }
-                          onOpenAsset={async (blockId) => {
-                            await window.scipaper.openBlockAsset(selectedArticle.id, blockId)
-                          }}
-                          onAddFinding={(title) =>
-                            mutate(
-                              () => window.scipaper.addFinding(selectedArticle.id, focusSection.type, { title }),
-                              '已新增 finding',
-                            )
-                          }
-                          onUpdateFinding={(findingId, patch) =>
-                            mutate(
-                              () => window.scipaper.updateFinding(selectedArticle.id, findingId, patch),
-                              'finding 已更新',
-                            )
-                          }
-                          onDeleteFinding={(findingId) =>
-                            mutate(
-                              () => window.scipaper.deleteFinding(selectedArticle.id, findingId),
-                              'finding 已删除',
-                            )
-                          }
-                        />
+                      onAddFinding={(title) =>
+                        mutate(
+                          () => window.scipaper.addFinding(selectedArticle.id, focusSection.type, { title }),
+                          '已新增 finding',
+                        )
+                      }
+                      onUpdateFinding={(findingId, patch) =>
+                        mutate(
+                          () => window.scipaper.updateFinding(selectedArticle.id, findingId, patch),
+                          'finding 已更新',
+                        )
+                      }
+                      onDeleteFinding={(findingId) =>
+                        mutate(
+                          () => window.scipaper.deleteFinding(selectedArticle.id, findingId),
+                          'finding 已删除',
+                        )
                       }
                     />
                   ) : null}
@@ -1885,6 +2028,16 @@ function App() {
                     />
                   ) : null}
                 </section>
+
+                {/* Right rail — only on Section tabs (Citations/Outline/Tags/Reviews
+                    keep the 2-column layout because they own the full content stage). */}
+                {isSectionTab(articleTab) && rightRailOpen ? (
+                  <ArticleRightRail
+                    article={selectedArticle}
+                    section={focusSection}
+                    focusBlock={focusBlock}
+                  />
+                ) : null}
               </div>
             </div>
           ) : null}

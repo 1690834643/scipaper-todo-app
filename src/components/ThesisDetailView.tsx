@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Article, ContentBlock, Thesis, ThesisStatus, UpdateThesisPayload } from '../types'
 import { THESIS_STATUS_LABEL_ZH } from '../utils/articleUtils'
+import { stripHtml } from '../utils/htmlContent'
 
 interface ThesisDetailViewProps {
   thesis: Thesis
@@ -88,12 +89,14 @@ export function ThesisDetailView({
       keywords: thesis.keywords,
     })
     setKeywordsText(thesis.keywords.join(', '))
+    // Thesis blocks edit as plain text; if FocusModeEditor (articles) ever
+    // writes HTML into a thesis block, strip on the way into the textarea.
     setBlockDrafts(
       Object.fromEntries(
         thesis.sections.flatMap((section) =>
           section.contentBlocks
             .filter((block): block is ContentBlock => block.type === 'Text')
-            .map((block) => [block.id, block.content]),
+            .map((block) => [block.id, stripHtml(block.content)]),
         ),
       ),
     )
@@ -129,7 +132,7 @@ export function ThesisDetailView({
   }
 
   async function saveTextBlock(block: ContentBlock) {
-    const content = (blockDrafts[block.id] ?? block.content).trim()
+    const content = (blockDrafts[block.id] ?? stripHtml(block.content)).trim()
     if (!content) return
     await onUpdateTextBlock(thesis.id, block.id, content, block.description)
   }
@@ -303,7 +306,7 @@ export function ThesisDetailView({
                                 <span>{block.description || '文本块'}</span>
                                 <textarea
                                   rows={4}
-                                  value={blockDrafts[block.id] ?? block.content}
+                                  value={blockDrafts[block.id] ?? stripHtml(block.content)}
                                   onChange={(event) => setBlockDrafts({ ...blockDrafts, [block.id]: event.target.value })}
                                 />
                               </label>
@@ -311,7 +314,7 @@ export function ThesisDetailView({
                                 <button
                                   className="ghost-button"
                                   type="button"
-                                  disabled={!(blockDrafts[block.id] ?? block.content).trim()}
+                                  disabled={!(blockDrafts[block.id] ?? stripHtml(block.content)).trim()}
                                   onClick={() => saveTextBlock(block)}
                                 >
                                   保存文本块

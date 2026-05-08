@@ -1,7 +1,7 @@
 {
   "name": "scipaper-todo",
   "private": true,
-  "version": "1.0.46",
+  "version": "1.0.48",
   "description": "SciPaper Todo desktop app for local-first scientific manuscript management.",
   "author": "nee <ksjhunau@gmail.com>",
   "type": "module",
@@ -20,6 +20,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
     "@tiptap/extension-highlight": "^3.22.5",
+    "@tiptap/extension-link": "^3.22.5",
     "@tiptap/extension-placeholder": "^3.22.5",
     "@tiptap/react": "^3.22.5",
     "@tiptap/starter-kit": "^3.22.5",
@@ -101,8 +102,20 @@
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "category": "public.app-category.productivity",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
