@@ -54,6 +54,7 @@ SciPaper Todo 的 AI 接入解决的是这个问题：
 | 上下文集中 | LLM 可以围绕同一篇文章读取章节、文本块、审稿意见、回复信、引用线索、Daily Log 和进度。 |
 | 操作对象清楚 | AI 面对的不是一大段粘贴文本，而是文章、章节、文本块、reviewer comment、revision response 这些明确对象。 |
 | 两种接入方式 | 应用内 API 适合直接在写作界面用；MCP 适合让 Claude Code、Codex、Cursor、Cline 等 agent 接管更复杂的整理和改写。 |
+| Zotero 文献桥接 | 外部 agent 通过 SciPaper Todo MCP 可以搜索本机 Zotero、读取条目详情、收藏夹和已索引全文。 |
 | 少复制粘贴 | 导入、拆块、改写、审稿回复和导出都围绕本地项目库走，不需要在多个工具之间来回搬文本。 |
 | 写入有边界 | 读写工具分开，写入类操作默认需要确认；你可以调整 auto-approve，但不建议一开始放太开。 |
 | 不绑死模型 | 支持 OpenAI-compatible、Anthropic-compatible 和 MCP 客户端；你可以按成本、速度、上下文窗口和写作质量换模型。 |
@@ -76,6 +77,7 @@ SciPaper Todo 的 AI 接入解决的是这个问题：
 | 补全词库 | 内置 11 个领域包，包括通用学术、分子生物、IMRaD、统计、生信、鳞翅目、性别决定、表观遗传 / RNA 等；可按需启用。 |
 | 自定义词库 | 支持从 `.txt` 或 `.json` 导入自己的词库 pack，也能通过 MCP 添加单词和短语。 |
 | 引用补全 | Focus mode 中用 `@` 触发引用候选，和写作补全共用同一套弹窗。 |
+| MCP 读 Zotero | Claude Code、Codex、Cursor、Cline 等 agent 可通过 SciPaper Todo MCP 搜索 Zotero 文献库、读取条目详情、列收藏夹、读收藏夹条目和全文索引。 |
 | 拉丁斜体规范 | 可自定义 italic prompt，让 LLM 处理物种学名、拉丁短语、统计变量；DOCX 导出也可勾选套用。 |
 | 写入审批 | 写入类 AI 工具默认需要确认；熟悉流程后可以在 Settings 打开自动批准。 |
 
@@ -195,11 +197,34 @@ AI 助手可以读取当前文章、章节、审稿意见、引用和进度上�
 
 写入类 AI 工具默认需要确认。你可以在 Settings 里调整 auto-approve 策略。
 
+### MCP + Zotero
+
+Zotero 是 SciPaper Todo 的关键 MCP 能力之一。链路是：
+
+```text
+Claude Code / Codex / Cursor / Cline
+  → SciPaper Todo MCP
+  → 本机 Zotero endpoint
+  → Zotero 文献库、收藏夹、条目详情、全文索引
+```
+
+配置后，外部 agent 可以直接调用这些工具：
+
+- `zotero_search_library`：按题名、作者或年份搜索文献，定位 `itemKey`。
+- `zotero_get_item_details`：读取题名、作者、期刊、DOI、摘要、附件摘要等。
+- `zotero_list_collections`：列出 Zotero 收藏夹。
+- `zotero_get_collection_items`：读取某个收藏夹下的条目。
+- `zotero_get_item_fulltext`：读取已索引 PDF / 附件全文内容。
+- `get_zotero_config` / `set_zotero_config`：查看或修改 Zotero 集成配置。
+
+这意味着 agent 写 Introduction、Discussion 或回复审稿人时，不需要你手动复制 Zotero 条目。它可以先搜本地文献库，再把候选文献带回当前论文上下文里。
+
 Settings 里还有几个和 AI 直接相关的模块：
 
 - `写作场景库`：管理内置场景和自定义 prompt。
 - `拉丁斜体规范`：自定义学名、拉丁短语、统计变量的斜体规则。
 - `补全词库`：启用内置词库包或导入自己的词库。
+- `Zotero 接入`：启用本机 Zotero endpoint，供内置 AI 和 MCP 工具读取文献库。
 - `AI 自动批准`：控制内置 AI 写入工具是否每次弹确认。
 
 内置 MCP 入口：
