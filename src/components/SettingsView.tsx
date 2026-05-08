@@ -430,7 +430,7 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
 
       <div className="module-grid">
         <button className="module-card" onClick={() => setActive('profile')} type="button">
-          <span className="module-card-icon" aria-hidden="true">☺</span>
+          <span className="module-card-icon" aria-hidden="true">ID</span>
           <h3 className="module-card-title">个人资料</h3>
           <p className="module-card-desc">显示在侧边栏与时间问候后的名字</p>
           <p className="module-card-status">
@@ -476,14 +476,14 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
         </button>
 
         <button className="module-card" onClick={() => setActive('italic')} type="button">
-          <span className="module-card-icon">𝐼</span>
+          <span className="module-card-icon">I</span>
           <h3 className="module-card-title">拉丁斜体规范</h3>
           <p className="module-card-desc">物种学名 / 拉丁短语 / 统计符号自动斜体</p>
           <p className="module-card-status">{props.italicGuide.enabled ? '已启用' : '未启用'}</p>
         </button>
 
         <button className="module-card" onClick={() => setActive('zotero')} type="button">
-          <span className="module-card-icon">𝒁</span>
+          <span className="module-card-icon">Z</span>
           <h3 className="module-card-title">Zotero 接入</h3>
           <p className="module-card-desc">直连本地 Zotero 6/7,搜索引文与笔记</p>
           <p className="module-card-status">
@@ -515,7 +515,7 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
         </button>
 
         <button className="module-card" onClick={() => setActive('vocabPacks')} type="button">
-          <span className="module-card-icon">𝑨</span>
+          <span className="module-card-icon">Aa</span>
           <h3 className="module-card-title">补全词库</h3>
           <p className="module-card-desc">11 个分领域内置 + 自定义导入，按需开关</p>
           <p className="module-card-status">

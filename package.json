@@ -1,7 +1,7 @@
 {
   "name": "scipaper-todo",
   "private": true,
-  "version": "1.0.48",
+  "version": "1.0.49",
   "description": "SciPaper Todo desktop app for local-first scientific manuscript management.",
   "author": "nee <ksjhunau@gmail.com>",
   "type": "module",
@@ -14,6 +14,7 @@
     "dist:mac": "npm run build && node ./node_modules/electron-builder/cli.js --mac --arm64 --x64",
     "dist:mac:arm64": "npm run build && node ./node_modules/electron-builder/cli.js --mac --arm64",
     "lint": "eslint src --max-warnings=0",
+    "promo:screenshots": "node ./node_modules/electron/cli.js scripts/generate-promo-screenshots.cjs",
     "test": "vitest run",
     "preview": "node ./node_modules/vite/bin/vite.js preview"
   },

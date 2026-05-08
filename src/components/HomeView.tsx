@@ -5,6 +5,7 @@ import {
   relativeTime,
 } from '../utils/articleUtils'
 import { localIsoDate } from '../utils/dateUtils'
+import { articleExcerpt } from '../utils/articleExcerpt'
 
 const HEATMAP_WEEKS = 16
 const HEATMAP_DAYS = HEATMAP_WEEKS * 7
@@ -109,18 +110,6 @@ function formatNow() {
   const hh = now.getHours().toString().padStart(2, '0')
   const mm = now.getMinutes().toString().padStart(2, '0')
   return `星期${weekday}, ${hh}:${mm}`
-}
-
-function articleExcerpt(article: Article): string {
-  for (const sec of article.sections) {
-    for (const blk of sec.contentBlocks) {
-      if (blk.type === 'Text' && blk.content && blk.content.trim()) {
-        const text = blk.content.replace(/\s+/g, ' ').trim()
-        return text.length > 220 ? text.slice(0, 220) + '…' : text
-      }
-    }
-  }
-  return '这篇稿子还没有正文。点开任何章节就能开始写。'
 }
 
 function unresolvedComments(article: Article): number {

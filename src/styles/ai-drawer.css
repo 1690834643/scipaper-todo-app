@@ -606,8 +606,9 @@ body.ai-drawer-open .article-right-rail {
   transform: translateY(-1px);
 }
 .module-card-icon {
-  font-size: 1.6rem;
-  line-height: 1;
+  min-height: 1.6rem;
+  font: 700 1.05rem/1 var(--font-mono);
+  letter-spacing: 0;
 }
 .module-card-title {
   font-size: var(--fs-md);

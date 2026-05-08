@@ -157,6 +157,7 @@
 }
 
 .library-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--c-panel);
@@ -171,6 +172,39 @@
 .library-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
+}
+
+.library-card-delete {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-panel) 88%, transparent);
+  color: var(--c-ink-muted);
+  cursor: pointer;
+  font: 600 14px/1 var(--font-ui);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity var(--t-fast), transform var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+
+.library-card:hover .library-card-delete,
+.library-card:focus-within .library-card-delete,
+.library-card-delete:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.library-card-delete:hover {
+  color: var(--c-danger);
+  border-color: color-mix(in srgb, var(--c-danger) 44%, var(--c-line));
 }
 
 .library-card-cover {

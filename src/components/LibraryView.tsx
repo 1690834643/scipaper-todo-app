@@ -212,7 +212,6 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
                     open()
                   }
                 }}
-                style={{ position: 'relative' }}
               >
                 <button
                   type="button"
@@ -234,24 +233,6 @@ export function LibraryView(props: LibraryViewProps): JSX.Element {
                   onKeyDown={(e) => {
                     // Don't let Enter/Space bubble to the parent (would open the card)
                     if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
-                  }}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    width: 44,
-                    height: 44,
-                    padding: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: '50%',
-                    border: '1px solid var(--c-line)',
-                    background: 'var(--c-panel)',
-                    color: 'var(--c-ink-muted)',
-                    cursor: 'pointer',
-                    fontSize: 16,
-                    lineHeight: 1,
                   }}
                 >
                   ✕
