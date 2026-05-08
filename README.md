@@ -6,7 +6,13 @@ SciPaper Todo 是一个本地优先的科研论文写作工作台。它不是普
 
 数据默认保存在你自己的电脑里，应用不依赖云端账号。LLM、MCP、Zotero、导入导出都是围绕同一个本地项目库工作。
 
-[下载最新版](https://github.com/1690834643/scipaper-todo-app/releases/latest) · Windows / macOS · Electron + React + local JSON storage
+[完整使用教程（含截图）](https://github.com/1690834643/scipaper-todo-app/wiki/User-Guide) · [下载最新版](https://github.com/1690834643/scipaper-todo-app/releases/latest) · [Wiki 首页](https://github.com/1690834643/scipaper-todo-app/wiki) · Windows / macOS
+
+## 第一次使用先看这里
+
+- [完整使用教程（含截图）](https://github.com/1690834643/scipaper-todo-app/wiki/User-Guide)：安装、LLM 接入、AI 写作功能、MCP + Zotero、导入导出和备份。
+- [MCP + Zotero 文献检索](https://github.com/1690834643/scipaper-todo-app/wiki/User-Guide#18-zotero-接入和-mcp-文献检索)：让 Claude Code、Codex、Cursor、Cline 等 agent 搜索本机 Zotero。
+- [下载最新版](https://github.com/1690834643/scipaper-todo-app/releases/latest)：Windows / macOS 安装包。
 
 ## 截图
 
