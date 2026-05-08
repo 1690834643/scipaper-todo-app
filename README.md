@@ -2,7 +2,9 @@
 
 SciPaper Todo 是一个本地优先的科研论文写作工作台。它不是普通 todo，也不是单纯的 Markdown 编辑器，而是把一篇论文从立题、写作、审稿、修回、导出到学位论文整理都当成一个长期项目来管理。
 
-数据默认保存在你自己的电脑里，应用不依赖云端账号。AI、MCP、Zotero、导入导出都是围绕同一个本地项目库工作。
+先说清楚：如果想获得它相对传统写作工具的价值，必须接入至少一个 LLM 工具。你可以在应用里配置 OpenAI-compatible / Anthropic-compatible API，也可以通过 MCP 接 Claude Code、Codex、Cursor、Cline、Roo Code、Continue、Windsurf 这类 agent。没有 LLM，它仍然能做本地论文管理、导入导出和备份，但这不是推荐用法，也不一定比 Word、Zotero、Notion 或普通 Markdown 流程更划算。
+
+数据默认保存在你自己的电脑里，应用不依赖云端账号。LLM、MCP、Zotero、导入导出都是围绕同一个本地项目库工作。
 
 [下载最新版](https://github.com/1690834643/scipaper-todo-app/releases/latest) · Windows / macOS · Electron + React + local JSON storage
 
@@ -28,8 +30,18 @@ SciPaper Todo 是一个本地优先的科研论文写作工作台。它不是普
 
 - 正在写小论文、综述、毕业论文或项目阶段报告的人。
 - 需要同时管理正文、审稿意见、回复信、参考文献、附件和每日进展的人。
-- 希望 AI 能读写本地论文项目，但又不想把所有数据交给云端工作台的人。
-- 使用 Claude Code、Cursor、Cline、Roo Code、Continue、Windsurf 等 MCP 客户端的人。
+- 愿意把 LLM 当成论文工作流一部分，而不是只把它当聊天窗口的人。
+- 希望 LLM 能读写本地论文项目，但又不想把所有数据交给云端工作台的人。
+- 使用 Claude Code、Codex、Cursor、Cline、Roo Code、Continue、Windsurf 等 MCP 客户端的人。
+
+## 它的优势和短板
+
+| 维度 | 说明 |
+|---|---|
+| 主要优势 | 把正文、审稿意见、回复信、附件、日志和导出放在同一个本地项目里，再交给 LLM 带上下文处理。 |
+| 最佳用法 | 必须接一个 LLM：应用内 API 配置，或 MCP agent。 |
+| 不适合 | 只想安静写字、完全不用 LLM、只需要最终排版的人。传统 Word / LaTeX / Markdown 可能更直接。 |
+| 需要接受 | 需要配置 API Key 或 MCP；AI 写入仍要人工确认；最终投稿格式可能还要回到 Word、LaTeX 或期刊模板里收尾。 |
 
 ## 核心工作流
 
@@ -136,7 +148,12 @@ Daily Log 用来记录科研日常，不只记录字数：
 
 ## AI 和 MCP
 
-SciPaper Todo 支持 OpenAI-compatible 和 Anthropic-compatible provider。AI 助手可以读取当前文章、章节、审稿意见、引用和进度上下文。
+SciPaper Todo 的核心用法是让 LLM 进入论文项目，而不是只在旁边聊天。要发挥它的价值，至少接一种 LLM 工具：
+
+- 应用内 API：配置 OpenAI-compatible 或 Anthropic-compatible provider。
+- MCP agent：接 Claude Code、Codex、Cursor、Cline、Roo Code、Continue、Windsurf 等支持 MCP 的工具。
+
+AI 助手可以读取当前文章、章节、审稿意见、引用和进度上下文。
 
 写入类 AI 工具默认需要确认。你可以在 Settings 里调整 auto-approve 策略。
 
