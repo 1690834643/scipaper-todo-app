@@ -6,6 +6,20 @@ Local-first desktop workspace for scientific manuscript writing, review response
 
 [下载最新版 / Latest release](https://github.com/1690834643/scipaper-todo-app/releases/latest) · Windows / macOS · Electron + React + local JSON storage
 
+## 产品截图 / Screenshots
+
+| 主页总览 | 稿件库 |
+|---|---|
+| ![SciPaper Todo home dashboard](docs/screenshots/promo-home-dashboard.png) | ![SciPaper Todo manuscript library](docs/screenshots/promo-library.png) |
+
+| 稿件工作区 | 沉浸写作 |
+|---|---|
+| ![SciPaper Todo article workspace](docs/screenshots/promo-article-workspace.png) | ![SciPaper Todo focus writing](docs/screenshots/promo-focus-writing.png) |
+
+| AI 助手 | 设置与集成 |
+|---|---|
+| ![SciPaper Todo focus writing with AI assistant](docs/screenshots/promo-focus-ai.png) | ![SciPaper Todo settings and integrations](docs/screenshots/promo-settings.png) |
+
 ## 中文说明
 
 ### 这是什么
