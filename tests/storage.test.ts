@@ -205,6 +205,29 @@ describe('storage derived data', () => {
     expect(updated?.keywords).toEqual([])
   })
 
+  it('imports, renames, toggles, and deletes custom vocab packs', () => {
+    const storage = loadStorage(makeHome())
+
+    const pack = storage.importVocabPack({
+      name: 'Custom writing pack',
+      description: 'temporary terms',
+      words: ['piRNA', 'doublesex'],
+      phrases: [{ trigger: 'wefind', text: 'we find that', label: 'we find' }],
+    })
+
+    expect(pack.id).toMatch(/^custom-/)
+    expect(storage.listVocabPacks().some((item) => item.id === pack.id && item.enabled)).toBe(true)
+
+    const renamed = storage.renameCustomVocabPack(pack.id, 'Renamed writing pack')
+    expect(renamed.name).toBe('Renamed writing pack')
+
+    const disabled = storage.setVocabPackEnabled(pack.id, false)
+    expect(disabled.find((item) => item.id === pack.id)?.enabled).toBe(false)
+
+    const afterDelete = storage.deleteCustomVocabPack(pack.id)
+    expect(afterDelete.some((item) => item.id === pack.id)).toBe(false)
+  })
+
   it('writes, edits, deletes, and exports thesis section text blocks', () => {
     const storage = loadStorage(makeHome())
     const thesis = storage.createThesis({
@@ -775,6 +798,23 @@ describe('storage import workflows', () => {
     expect(imported?.sections.find((section) => section.type === 'Results')?.contentBlocks.map((block) => block.content)).toEqual([
       'Original result text that must survive undo.',
     ])
+  })
+
+  it('exports reimportable markdown with section and text block markers', () => {
+    const storage = loadStorage(makeHome())
+    const article = createSmokeArticle(storage)
+
+    storage.addTextBlock(article.id, 'Results', 'First result block.', 'first')
+    storage.addTextBlock(article.id, 'Results', 'Second result block.', 'second')
+
+    const exportPath = storage.exportReimportableMarkdown(article.id)
+    const markdown = fs.readFileSync(exportPath, 'utf-8')
+
+    expect(markdown).toContain('<!-- scipaper:section Results -->')
+    expect(markdown).toContain('<!-- scipaper:block text')
+    expect(markdown).toContain('First result block.')
+    expect(markdown).toContain('Second result block.')
+    expect(markdown).toContain('<!-- /scipaper:block -->')
   })
 
   it('allows unassigned daily progress entries', () => {

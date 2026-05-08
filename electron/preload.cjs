@@ -32,6 +32,7 @@ const scipaperApi = {
   importAssetBlock: (articleId, sectionType, kind) =>
     ipcRenderer.invoke('block:importAsset', { articleId, sectionType, kind }),
   selectImportTextFile: () => ipcRenderer.invoke('import:selectTextFile'),
+  selectImportTextFiles: () => ipcRenderer.invoke('import:selectTextFiles'),
   importManuscriptSections: (articleId, sections, mode) =>
     ipcRenderer.invoke('import:manuscriptSections', { articleId, sections, mode }),
   importReviewComments: (articleId, payload) =>
@@ -60,6 +61,7 @@ const scipaperApi = {
   deleteRevision: (articleId, roundId, commentId, revisionId) =>
     ipcRenderer.invoke('review:deleteRevision', { articleId, roundId, commentId, revisionId }),
   exportMarkdown: (articleId) => ipcRenderer.invoke('article:exportMarkdown', { articleId }),
+  exportReimportableMarkdown: (articleId) => ipcRenderer.invoke('article:exportReimportableMarkdown', { articleId }),
   exportArticleDocx: (articleId, templateId, applyItalicGuide) =>
     ipcRenderer.invoke('article:exportDocx', { articleId, templateId, applyItalicGuide }),
   exportArticleLatex: (articleId) => ipcRenderer.invoke('article:exportLatex', { articleId }),

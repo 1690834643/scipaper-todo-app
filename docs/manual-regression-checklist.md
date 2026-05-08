@@ -7,11 +7,15 @@ Run this checklist before publishing a user-facing release.
 - Create a new small paper from the library or sidebar.
 - Open the paper and edit title, target journal, status, and research context.
 - Import a partial manuscript from Word/PDF/text through the manuscript import entry, then confirm sections land in the expected tabs.
+- Import two Markdown/text files in one import action and confirm both source names appear in the preview.
+- Import a Markdown Results file with "每章节一个块" and confirm Results becomes one text block.
+- Import the same Markdown with "按小标题拆块" and confirm subheadings become separate text blocks.
 - Use AI reformat/cleanup on imported text and confirm the cleaned text can be imported separately from image/file attachment import.
 - Open a text section, enter writing mode, type text, exit to preview, and confirm the saved text remains visible.
 - Add, edit, and delete a citation.
 - Add, edit, and delete a Daily Log/progress entry.
-- Export Markdown, DOCX, LaTeX, HTML, JSON, and share package where available.
+- Export readable Markdown, re-importable Markdown, DOCX, LaTeX, HTML, JSON, and share package where available.
+- Export re-importable Markdown, import it back into a disposable article, and confirm text-block boundaries are preserved.
 
 ## 2. Review Workflow
 - Open the Review tab of a small paper.
@@ -48,5 +52,6 @@ Run this checklist before publishing a user-facing release.
 - No blank screen.
 - No missing edit/delete controls for user-created objects.
 - No ambiguous import entry between manuscript/review import and image/file attachment import.
+- The article toolbar clearly separates 分享 MD, 回导 MD, docx, LaTeX, HTML, JSON, share, and backup/restore.
 - No stuck loading state after a failed operation.
 - No data loss after backup/restore rehearsal.

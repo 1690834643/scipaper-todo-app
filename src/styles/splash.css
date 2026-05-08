@@ -87,7 +87,7 @@ body.splash-active .app-shell {
   font-size: clamp(56px, 8vw, 96px);
   font-weight: 400;
   font-style: italic;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--c-ink);
   user-select: none;
 }

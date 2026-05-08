@@ -1113,10 +1113,22 @@ function App() {
     try {
       const exportPath = await window.scipaper.exportMarkdown(selectedArticle.id)
       setLastExport({ kind: 'article', id: selectedArticle.id, path: exportPath })
-      setNotice(`Markdown 导出成功：${exportPath}`)
+      setNotice(`分享 Markdown 导出成功：${exportPath}`)
     } catch (error) {
       console.error(error)
-      setNotice(error instanceof Error ? error.message : 'Markdown 导出失败')
+      setNotice(error instanceof Error ? error.message : '分享 Markdown 导出失败')
+    }
+  }
+
+  async function handleExportReimportableMarkdown() {
+    if (!selectedArticle) return
+    try {
+      const exportPath = await window.scipaper.exportReimportableMarkdown(selectedArticle.id)
+      setLastExport({ kind: 'article', id: selectedArticle.id, path: exportPath })
+      setNotice(`回导 Markdown 已导出：${exportPath}`)
+    } catch (error) {
+      console.error(error)
+      setNotice(error instanceof Error ? error.message : '回导 Markdown 导出失败')
     }
   }
 
@@ -1741,29 +1753,42 @@ function App() {
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
-                      导入正文 / 审稿
+                      导入正文/审稿
                     </button>
 
                     <div className="export-group" role="group" aria-label="导出">
                       <span className="export-label">导出</span>
                       <div className="export-buttons">
-                        <button className="btn sm subtle" onClick={handleExportMarkdown} type="button">
-                          Markdown
+                        <button
+                          className="btn sm subtle"
+                          onClick={handleExportMarkdown}
+                          type="button"
+                          title="分享 Markdown"
+                        >
+                          分享 MD
+                        </button>
+                        <button
+                          className="btn sm subtle"
+                          onClick={handleExportReimportableMarkdown}
+                          type="button"
+                          title="回导 Markdown"
+                        >
+                          回导 MD
                         </button>
                         <button
                           className="btn sm subtle"
                           disabled={docxBusy}
                           onClick={handleExportDocx}
                           type="button"
-                          title="导出 docx，可在元信息行配模板与斜体"
+                          title="DOCX"
                         >
-                          {docxBusy ? 'docx…' : 'docx'}
+                          {docxBusy ? 'DOCX…' : 'DOCX'}
                         </button>
                         <button
                           className="btn sm subtle"
                           onClick={handleExportLatex}
                           type="button"
-                          title="导出 LaTeX 工程（.tex + references.bib + 图片）"
+                          title="LaTeX"
                         >
                           LaTeX
                         </button>
@@ -1796,11 +1821,7 @@ function App() {
                     </label>
                     <label
                       className="checkbox-inline"
-                      title={
-                        docxApplyItalic
-                          ? '导出前调 LLM 按拉丁/学名规范自动加斜体（按 Settings → 拉丁斜体规范 的 prompt）'
-                          : '勾选后导出前会调 LLM 给学名/拉丁短语等加斜体（成本更高、更慢）'
-                      }
+                      title="套斜体规范"
                     >
                       <input
                         type="checkbox"
@@ -1808,7 +1829,6 @@ function App() {
                         onChange={(event) => setDocxApplyItalic(event.target.checked)}
                       />
                       <span>套斜体规范</span>
-                      <span className="hint">导出前 LLM 自动给学名 / 拉丁短语 / 统计变量打斜体</span>
                     </label>
                     <span className="grow" />
                     <button className="btn primary sm" disabled={busy} onClick={saveMeta} type="button">

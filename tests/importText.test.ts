@@ -140,4 +140,25 @@ describe('import text extraction', () => {
       fs.rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it('extracts multiple text import files with source names', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scipaper-multi-import-'))
+    const first = path.join(dir, 'results.md')
+    const second = path.join(dir, 'discussion.txt')
+    fs.writeFileSync(first, '## Results\n\nResult text.', 'utf-8')
+    fs.writeFileSync(second, '## Discussion\n\nDiscussion text.', 'utf-8')
+
+    try {
+      const { extractTextFromFiles } = require('../electron/importText.cjs') as {
+        extractTextFromFiles: (filePaths: string[]) => Array<{ filePath: string; fileName: string; text: string }>
+      }
+      expect(extractTextFromFiles([first, second]).map((file) => file.fileName)).toEqual(['results.md', 'discussion.txt'])
+      expect(extractTextFromFiles([first, second]).map((file) => file.text)).toEqual([
+        '## Results\n\nResult text.',
+        '## Discussion\n\nDiscussion text.',
+      ])
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

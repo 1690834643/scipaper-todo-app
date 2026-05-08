@@ -1403,7 +1403,7 @@ body.ai-drawer-open .focus-mode-stage.is-rail-open {
   font-size: clamp(1.75rem, 2.4vw + 1rem, 2.375rem);
   line-height: 1.18;
   font-weight: var(--fw-semi);
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   color: var(--c-ink);
 }
 .focus-mode-canvas-byline {

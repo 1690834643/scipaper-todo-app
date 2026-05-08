@@ -95,12 +95,12 @@ interface HomeViewProps {
 
 function timeOfDay() {
   const hour = new Date().getHours()
-  if (hour < 6) return { greeting: '深夜好', mood: '夜未央', period: 'night' }
-  if (hour < 12) return { greeting: '早上好', mood: '正清醒', period: 'morning' }
-  if (hour < 14) return { greeting: '中午好', mood: '正等候', period: 'noon' }
-  if (hour < 18) return { greeting: '下午好', mood: '正安静', period: 'afternoon' }
-  if (hour < 22) return { greeting: '晚上好', mood: '正温柔', period: 'evening' }
-  return { greeting: '夜深了', mood: '正寂静', period: 'late' }
+  if (hour < 6) return { greeting: '深夜好', mood: '正无声', period: 'night' }
+  if (hour < 12) return { greeting: '早上好', mood: '正显影', period: 'morning' }
+  if (hour < 14) return { greeting: '中午好', mood: '正成形', period: 'noon' }
+  if (hour < 18) return { greeting: '下午好', mood: '正沉潜', period: 'afternoon' }
+  if (hour < 22) return { greeting: '晚上好', mood: '正回响', period: 'evening' }
+  return { greeting: '夜深了', mood: '正未竟', period: 'late' }
 }
 
 function formatNow() {
@@ -217,7 +217,7 @@ export function HomeView({ state, onResume, onNavigate }: HomeViewProps) {
             <p className="home-hero-sub">
               {recent
                 ? `你最近在《${recent.title}》停笔。${recentSecProgress}% 章节有了内容,继续把它写完。`
-                : '一切都还是空白。点右边新建一篇,或先随便记一段。'}
+                : '还没有稿件。先新建一篇文章或记录一项进展。'}
             </p>
             <p className="home-hero-aphorism">
               <span>"白纸从来不是白的:它已经在和你争论了。"</span>

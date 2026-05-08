@@ -374,8 +374,8 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
         {messages.length === 0 && (
           <div className="ai-drawer-empty">
             <div className="ai-empty-mark">AI</div>
-            <h3>从当前稿件继续</h3>
-            <p className="muted-text">选择一个常用任务，或直接输入要 AI 帮你完成的事。</p>
+            <h3>跟 AI 说你想做什么</h3>
+            <p className="muted-text">选择任务模板，或直接描述目标。</p>
             <div className="ai-preset-list">
               {EMPTY_PRESETS.map((preset) => (
                 <button
@@ -450,7 +450,7 @@ export function AIAssistantPanel(props: AIAssistantPanelProps): JSX.Element | nu
         <div className="ai-composer-frame">
           <textarea
             rows={3}
-            placeholder={activeProvider ? '输入任务。Enter 发送，Shift+Enter 换行。' : '先到 Settings 添加 LLM Provider。'}
+            placeholder={activeProvider ? '跟 AI 说你想做什么…' : '先添加 LLM Provider。'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

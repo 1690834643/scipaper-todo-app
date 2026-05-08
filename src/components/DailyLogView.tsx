@@ -9,7 +9,6 @@ import type {
 } from '../types'
 import { PomodoroTimer } from './PomodoroTimer'
 import { MoodTracker } from './MoodTracker'
-import { pickKickoffPlaceholder } from '../utils/jokesAndAnalogies'
 import { localIsoDate } from '../utils/dateUtils'
 
 const KIND_LABELS: Record<ProgressEntryKind, string> = {
@@ -118,7 +117,7 @@ export function DailyLogView({
   const [summaryDraft, setSummaryDraft] = useState(session?.summaryText || '')
   const [planJustSaved, setPlanJustSaved] = useState(false)
   const [summaryJustSaved, setSummaryJustSaved] = useState(false)
-  const [planPlaceholder] = useState(() => pickKickoffPlaceholder())
+  const [planPlaceholder] = useState('写下今天计划。')
   const [goalDraft, setGoalDraft] = useState(String(dailyGoal))
   const [goalEditing, setGoalEditing] = useState(false)
 
@@ -249,7 +248,7 @@ export function DailyLogView({
               <h1 className='home-hero-title'>今日 · {heroProgressTotal} 项进展</h1>
               <p className='home-hero-sub'>
                 {counts.length === 0
-                  ? '今天还没记。随便写一条都比空白强。'
+                  ? '今天还没有进展记录。'
                   : counts.map((c) => `${KIND_LABELS[c.kind]} ${c.n}`).join('  ·  ')}
                 <button className='daily-log-share-link' type='button' onClick={onShareToday}>
                   · 生成今日海报 ↗
@@ -352,7 +351,7 @@ export function DailyLogView({
               className='daily-log-plan'
               value={summaryDraft}
               onChange={(e) => setSummaryDraft(e.target.value)}
-              placeholder='今天大概干了啥，明天接着搞什么。可以空。'
+              placeholder='写下今天总结和明天接续事项。'
               rows={3}
             />
             <button className='primary-button' type='button' onClick={handleEndSession}>
@@ -395,7 +394,7 @@ export function DailyLogView({
             <input
               className='daily-log-input'
               type='text'
-              placeholder='一句话写下你刚做了什么…'
+              placeholder='记录一项进展…'
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               onKeyDown={(e) => {
@@ -416,7 +415,7 @@ export function DailyLogView({
           </div>
 
           {todayEntries.length === 0 ? (
-            <p className='daily-log-empty'>还没有记录。在上面写一笔，回车即可。</p>
+            <p className='daily-log-empty'>还没有记录。先添加一项进展。</p>
           ) : (
             <ul className='daily-log-timeline'>
               {todayEntries.map((entry) => (

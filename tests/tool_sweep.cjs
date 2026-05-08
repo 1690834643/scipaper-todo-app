@@ -36,7 +36,7 @@ async function call(name, args, expect = 'ok') {
 }
 
 async function main() {
-  let articleId, thesisId, blockId, roundId, commentId, citationId, tagId, findingId, scenarioId, progressId;
+  let articleId, thesisId, thesisSectionId, thesisBlockId, blockId, roundId, commentId, revisionId, citationId, tagId, findingId, scenarioId, progressId, vocabPackId;
 
   // ---- create_article ----
   let r = await call('create_article', {
@@ -101,6 +101,8 @@ async function main() {
   });
   r = await call('list_citations', { articleId });
   citationId = r.result[0].id;
+  await call('update_citation', { articleId, citationId, patch: { title: 'X updated', doi: '10.0000/sweep' } });
+  await call('delete_citation', { articleId, citationId });
 
   // ---- tags ----
   await call('add_tag', { articleId, tagName: 'urgent', tagColor: 'red' });
@@ -111,7 +113,7 @@ async function main() {
   else skipped.push('remove_tag (no tag id surfaced)');
 
   // ---- review round + comment + revision ----
-  await call('add_review_round', { articleId, payload: { roundNumber: 1, journal: 'J' } });
+  await call('add_review_round', { articleId, payload: { journalName: 'J. Sweep Review' } });
   r = await call('get_article', { articleId });
   roundId = r.result.reviewRounds[0].id;
   await call('add_review_comment', {
@@ -121,15 +123,29 @@ async function main() {
   });
   r = await call('list_pending_reviews', { articleId });
   commentId = r.result[0].commentId;
-  await call('add_revision', { articleId, roundId, commentId, payload: { responseText: 'resp', markCompleted: false } });
+  await call('update_review_round', { articleId, roundId, patch: { manuscriptNumber: 'SWP-001' } });
+  await call('add_revision', { articleId, roundId, commentId, payload: { description: 'changed Discussion', responseText: 'resp', markCompleted: false } });
+  r = await call('get_article', { articleId });
+  revisionId = r.result.reviewRounds[0].comments[0].revisions[0].id;
+  await call('update_revision', { articleId, roundId, commentId, revisionId, patch: { isVerified: true } });
+  await call('delete_revision', { articleId, roundId, commentId, revisionId });
   await call('update_review_comment_status', { articleId, roundId, commentId, status: 'Completed' });
 
   // ---- thesis ----
   await call('create_thesis', { title: 'Sweep thesis', degree: 'Master', author: 'A' });
   r = await call('list_theses', {});
   thesisId = r.result[0].id;
+  await call('get_thesis', { thesisId });
   await call('update_thesis_meta', { thesisId, patch: { status: 'InProgress' } });
   await call('add_thesis_section', { thesisId, sectionType: 'Chapter', title: 'Intro' });
+  r = await call('get_thesis', { thesisId });
+  thesisSectionId = r.result.sections.find((section) => section.type === 'Chapter')?.id || r.result.sections[0].id;
+  await call('add_thesis_text_block', { thesisId, sectionId: thesisSectionId, content: 'Thesis sweep text.', description: 'seed' });
+  r = await call('get_thesis', { thesisId });
+  thesisBlockId = r.result.sections.find((section) => section.id === thesisSectionId).contentBlocks[0].id;
+  await call('update_thesis_text_block', { thesisId, blockId: thesisBlockId, content: 'Thesis sweep text updated.', description: 'edit' });
+  await call('export_thesis', { thesisId, format: 'markdown' });
+  await call('delete_thesis_block', { thesisId, blockId: thesisBlockId });
   await call('link_article_to_thesis', { thesisId, articleId });
   await call('unlink_article_from_thesis', { thesisId, articleId });
 
@@ -190,6 +206,32 @@ async function main() {
   await call('set_zotero_config', { endpoint: 'http://localhost:23119', userId: '0', enabled: false });
   await call('get_zotero_config', {});
 
+  // ---- user profile + vocab ----
+  await call('get_user_profile', {});
+  await call('set_user_profile', { displayName: 'Sweep Tester' });
+  await call('list_vocab', {});
+  await call('add_vocab_word', { word: 'spermatheca' });
+  await call('remove_vocab_word', { word: 'spermatheca' });
+  await call('add_vocab_phrase', { trigger: 'weshow', text: 'we show that', label: 'we show that' });
+  await call('remove_vocab_phrase', { trigger: 'weshow', text: 'we show that' });
+  r = await call('list_vocab_packs', {});
+  const firstPack = (r.result || [])[0];
+  if (firstPack) await call('set_vocab_pack_enabled', { id: firstPack.id, enabled: false });
+  else skipped.push('set_vocab_pack_enabled (no pack surfaced)');
+  r = await call('import_vocab_pack', {
+    name: 'Sweep vocab',
+    description: 'temporary sweep pack',
+    words: ['sex-determination', 'piRNA'],
+    phrases: [{ trigger: 'wefind', text: 'we find that', label: 'we find' }],
+  });
+  vocabPackId = r.result && r.result.id;
+  if (vocabPackId) {
+    await call('rename_vocab_pack', { id: vocabPackId, name: 'Sweep vocab renamed' });
+    await call('delete_vocab_pack', { id: vocabPackId });
+  } else {
+    skipped.push('rename_vocab_pack / delete_vocab_pack (no imported pack id surfaced)');
+  }
+
   // ---- scenarios ----
   r = await call('add_scenario', { name: 'sweep-scn', systemPromptAddon: 'be terse', enabled: true });
   // addWritingScenario returns the new scenario; runTool wraps it
@@ -247,6 +289,9 @@ async function main() {
   const badEnum = await runTool('export_article', { articleId, format: 'yaml' });
   if (badEnum.ok || !/invalid enum/.test(badEnum.error || '')) failed.push({ name: 'validation:export_article', got: badEnum });
   else passed.push('validation:export_article(bad-enum)');
+
+  // ---- delete_article (very last, after article-scoped checks) ----
+  await call('delete_article', { articleId });
 
   // ---- Report ----
   const tested = new Set(passed.map((p) => p.split('(')[0].trim()));

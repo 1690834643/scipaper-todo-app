@@ -1,4 +1,5 @@
 import type { ReviewCommentType, SectionType } from '../types'
+import { parseMarkdownManuscript } from './markdownImportParser'
 
 export interface ParsedManuscriptSection {
   sectionType: SectionType
@@ -44,36 +45,12 @@ function normalizeHeading(line: string): string {
     .trim()
 }
 
-function matchSection(line: string) {
-  const heading = normalizeHeading(line)
-  return SECTION_ALIASES.find((entry) => entry.patterns.some((pattern) => pattern.test(heading)))
-}
-
 export function parseManuscriptDraft(text: string): ParsedManuscriptSection[] {
-  const lines = cleanLines(text)
-  const sections: ParsedManuscriptSection[] = []
-  let current: { sectionType: SectionType; title: string; lines: string[] } | null = null
-
-  for (const line of lines) {
-    const matched = matchSection(line)
-    if (matched) {
-      if (current) {
-        const content = current.lines.join('\n').trim()
-        if (content) sections.push({ sectionType: current.sectionType, title: current.title, content })
-      }
-      current = { sectionType: matched.sectionType, title: matched.title, lines: [] }
-      continue
-    }
-
-    if (current) current.lines.push(line)
-  }
-
-  if (current) {
-    const content = current.lines.join('\n').trim()
-    if (content) sections.push({ sectionType: current.sectionType, title: current.title, content })
-  }
-
-  return sections
+  return parseMarkdownManuscript(text, { strategy: 'section' }).map((block) => ({
+    sectionType: block.sectionType,
+    title: block.title,
+    content: block.content,
+  }))
 }
 
 function parseReviewerHeading(line: string): string | null {

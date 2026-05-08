@@ -144,8 +144,33 @@ function extractTextFromFile(filePath) {
   throw new Error('暂不支持该文件类型。请使用 .txt、.md、.docx 或文本型 .pdf。');
 }
 
+function validateImportFileSize(filePath) {
+  const stats = fs.statSync(filePath);
+  if (stats.size > 2 * 1024 * 1024) {
+    throw new Error(`${path.basename(filePath)} 超过 2MB，请先复制需要导入的主体文本。`);
+  }
+  return stats.size;
+}
+
+function extractTextFromFiles(filePaths) {
+  if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
+  let totalSize = 0;
+  return filePaths.map((filePath) => {
+    totalSize += validateImportFileSize(filePath);
+    if (totalSize > 8 * 1024 * 1024) {
+      throw new Error('本次导入文件总量超过 8MB，请分批导入。');
+    }
+    return {
+      filePath,
+      fileName: path.basename(filePath),
+      text: extractTextFromFile(filePath),
+    };
+  });
+}
+
 module.exports = {
   extractDocxText,
   extractPdfText,
   extractTextFromFile,
+  extractTextFromFiles,
 };

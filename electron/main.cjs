@@ -22,6 +22,7 @@ const {
   undoLastImportBatch,
   deleteBlock,
   exportMarkdown,
+  exportReimportableMarkdown,
   getArticleDirectory,
   getPreviewPayload,
   getWritingGuidance,
@@ -103,7 +104,7 @@ const {
   getDailySession,
 } = require('./storage.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
-const { extractTextFromFile } = require('./importText.cjs');
+const { extractTextFromFiles } = require('./importText.cjs');
 const {
   listProviders,
   addProvider: addProviderStorage,
@@ -455,6 +456,23 @@ function registerIpc() {
       }
     }),
   );
+  ipcMain.handle('import:selectTextFiles', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const dialogResult = await dialog.showOpenDialog(browserWindow, {
+      title: '选择要导入的文本文件',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Manuscript / Review text', extensions: ['txt', 'md', 'markdown', 'docx', 'pdf'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+
+    if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
+      return [];
+    }
+
+    return extractTextFromFiles(dialogResult.filePaths);
+  });
   ipcMain.handle('import:selectTextFile', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const dialogResult = await dialog.showOpenDialog(browserWindow, {
@@ -470,17 +488,7 @@ function registerIpc() {
       return null;
     }
 
-    const filePath = dialogResult.filePaths[0];
-    const stats = fs.statSync(filePath);
-    if (stats.size > 2 * 1024 * 1024) {
-      throw new Error('导入文件超过 2MB，请先复制需要导入的主体文本。');
-    }
-
-    return {
-      filePath,
-      fileName: path.basename(filePath),
-      text: extractTextFromFile(filePath),
-    };
+    return extractTextFromFiles([dialogResult.filePaths[0]])[0] || null;
   });
   ipcMain.handle(
     'import:manuscriptSections',
@@ -638,6 +646,11 @@ function registerIpc() {
   );
   ipcMain.handle('article:exportMarkdown', async (_event, { articleId }) => {
     const exportPath = exportMarkdown(articleId);
+    await shell.showItemInFolder(exportPath);
+    return exportPath;
+  });
+  ipcMain.handle('article:exportReimportableMarkdown', async (_event, { articleId }) => {
+    const exportPath = exportReimportableMarkdown(articleId);
     await shell.showItemInFolder(exportPath);
     return exportPath;
   });

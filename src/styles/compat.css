@@ -420,7 +420,7 @@
   font-weight: var(--fw-bold);
   color: var(--c-ink);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .duration-selector {

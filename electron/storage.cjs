@@ -2723,6 +2723,55 @@ function exportMarkdown(articleId) {
   return exportPath;
 }
 
+function escapeMarkerValue(value) {
+  return String(value || '').replace(/"/g, '&quot;').replace(/\n/g, ' ');
+}
+
+function exportReimportableMarkdown(articleId) {
+  const database = readDatabase();
+  const article = findArticle(database, articleId);
+  const articleRoot = createArticleFolder(articleId);
+  const exportDir = path.join(articleRoot, 'Exports');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const lines = [
+    `# ${article.title}`,
+    '',
+    '<!-- scipaper:format reimportable-markdown version=1 -->',
+    '',
+  ];
+
+  for (const section of article.sections.sort((left, right) => left.orderIndex - right.orderIndex)) {
+    lines.push(`<!-- scipaper:section ${section.type} -->`);
+    lines.push(`## ${section.type}`);
+    lines.push('');
+
+    for (const block of section.contentBlocks.sort((left, right) => left.orderIndex - right.orderIndex)) {
+      const blockType = normalizeBlockType(block.type);
+      if (blockType === 'Text') {
+        lines.push(`<!-- scipaper:block text blockId=${block.id} title="${escapeMarkerValue(block.description || section.type)}" -->`);
+        lines.push(block.content);
+        lines.push('<!-- /scipaper:block -->');
+        lines.push('');
+      } else if (blockType === 'Image') {
+        const assetPath = resolveBlockPath(article.id, block);
+        lines.push(`![${block.description || '图片'}](${assetPath})`);
+        lines.push('');
+      } else {
+        const assetPath = resolveBlockPath(article.id, block);
+        lines.push(`[${block.description || '文件'}](${assetPath})`);
+        lines.push('');
+      }
+    }
+
+    lines.push(`<!-- /scipaper:section -->`);
+    lines.push('');
+  }
+
+  const exportPath = path.join(exportDir, `${article.title.replace(/[^\w\u4e00-\u9fa5-]+/g, '-') || 'manuscript'}-reimportable-${stamp}.md`);
+  fs.writeFileSync(exportPath, lines.join('\n'), 'utf-8');
+  return exportPath;
+}
+
 function openPathForBlock(articleId, blockId) {
   const database = readDatabase();
   const article = findArticle(database, articleId);
@@ -3141,6 +3190,7 @@ module.exports = {
   updateRevision,
   deleteRevision,
   exportMarkdown,
+  exportReimportableMarkdown,
   openPathForBlock,
   getPreviewPayload,
   getArticleDirectory,

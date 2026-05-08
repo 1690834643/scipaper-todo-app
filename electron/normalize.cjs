@@ -2,6 +2,7 @@ const path = require('path');
 const { PRESETS } = require('./llmPresets.cjs');
 const { localIsoDate } = require('./dateUtils.cjs');
 const { DEFAULT_ITALIC_PROMPT } = require('./schema.cjs');
+const { BUILTIN_PACK_IDS } = require('./vocabPackRegistry.cjs');
 
 function now() {
   return new Date().toISOString();

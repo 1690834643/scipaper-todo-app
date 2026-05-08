@@ -1,9 +1,40 @@
 /* ---------- AI Drawer (right-side resizable panel) ---------- */
+body.ai-drawer-open {
+  overflow-x: hidden;
+}
+
 body.ai-drawer-open .app-shell {
-  padding-right: var(--ai-drawer-width, 0);
+  width: calc(100vw - var(--ai-drawer-width, 0px));
+  max-width: calc(100vw - var(--ai-drawer-width, 0px));
+  padding-right: var(--sp-4);
   /* Keep grid-template-columns transition from shell.css alive when drawer is
    * open; otherwise sidebar collapse loses its animation. */
-  transition: padding-right .12s ease, grid-template-columns var(--t-fast);
+  transition: width .12s ease, max-width .12s ease, grid-template-columns var(--t-fast);
+}
+
+body.ai-drawer-open .workspace-top {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.ai-drawer-open .workspace-top > *,
+body.ai-drawer-open .dash-toolbar .toolbar-row,
+body.ai-drawer-open .dash-toolbar .export-group {
+  min-width: 0;
+  max-width: 100%;
+}
+
+body.ai-drawer-open .dash-title {
+  overflow-wrap: anywhere;
+}
+
+body.ai-drawer-open .workspace-grid.is-rail-open,
+body.ai-drawer-open .workspace-grid.is-rail-open.is-nav-collapsed {
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+}
+
+body.ai-drawer-open .article-right-rail {
+  display: none;
 }
 
 .ai-drawer {

@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type { AppState, Article, ReviewCommentType, SectionType } from '../types'
 import { localIsoDate } from '../utils/dateUtils'
-import { parseManuscriptDraft, parseReviewLetter } from '../utils/importParsers'
+import { parseReviewLetter } from '../utils/importParsers'
+import type { ImportSourceFile, ManuscriptImportStrategy } from '../utils/importDocument'
+import { joinImportSourceNames } from '../utils/importDocument'
+import { parseMarkdownManuscript } from '../utils/markdownImportParser'
 
 type ImportMode = 'manuscript' | 'review'
 type WriteMode = 'append' | 'replace'
@@ -60,7 +63,9 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
   const [writeMode, setWriteMode] = useState<WriteMode>('append')
   const [targetRoundId, setTargetRoundId] = useState('__new__')
   const [text, setText] = useState('')
-  const [sourceName, setSourceName] = useState('')
+  const [sourceFiles, setSourceFiles] = useState<ImportSourceFile[]>([])
+  const [importStrategy, setImportStrategy] = useState<ManuscriptImportStrategy>('section')
+  const [singleTargetSection, setSingleTargetSection] = useState<SectionType>('Results')
   const [reviewMeta, setReviewMeta] = useState({
     submittedAt: localIsoDate(),
     journalName: '',
@@ -72,7 +77,18 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
   const [editableSections, setEditableSections] = useState<EditableManuscriptSection[]>([])
   const [editableReviewGroups, setEditableReviewGroups] = useState<EditableReviewGroup[]>([])
 
-  const manuscriptSections = useMemo(() => parseManuscriptDraft(text), [text])
+  const sourceName = joinImportSourceNames(sourceFiles)
+  const manuscriptSections = useMemo(() => (
+    parseMarkdownManuscript(text, {
+      strategy: importStrategy,
+      targetSection: singleTargetSection,
+      sourceName,
+    }).map((block) => ({
+      sectionType: block.sectionType,
+      title: block.title,
+      content: block.content,
+    }))
+  ), [importStrategy, singleTargetSection, sourceName, text])
   const reviewGroups = useMemo(() => parseReviewLetter(text), [text])
 
   useEffect(() => {
@@ -205,10 +221,10 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
 
   async function chooseFile() {
     try {
-      const selected = await window.scipaper.selectImportTextFile()
-      if (!selected) return
-      setText(selected.text)
-      setSourceName(selected.fileName)
+      const selected = await window.scipaper.selectImportTextFiles()
+      if (!selected.length) return
+      setSourceFiles(selected)
+      setText(selected.map((file) => file.text.trim()).filter(Boolean).join('\n\n'))
     } catch (error) {
       onError(error instanceof Error ? error.message : '文件读取失败')
     }
@@ -243,7 +259,7 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
         onApplied(nextState, '审稿意见已导入')
       }
       setText('')
-      setSourceName('')
+      setSourceFiles([])
       onClose()
     } catch (error) {
       onError(error instanceof Error ? error.message : '导入失败')
@@ -287,20 +303,19 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
       <div className="modal-dialog modal-dialog--wide">
         <div className="modal-header">
           <div>
-            <p className="eyebrow">AI Import Assistant</p>
             <h2>导入正文或审稿意见</h2>
           </div>
           <button className="ghost-button" onClick={onClose} type="button">关闭</button>
         </div>
 
-        {!article ? (
-          <section className="empty-panel">
-            <h3>请先选择一篇文章</h3>
-            <p>导入助手需要知道正文或审稿意见要写入哪篇文章。</p>
-          </section>
-        ) : (
-          <div className="panel-stack">
-            <section className="panel-card">
+        <div className="modal-body import-assistant-body">
+          {!article ? (
+            <section className="empty-panel">
+              <h3>未选择文章</h3>
+            </section>
+          ) : (
+            <div className="panel-stack">
+              <section className="panel-card">
               <div className="form-grid">
                 <label className="field">
                   <span>导入类型</span>
@@ -321,16 +336,13 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                   <label className="field">
                     <span>写入位置</span>
                     <select value={targetRoundId} onChange={(event) => setTargetRoundId(event.target.value)}>
-                      <option value="__new__">新建审稿轮次（推荐）</option>
+                      <option value="__new__">新建审稿轮次</option>
                       {article.reviewRounds.map((round) => (
                         <option key={round.id} value={round.id}>
                           追加到 Round {round.roundNumber} · {round.journalName || article.targetJournal || '未填写期刊'} · {round.comments.length} 条已有意见
                         </option>
                       ))}
                     </select>
-                    <small className="muted-text">
-                      新建会生成一个独立轮次；选择已有 Round 会把识别结果追加进去。
-                    </small>
                   </label>
                 )}
               </div>
@@ -341,7 +353,7 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                     <input
                       value={reviewMeta.journalName}
                       onChange={(event) => setReviewMeta((prev) => ({ ...prev, journalName: event.target.value }))}
-                      placeholder={article.targetJournal || 'Journal name'}
+                      placeholder={article.targetJournal || '期刊名称'}
                     />
                   </label>
                   <label className="field">
@@ -349,7 +361,7 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                     <input
                       value={reviewMeta.manuscriptNumber}
                       onChange={(event) => setReviewMeta((prev) => ({ ...prev, manuscriptNumber: event.target.value }))}
-                      placeholder="Manuscript number"
+                      placeholder="稿件编号"
                     />
                   </label>
                   <label className="field">
@@ -370,214 +382,260 @@ export function ImportAssistantModal(props: ImportAssistantModalProps): JSX.Elem
                   </label>
                 </div>
               ) : null}
+              {mode === 'manuscript' ? (
+                <div className="import-strategy-row" role="group" aria-label="正文拆分方式">
+                  <span className="import-strategy-label">拆分</span>
+                  <button
+                    className={importStrategy === 'section' ? 'btn sm primary' : 'btn sm subtle'}
+                    type="button"
+                    onClick={() => setImportStrategy('section')}
+                  >
+                    每章一块
+                  </button>
+                  <button
+                    className={importStrategy === 'heading' ? 'btn sm primary' : 'btn sm subtle'}
+                    type="button"
+                    onClick={() => setImportStrategy('heading')}
+                  >
+                    小标题分块
+                  </button>
+                  <button
+                    className={importStrategy === 'single' ? 'btn sm primary' : 'btn sm subtle'}
+                    type="button"
+                    onClick={() => setImportStrategy('single')}
+                  >
+                    整篇一块
+                  </button>
+                  {importStrategy === 'single' ? (
+                    <label className="field compact import-single-target">
+                      <span>目标章节</span>
+                      <select value={singleTargetSection} onChange={(event) => setSingleTargetSection(event.target.value as SectionType)}>
+                        {SECTION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="import-action-row">
-                <button className="ghost-button" onClick={chooseFile} type="button">选择 .txt/.md/.docx/.pdf 文件</button>
+                <button className="ghost-button" onClick={chooseFile} type="button">选择文本文件</button>
                 <button className="ghost-button" onClick={reformatWithAi} type="button" disabled={!text.trim() || reformatting}>
                   {reformatting ? 'AI 整理中...' : 'AI 重排版/清理'}
                 </button>
-                {sourceName && <span className="muted-text">{sourceName}</span>}
               </div>
+              {sourceFiles.length > 0 ? (
+                <div className="import-source-list" aria-label="已选择文件">
+                  {sourceFiles.map((file) => (
+                    <span key={file.filePath || file.fileName} className="import-source-chip" title={file.filePath}>
+                      {file.fileName}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <label className="field" style={{ marginTop: 'var(--sp-3)' }}>
-                <span>或直接粘贴文本</span>
+                <span>粘贴文本</span>
                 <textarea
                   rows={10}
                   value={text}
                   onChange={(event) => {
                     setText(event.target.value)
-                    setSourceName('')
+                    setSourceFiles([])
                   }}
-                  placeholder={mode === 'manuscript' ? '粘贴带有 Abstract / Introduction / Results 等标题的手稿正文...' : '粘贴 decision letter 或 reviewer comments...'}
+                  placeholder={mode === 'manuscript' ? '粘贴正文' : '粘贴审稿意见'}
                 />
               </label>
-            </section>
+              </section>
 
-            <section className="panel-card">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Preview</p>
-                  <h3>写入预览</h3>
+              <section className="panel-card">
+                <div className="section-heading import-preview-heading">
+                  <div>
+                    <h3>写入预览</h3>
+                  </div>
+                  <div className="inline-actions import-preview-actions">
+                    <button className="primary-button" disabled={disabled} onClick={applyImport} type="button">
+                      {applying ? '导入中...' : '确认导入'}
+                    </button>
+                    {mode === 'manuscript' ? (
+                      <button className="ghost-button" type="button" onClick={addManualSection}>
+                        手动补章节
+                      </button>
+                    ) : (
+                      <button className="ghost-button" type="button" onClick={addManualReviewerGroup}>
+                        手动补审稿人
+                      </button>
+                    )}
+                    <button className="ghost-button" disabled={!article || applying} onClick={undoLastImport} type="button">
+                      撤销最近导入
+                    </button>
+                  </div>
                 </div>
-                <button className="primary-button" disabled={disabled} onClick={applyImport} type="button">
-                  {applying ? '导入中...' : '确认导入'}
-                </button>
-                {mode === 'manuscript' ? (
-                  <button className="ghost-button" type="button" onClick={addManualSection}>
-                    手动补章节
-                  </button>
-                ) : (
-                  <button className="ghost-button" type="button" onClick={addManualReviewerGroup}>
-                    手动补审稿人
-                  </button>
-                )}
-                <button className="ghost-button" disabled={!article || applying} onClick={undoLastImport} type="button">
-                  撤销最近导入
-                </button>
-              </div>
 
-              {!text.trim() && editableSections.length === 0 && editableReviewGroups.length === 0 ? (
-                <p className="empty-text">选择文件或粘贴文本后会在这里预览。</p>
-              ) : mode === 'manuscript' ? (
-                editableSections.length > 0 ? (
-                  <div className="plain-list">
-                    {editableSections.map((section, index) => (
-                      <div key={section.id} className="revision-item import-preview-card">
-                        <div className="form-grid">
-                          <label className="checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={section.enabled}
+                {!text.trim() && editableSections.length === 0 && editableReviewGroups.length === 0 ? (
+                  <p className="empty-text">暂无预览。</p>
+                ) : mode === 'manuscript' ? (
+                  editableSections.length > 0 ? (
+                    <div className="plain-list">
+                      {editableSections.map((section, index) => (
+                        <div key={section.id} className="revision-item import-preview-card">
+                          <div className="form-grid">
+                            <label className="checkbox-row">
+                              <input
+                                type="checkbox"
+                                checked={section.enabled}
+                                onChange={(event) => setEditableSections((prev) => prev.map((item) => (
+                                  item.id === section.id ? { ...item, enabled: event.target.checked } : item
+                                )))}
+                              />
+                              <span>导入第 {index + 1} 段</span>
+                            </label>
+                            <label className="field">
+                              <span>目标章节</span>
+                              <select
+                                value={section.sectionType}
+                                onChange={(event) => setEditableSections((prev) => prev.map((item) => (
+                                  item.id === section.id ? { ...item, sectionType: event.target.value as SectionType } : item
+                                )))}
+                              >
+                                {SECTION_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <button className="ghost-button danger" type="button" onClick={() => removeSection(section.id)}>
+                              移出本次导入
+                            </button>
+                          </div>
+                          <label className="field" style={{ marginTop: 'var(--sp-2)' }}>
+                            <span>内容</span>
+                            <textarea
+                              rows={5}
+                              value={section.content}
                               onChange={(event) => setEditableSections((prev) => prev.map((item) => (
-                                item.id === section.id ? { ...item, enabled: event.target.checked } : item
+                                item.id === section.id ? { ...item, content: event.target.value } : item
                               )))}
                             />
-                            <span>导入第 {index + 1} 段</span>
                           </label>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="empty-text">未识别到正文结构。</p>
+                  )
+                ) : editableReviewGroups.length > 0 ? (
+                  <div className="plain-list">
+                    {editableReviewGroups.map((group, groupIndex) => (
+                      <div key={group.id} className="revision-item import-preview-card">
+                        <div className="import-reviewer-head">
                           <label className="field">
-                            <span>目标章节</span>
-                            <select
-                              value={section.sectionType}
-                              onChange={(event) => setEditableSections((prev) => prev.map((item) => (
-                                item.id === section.id ? { ...item, sectionType: event.target.value as SectionType } : item
+                            <span>审稿人</span>
+                            <input
+                              value={group.reviewerId}
+                              onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
+                                item.id === group.id ? { ...item, reviewerId: event.target.value } : item
                               )))}
-                            >
-                              {SECTION_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                              ))}
-                            </select>
+                            />
                           </label>
-                          <button className="ghost-button danger" type="button" onClick={() => removeSection(section.id)}>
-                            移出本次导入
-                          </button>
+                          <div className="inline-actions">
+                            <button className="ghost-button" type="button" onClick={() => addManualReviewComment(group.id)}>
+                              补意见
+                            </button>
+                            <button className="ghost-button danger" type="button" onClick={() => removeReviewerGroup(group.id)}>
+                              移出审稿人
+                            </button>
+                          </div>
                         </div>
-                        <label className="field" style={{ marginTop: 'var(--sp-2)' }}>
-                          <span>内容</span>
-                          <textarea
-                            rows={5}
-                            value={section.content}
-                            onChange={(event) => setEditableSections((prev) => prev.map((item) => (
-                              item.id === section.id ? { ...item, content: event.target.value } : item
-                            )))}
-                          />
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="empty-text">没有识别到标准章节标题。请保留 Abstract / Introduction / Methods / Results / Discussion 等标题。</p>
-                )
-              ) : editableReviewGroups.length > 0 ? (
-                <div className="plain-list">
-                  {editableReviewGroups.map((group, groupIndex) => (
-                    <div key={group.id} className="revision-item import-preview-card">
-                      <div className="import-reviewer-head">
-                        <label className="field">
-                          <span>审稿人</span>
-                          <input
-                            value={group.reviewerId}
-                            onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
-                              item.id === group.id ? { ...item, reviewerId: event.target.value } : item
-                            )))}
-                          />
-                        </label>
-                        <div className="inline-actions">
-                          <button className="ghost-button" type="button" onClick={() => addManualReviewComment(group.id)}>
-                            给该审稿人补一条意见
-                          </button>
-                          <button className="ghost-button danger" type="button" onClick={() => removeReviewerGroup(group.id)}>
-                            移出该审稿人
-                          </button>
-                        </div>
-                      </div>
-                      <div className="plain-list" style={{ marginTop: 'var(--sp-2)' }}>
-                        {group.comments.map((comment, commentIndex) => (
-                          <div key={comment.id} className="revision-item import-preview-card import-preview-card--nested">
-                            <div className="form-grid">
-                              <label className="checkbox-row">
+                        <div className="plain-list" style={{ marginTop: 'var(--sp-2)' }}>
+                          {group.comments.map((comment, commentIndex) => (
+                            <div key={comment.id} className="revision-item import-preview-card import-preview-card--nested">
+                              <div className="form-grid">
+                                <label className="checkbox-row">
+                                  <input
+                                    type="checkbox"
+                                    checked={comment.enabled}
+                                    onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
+                                      item.id === group.id
+                                        ? {
+                                            ...item,
+                                            comments: item.comments.map((entry) => (
+                                              entry.id === comment.id ? { ...entry, enabled: event.target.checked } : entry
+                                            )),
+                                          }
+                                        : item
+                                    )))}
+                                  />
+                                  <span>导入意见 {groupIndex + 1}.{commentIndex + 1}</span>
+                                </label>
+                                <label className="field">
+                                  <span>类型</span>
+                                  <select
+                                    value={comment.type}
+                                    onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
+                                      item.id === group.id
+                                        ? {
+                                            ...item,
+                                            comments: item.comments.map((entry) => (
+                                              entry.id === comment.id ? { ...entry, type: event.target.value as ReviewCommentType } : entry
+                                            )),
+                                          }
+                                        : item
+                                    )))}
+                                  >
+                                    <option value="Major">Major</option>
+                                    <option value="Minor">Minor</option>
+                                  </select>
+                                </label>
+                                <button className="ghost-button danger" type="button" onClick={() => removeReviewComment(group.id, comment.id)}>
+                                  移出意见
+                                </button>
+                              </div>
+                              <label className="field" style={{ marginTop: 'var(--sp-2)' }}>
+                                <span>建议关联章节</span>
                                 <input
-                                  type="checkbox"
-                                  checked={comment.enabled}
+                                  value={comment.suggestedSection}
                                   onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
                                     item.id === group.id
                                       ? {
                                           ...item,
                                           comments: item.comments.map((entry) => (
-                                            entry.id === comment.id ? { ...entry, enabled: event.target.checked } : entry
+                                            entry.id === comment.id ? { ...entry, suggestedSection: event.target.value } : entry
+                                          )),
+                                        }
+                                      : item
+                                  )))}
+                                  placeholder="例如 Results / Discussion / References"
+                                />
+                              </label>
+                              <label className="field" style={{ marginTop: 'var(--sp-2)' }}>
+                                <span>意见内容</span>
+                                <textarea
+                                  rows={4}
+                                  value={comment.originalText}
+                                  onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
+                                    item.id === group.id
+                                      ? {
+                                          ...item,
+                                          comments: item.comments.map((entry) => (
+                                            entry.id === comment.id ? { ...entry, originalText: event.target.value } : entry
                                           )),
                                         }
                                       : item
                                   )))}
                                 />
-                                <span>导入意见 {groupIndex + 1}.{commentIndex + 1}</span>
                               </label>
-                              <label className="field">
-                                <span>类型</span>
-                                <select
-                                  value={comment.type}
-                                  onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
-                                    item.id === group.id
-                                      ? {
-                                          ...item,
-                                          comments: item.comments.map((entry) => (
-                                            entry.id === comment.id ? { ...entry, type: event.target.value as ReviewCommentType } : entry
-                                          )),
-                                        }
-                                      : item
-                                  )))}
-                                >
-                                  <option value="Major">Major</option>
-                                  <option value="Minor">Minor</option>
-                                </select>
-                              </label>
-                              <button className="ghost-button danger" type="button" onClick={() => removeReviewComment(group.id, comment.id)}>
-                                移出该意见
-                              </button>
                             </div>
-                            <label className="field" style={{ marginTop: 'var(--sp-2)' }}>
-                              <span>建议关联章节</span>
-                              <input
-                                value={comment.suggestedSection}
-                                onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
-                                  item.id === group.id
-                                    ? {
-                                        ...item,
-                                        comments: item.comments.map((entry) => (
-                                          entry.id === comment.id ? { ...entry, suggestedSection: event.target.value } : entry
-                                        )),
-                                      }
-                                    : item
-                                )))}
-                                placeholder="例如 Results / Discussion / References"
-                              />
-                            </label>
-                            <label className="field" style={{ marginTop: 'var(--sp-2)' }}>
-                              <span>意见内容</span>
-                              <textarea
-                                rows={4}
-                                value={comment.originalText}
-                                onChange={(event) => setEditableReviewGroups((prev) => prev.map((item) => (
-                                  item.id === group.id
-                                    ? {
-                                        ...item,
-                                        comments: item.comments.map((entry) => (
-                                          entry.id === comment.id ? { ...entry, originalText: event.target.value } : entry
-                                        )),
-                                      }
-                                    : item
-                                )))}
-                              />
-                            </label>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="empty-text">没有识别到审稿意见。请保留 Reviewer 1 / Reviewer 2 或 comment 编号。</p>
-              )}
-            </section>
-          </div>
-        )}
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty-text">未识别到审稿意见。</p>
+                )}
+              </section>
+            </div>
+          )}
+        </div>
       </div>
     </div>,
     document.body,

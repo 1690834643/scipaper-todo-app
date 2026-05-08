@@ -69,6 +69,7 @@ declare global {
         kind: 'image' | 'file',
       ) => Promise<AppState>
       selectImportTextFile: () => Promise<{ filePath: string; fileName: string; text: string } | null>
+      selectImportTextFiles: () => Promise<Array<{ filePath: string; fileName: string; text: string }>>
       importManuscriptSections: (
         articleId: string,
         sections: Array<Pick<ParsedManuscriptSection, 'sectionType' | 'content'> & { description?: string; sourceName?: string }>,
@@ -169,6 +170,7 @@ declare global {
       ) => Promise<AppState>
       deleteRevision: (articleId: string, roundId: string, commentId: string, revisionId: string) => Promise<AppState>
       exportMarkdown: (articleId: string) => Promise<string>
+      exportReimportableMarkdown: (articleId: string) => Promise<string>
       exportArticleDocx: (
         articleId: string,
         templateId: string,
