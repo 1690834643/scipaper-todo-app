@@ -202,3 +202,8 @@ It keeps manuscripts, references, review rounds, writing progress, attachments, 
 - Vitest
 - electron-builder
 - `@modelcontextprotocol/sdk`
+
+## 贡献者 / Contributors
+
+- 匡穗杰：产品方向、科研写作工作流、设计反馈和真实使用场景。
+- OpenAI Codex：协助实现代码改动、性能优化、README 文档、宣传截图和 GitHub Release 自动化。
