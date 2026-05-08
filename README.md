@@ -20,6 +20,12 @@ Local-first desktop workspace for scientific manuscript writing, review response
 |---|---|
 | ![SciPaper Todo focus writing with AI assistant](docs/screenshots/promo-focus-ai.png) | ![SciPaper Todo settings and integrations](docs/screenshots/promo-settings.png) |
 
+### 三套主题 / Three Themes
+
+| Claude | Pixel | Fresh |
+|---|---|---|
+| ![SciPaper Todo Claude theme](docs/screenshots/promo-theme-claude.png) | ![SciPaper Todo Pixel theme](docs/screenshots/promo-theme-pixel.png) | ![SciPaper Todo Fresh theme](docs/screenshots/promo-theme-fresh.png) |
+
 ## 中文说明
 
 ### 这是什么
