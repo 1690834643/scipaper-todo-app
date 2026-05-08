@@ -38,10 +38,27 @@ SciPaper Todo 是一个本地优先的科研论文写作工作台。它不是普
 
 | 维度 | 说明 |
 |---|---|
-| 主要优势 | 把正文、审稿意见、回复信、附件、日志和导出放在同一个本地项目里，再交给 LLM 带上下文处理。 |
+| 主要优势 | 把正文、审稿意见、回复信、附件、日志和导出放在同一个本地项目里，让 LLM 带着完整上下文处理。 |
 | 最佳用法 | 必须接一个 LLM：应用内 API 配置，或 MCP agent。 |
 | 不适合 | 只想安静写字、完全不用 LLM、只需要最终排版的人。传统 Word / LaTeX / Markdown 可能更直接。 |
 | 需要接受 | 需要配置 API Key 或 MCP；AI 写入仍要人工确认；最终投稿格式可能还要回到 Word、LaTeX 或期刊模板里收尾。 |
+
+## AI 接入优势
+
+普通聊天 AI 的问题是上下文散：正文在 Word，审稿意见在邮件，修改计划在笔记，附件在文件夹里。每次都要复制、解释、再对齐一遍。
+
+SciPaper Todo 的 AI 接入解决的是这个问题：
+
+| 优势 | 具体体现 |
+|---|---|
+| 上下文集中 | LLM 可以围绕同一篇文章读取章节、文本块、审稿意见、回复信、引用线索、Daily Log 和进度。 |
+| 操作对象清楚 | AI 面对的不是一大段粘贴文本，而是文章、章节、文本块、reviewer comment、revision response 这些明确对象。 |
+| 两种接入方式 | 应用内 API 适合直接在写作界面用；MCP 适合让 Claude Code、Codex、Cursor、Cline 等 agent 接管更复杂的整理和改写。 |
+| 少复制粘贴 | 导入、拆块、改写、审稿回复和导出都围绕本地项目库走，不需要在多个工具之间来回搬文本。 |
+| 写入有边界 | 读写工具分开，写入类操作默认需要确认；你可以调整 auto-approve，但不建议一开始放太开。 |
+| 不绑死模型 | 支持 OpenAI-compatible、Anthropic-compatible 和 MCP 客户端；你可以按成本、速度、上下文窗口和写作质量换模型。 |
+
+一句话：它不是把 AI 放进一个侧边聊天框，而是把 LLM 接到论文项目本身。
 
 ## 核心工作流
 
@@ -153,7 +170,7 @@ SciPaper Todo 的核心用法是让 LLM 进入论文项目，而不是只在旁�
 - 应用内 API：配置 OpenAI-compatible 或 Anthropic-compatible provider。
 - MCP agent：接 Claude Code、Codex、Cursor、Cline、Roo Code、Continue、Windsurf 等支持 MCP 的工具。
 
-AI 助手可以读取当前文章、章节、审稿意见、引用和进度上下文。
+AI 助手可以读取当前文章、章节、审稿意见、引用和进度上下文。MCP agent 可以在外部工具里调用同一个本地项目库，适合做跨章节整理、批量清理导入内容、按 reviewer comment 梳理回复、检查修回计划这些需要更多上下文的工作。
 
 写入类 AI 工具默认需要确认。你可以在 Settings 里调整 auto-approve 策略。
 
